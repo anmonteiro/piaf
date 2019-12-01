@@ -1,0 +1,35 @@
+{
+  "name": "piaf",
+  "version": "0.1.0",
+  "description": "TBD",
+  "author": "António N. Monteiro <anmonteiro@gmail.com>",
+  "license": "BSD-3-clause",
+  "repository": "git+https://github.com/anmonteiro/piaf",
+  "dependencies": {
+    "ocaml": "~4.9.0",
+    "@opam/dune": "*",
+    "@opam/httpaf": "*",
+    "@opam/httpaf-lwt": "*",
+    "@opam/httpaf-lwt-unix": "*",
+    "@opam/h2": "*",
+    "@opam/h2-lwt-unix": "*",
+    "@opam/lwt_ssl": "*",
+    "@opam/ssl": ">= 0.5.8",
+    "@opam/logs": "*",
+    "@opam/conf-openssl": "*",
+    "@opam/uri": "*"
+  },
+  "devDependencies": {
+    "@opam/merlin": "*",
+    "@opam/ocamlformat": "*"
+  },
+  "resolutions": {
+    "@opam/httpaf-lwt": "../httpaf/httpaf-lwt.opam",
+    "@opam/httpaf-lwt-unix": "../httpaf/httpaf-lwt-unix.opam",
+    "@opam/httpaf": "../httpaf/httpaf.opam",
+    "@opam/h2-lwt": "../ocaml-h2/h2-lwt.opam",
+    "@opam/h2-lwt-unix": "../ocaml-h2/h2-lwt-unix.opam",
+    "@opam/h2": "../ocaml-h2/h2.opam",
+    "@opam/conf-libssl": "esy-packages/esy-openssl#860ad7f"
+  }
+}
