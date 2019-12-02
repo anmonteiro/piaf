@@ -17,7 +17,8 @@ let to_http1 { meth; target; version; headers } =
   Httpaf.Request.create ~version ~headers:http1_headers meth target
 
 let to_h2 { meth; target; headers; _ } =
-  (* We only support H2 over HTTPS *)
+  (* We only support H2 over HTTPS.
+   * TODO: this can be relaxed *)
   H2.Request.create ~scheme:"https" ~headers meth target
 
 let pp_hum fmt { meth; target; version; headers } =

@@ -1,7 +1,13 @@
 (* H2 doesn't speak insecure *)
 module type HTTP = sig
+  module Body : sig
+    type 'a t
+  end
+
   module Client : sig
     type t
+
+    type response_handler = Response.t -> [ `read ] Body.t -> unit
 
     val create_connection : ?config:Config.t -> Lwt_unix.file_descr -> t Lwt.t
 
@@ -9,8 +15,14 @@ module type HTTP = sig
       :  t
       -> Request.t
       -> error_handler:Httpaf.Client_connection.error_handler
-      -> response_handler:Httpaf.Client_connection.response_handler
+      -> response_handler:response_handler
       -> [ `write ] Httpaf.Body.t
+
+    val send_request
+      :  t
+      -> ?body:string
+      -> Request.t
+      -> (Response.t, 'a) result Lwt.t
 
     val shutdown : t -> unit
 
