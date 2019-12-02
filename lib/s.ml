@@ -1,35 +1,3 @@
-(* H2 doesn't speak insecure *)
-module type HTTP = sig
-  module Body : sig
-    type 'a t
-  end
-
-  module Client : sig
-    type t
-
-    type response_handler = Response.t -> [ `read ] Body.t -> unit
-
-    val create_connection : ?config:Config.t -> Lwt_unix.file_descr -> t Lwt.t
-
-    val request
-      :  t
-      -> Request.t
-      -> error_handler:Httpaf.Client_connection.error_handler
-      -> response_handler:response_handler
-      -> [ `write ] Httpaf.Body.t
-
-    val send_request
-      :  t
-      -> ?body:string
-      -> Request.t
-      -> (Response.t, 'a) result Lwt.t
-
-    val shutdown : t -> unit
-
-    val is_closed : t -> bool
-  end
-end
-
 type error =
   [ `Exn of exn
   | `Invalid_response_body_length of Response.t
@@ -39,21 +7,15 @@ type error =
 
 type error_handler = error -> unit
 
-module type HTTPS = sig
-  module Body : sig
-    type 'a t
-  end
+module BASE = struct
+  module type Body = module type of H2.Body
 
-  module Client : sig
+  module type Client = sig
     type t
 
-    type response_handler = Response.t -> [ `read ] Body.t -> unit
+    type 'rw body
 
-    val create_connection
-      :  ?client:Lwt_ssl.socket
-      -> ?config:Config.t
-      -> Lwt_unix.file_descr
-      -> t Lwt.t
+    type response_handler = Response.t -> [ `read ] body -> unit
 
     (* Removing this from the interface lets us delete a bunch of dup code.
      * Same for create_connection. Think about something more high level. *)
@@ -62,13 +24,12 @@ module type HTTPS = sig
       -> Request.t
       -> error_handler:error_handler
       -> response_handler:response_handler
-      -> [ `write ] Body.t
+      -> [ `write ] body
 
-    val send_request
-      :  t
-      -> ?body:string
-      -> Request.t
-      -> (Response.t, 'a) result Lwt.t
+    (* val send_request : t -> ?body:string -> Request.t -> (Response.t, 'a)
+       result Lwt.t *)
+
+    val create_connection : ?config:Config.t -> Lwt_unix.file_descr -> t Lwt.t
 
     (* ((Response.t * [ `read ] Body.t, 'a) result Lwt.t * ('b, string) result
        Lwt.t) Lwt.t *)
@@ -76,5 +37,37 @@ module type HTTPS = sig
     val shutdown : t -> unit
 
     val is_closed : t -> bool
+  end
+end
+
+(* All but creating connections, those require functions with different
+   signatures. *)
+module type HTTPCommon = sig
+  module Body : BASE.Body
+
+  module Client : BASE.Client with type 'rw body := 'rw Body.t
+end
+
+module type HTTP = sig
+  module Body : BASE.Body
+
+  module Client : sig
+    include BASE.Client with type 'rw body := 'rw Body.t
+
+    val create_connection : ?config:Config.t -> Lwt_unix.file_descr -> t Lwt.t
+  end
+end
+
+module type HTTPS = sig
+  module Body : BASE.Body
+
+  module Client : sig
+    include BASE.Client with type 'rw body := 'rw Body.t
+
+    val create_connection
+      :  ?client:Lwt_ssl.socket
+      -> ?config:Config.t
+      -> Lwt_unix.file_descr
+      -> t Lwt.t
   end
 end

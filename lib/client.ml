@@ -4,6 +4,7 @@
  * *)
 open Monads
 open Lwt.Infix
+module Version = Httpaf.Version
 
 module SSL = struct
   let () =
@@ -65,6 +66,8 @@ module Scheme = struct
     (* We don't support anything else *)
     | Some other ->
       Error (Format.asprintf "Unsupported scheme: %s" other)
+
+  let to_string = function HTTP -> "http" | HTTPS -> "https"
 end
 
 let infer_port ~scheme uri =
@@ -94,9 +97,56 @@ let resolve_host ~port hostname =
     Ok ai_addr
 
 module Headers = struct
-  let add_http1_headers ~host headers =
-    H2.Headers.of_list (("Host", host) :: headers)
+  let add_canonical_headers ~host ~version headers =
+    match version with
+    | { Version.major = 2; _ } ->
+      H2.Headers.of_list ((":authority", host) :: headers)
+    | { Version.major = 1; _ } ->
+      H2.Headers.of_list (("Host", host) :: headers)
+    | _ ->
+      failwith "unsupported version"
 end
+
+let make_impl ~scheme ~address ~host fd =
+  match scheme with
+  | Scheme.HTTP ->
+    Lwt_unix.connect fd address >|= fun () ->
+    let module Http = Http1.HTTP in
+    (* TODO: we should also be able to support HTTP/2 with prior knowledge /
+       HTTP/1.1 upgrade. For now, insecure HTTP/2 is unsupported. *)
+    (module Http : S.HTTPCommon), Request.v1_1
+  | HTTPS ->
+    SSL.connect ~hostname:host address fd >|= fun ssl_client ->
+    (match Lwt_ssl.ssl_socket ssl_client with
+    | None ->
+      failwith "handshake not established?"
+    | Some ssl_socket ->
+      let https_impl, version =
+        match Ssl.get_negotiated_alpn_protocol ssl_socket with
+        (* Default to HTTP/1.x if the remote doesn't speak ALPN. *)
+        | None | Some "http/1.1" ->
+          (module Http1.HTTPS : S.HTTPS), Request.v1_1
+        | Some "h2" ->
+          (module Http2.HTTPS : S.HTTPS), Request.v2_0
+        | Some _ ->
+          (* Can't really happen - would mean that TLS negotiated a
+           * protocol that we didn't specify. *)
+          assert false
+      in
+      let module Https = (val https_impl : S.HTTPS) in
+      let module Https = struct
+        include Https
+
+        module Client = struct
+          include Https.Client
+
+          (* partially apply the `create_connection` function so that we can
+           * reuse the HTTPCommon interface *)
+          let create_connection = Client.create_connection ~client:ssl_client
+        end
+      end
+      in
+      (module Https : S.HTTPCommon), version)
 
 (* Think about how to support "connections": we need to enforce that a
  * connection exists per address / port. But we may need to abstract that a
@@ -111,46 +161,27 @@ let send_request ~meth ~headers ?body uri =
   let port = infer_port ~scheme uri in
   let* address = resolve_host ~port host in
   let fd = Lwt_unix.socket Unix.PF_INET Unix.SOCK_STREAM 0 in
-  match scheme with
-  | HTTP ->
-    (* TODO: we should also be able to support HTTP/2 with prior knowledge /
-       HTTP/1.1 upgrade. For now, insecure HTTP/2 is unsupported. *)
-    Lwt_unix.connect fd address >>= fun () ->
-    let module Http = Http1.HTTP in
-    Http.Client.create_connection fd >>= fun conn ->
-    let request =
-      Request.create
-        meth
-        ~headers:(Headers.add_http1_headers ~host headers)
-        (Uri.path_and_query uri)
-    in
-    Http.Client.send_request conn ?body request
-  | HTTPS ->
-    Format.eprintf "hst : %s %s@." host (Uri.path uri);
-    SSL.connect ~hostname:host address fd >>= fun ssl_client ->
-    (match Lwt_ssl.ssl_socket ssl_client with
-    | None ->
-      failwith "handshake not established?"
-    | Some ssl_socket ->
-      let impl, headers =
-        match Ssl.get_negotiated_alpn_protocol ssl_socket with
-        (* Default to HTTP/1.x if the remote doesn't speak ALPN. *)
-        | None | Some "http/1.1" ->
-          ( (module Http1.HTTPS : S.HTTPS)
-          , Headers.add_http1_headers ~host headers )
-        | Some "h2" ->
-          ( (module Http2.HTTPS : S.HTTPS)
-          , H2.Headers.of_list ((":authority", host) :: headers) )
-        | Some _ ->
-          (* Can't really happen - would mean that TLS negotiated a
-           * protocol that we didn't specify. *)
-          assert false
-      in
-      let module Https = (val impl : S.HTTPS) in
-      let request = Request.create meth ~headers (Uri.path_and_query uri) in
-      Format.eprintf "TOINE: %a@." Request.pp_hum request;
-      Https.Client.create_connection ~client:ssl_client fd >>= fun conn ->
-      Https.Client.send_request conn ?body request)
+  Format.eprintf "hst : %s %s@." host (Uri.path_and_query uri);
+  let open Lwt.Syntax in
+  let* (module HTTPImpl : S.HTTPCommon), version =
+    make_impl ~scheme ~address ~host fd
+  in
+  HTTPImpl.Client.create_connection fd >>= fun conn ->
+  let headers = Headers.add_canonical_headers ~version ~host headers in
+  let request =
+    Request.create
+      meth
+      ~version
+      ~scheme:(Scheme.to_string scheme)
+      ~headers
+      (Uri.path_and_query uri)
+  in
+  Format.eprintf "TOINE: %a@." Request.pp_hum request;
+  Http_impl.send_request
+    (module HTTPImpl : S.HTTPCommon with type Client.t = HTTPImpl.Client.t)
+    conn
+    ?body
+    request
 
 let read_http1_response response_body =
   let open Httpaf in
