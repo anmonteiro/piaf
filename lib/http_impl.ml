@@ -1,3 +1,6 @@
+(* This module uses the interfaces in `s.ml` to abstract over HTTP/1 and HTTP/2
+ * and their respective insecure / secure versions. *)
+
 open Lwt.Infix
 
 let error_handler notify_response_received error =
@@ -13,6 +16,38 @@ let error_handler notify_response_received error =
       Format.asprintf "invalid response body length"
   in
   Lwt.wakeup notify_response_received (Error error_str)
+
+let read_body
+    : type a.
+      (module S.BASE.Body with type Read.t = a) -> a -> string Lwt_stream.t
+  =
+ fun (module Body) body ->
+  let module Body = Body.Read in
+  let read_fn () =
+    let r, notify = Lwt.wait () in
+    Body.schedule_read
+      body
+      ~on_eof:(fun () ->
+        Body.close_reader body;
+        Lwt.wakeup_later notify None)
+      ~on_read:(fun response_fragment ~off ~len ->
+        (* Note: we always need to make a copy here for now. See the following
+         * comment for an explanation why:
+         * https://github.com/inhabitedtype/httpaf/issues/140#issuecomment-517072327
+         *)
+        let response_fragment_bytes = Bytes.create len in
+        (* TODO: decide on the type of Body, and on the type of the stream
+         * elements. For now they're always strings. *)
+        Lwt_bytes.blit_to_bytes
+          response_fragment
+          off
+          response_fragment_bytes
+          0
+          len;
+        Lwt.wakeup_later notify (Some (Bytes.to_string response_fragment_bytes)));
+    r
+  in
+  Lwt_stream.from read_fn
 
 let send_request
     : type a.
@@ -35,13 +70,20 @@ let send_request
   in
   (match body with
   | Some body ->
-    Http.Body.write_string request_body body
+    Body.Write.write_string request_body body
   | None ->
     ());
-  Http.Body.flush request_body (fun () -> Http.Body.close_writer request_body);
+  Body.Write.flush request_body (fun () -> Body.Write.close_writer request_body);
   (* Lwt.return (response_received, error_received) *)
-  response_received >|= function
-  | Ok (response, _) ->
-    Ok response
+  response_received >>= function
+  | Ok (response, response_body) ->
+    let body = read_body (module Body) response_body in
+    let b = Buffer.create 0x2000 in
+    Lwt_stream.iter_s
+      (fun x ->
+        Buffer.add_string b x;
+        Lwt.return_unit)
+      body
+    >|= fun () -> Ok response
   | Error e ->
-    Error e
+    Lwt.return (Error e)
