@@ -1,10 +1,31 @@
+module Body :
+  S.BASE.Body
+    with type Read.t = [ `read ] Httpaf.Body.t
+     and type Write.t = [ `write ] Httpaf.Body.t = struct
+  module Read = struct
+    type t = [ `read ] Httpaf.Body.t
+
+    include (
+      Httpaf.Body :
+        module type of Httpaf.Body with type 'rw t := 'rw Httpaf.Body.t)
+  end
+
+  module Write = struct
+    type t = [ `write ] Httpaf.Body.t
+
+    include (
+      Httpaf.Body :
+        module type of Httpaf.Body with type 'rw t := 'rw Httpaf.Body.t)
+  end
+end
+
 module HTTP : S.HTTP = struct
-  module Body = Httpaf.Body
+  module Body = Body
 
   module Client = struct
     include Httpaf_lwt_unix.Client
 
-    type response_handler = Response.t -> [ `read ] Body.t -> unit
+    type response_handler = Response.t -> Body.Read.t -> unit
 
     let create_connection ?config:_ fd = create_connection fd
 
@@ -26,18 +47,13 @@ module HTTP : S.HTTP = struct
   end
 end
 
-module type HTTPS_1 =
-  S.HTTPS
-    with type Client.t = Httpaf_lwt_unix.Client.SSL.t
-     and type 'a Body.t = 'a Httpaf.Body.t
-
-module HTTPS = struct
-  module Body = Httpaf.Body
+module HTTPS : S.HTTPS = struct
+  module Body = Body
 
   module Client = struct
     include Httpaf_lwt_unix.Client.SSL
 
-    type response_handler = Response.t -> [ `read ] Body.t -> unit
+    type response_handler = Response.t -> Body.Read.t -> unit
 
     let create_connection ?client ?config:_ fd = create_connection ?client fd
 

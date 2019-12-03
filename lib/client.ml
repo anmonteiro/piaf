@@ -1,6 +1,7 @@
 (*
  * - Follow redirects (assumes upgrading to https too)
  * - Functions for persistent / oneshot connections
+ * - Logging
  * *)
 open Monads
 open Lwt.Infix
@@ -37,20 +38,6 @@ module SSL = struct
     | None ->
       Lwt_ssl.ssl_connect fd ctx
 end
-
-let error_handler notify_response_received error =
-  let error_str =
-    match error with
-    | `Malformed_response s ->
-      s
-    | `Exn exn ->
-      Printexc.to_string exn
-    | `Protocol_error (_code, msg) ->
-      Format.asprintf "Protocol Error: %s" msg
-    | `Invalid_response_body_length _ ->
-      Format.asprintf "invalid response body length"
-  in
-  Lwt.wakeup notify_response_received (Error error_str)
 
 module Scheme = struct
   type t =
@@ -183,33 +170,6 @@ let send_request ~meth ~headers ?body uri =
     ?body
     request
 
-let read_http1_response response_body =
-  let open Httpaf in
-  let buf = Buffer.create 0x2000 in
-  let body_read, notify_body_read = Lwt.wait () in
-  let rec read_fn () =
-    Body.schedule_read
-      response_body
-      ~on_eof:(fun () ->
-        Body.close_reader response_body;
-        Lwt.wakeup_later notify_body_read (Ok (Buffer.contents buf)))
-      ~on_read:(fun response_fragment ~off ~len ->
-        let response_fragment_bytes = Bytes.create len in
-        Lwt_bytes.blit_to_bytes
-          response_fragment
-          off
-          response_fragment_bytes
-          0
-          len;
-        Buffer.add_bytes buf response_fragment_bytes;
-        read_fn ())
-  in
-  read_fn ();
-  body_read
-
-(* let read_body f body err = Lwt.pick [ f body; err ] >|= fun x -> match x with
-   | Ok (Body body_str) -> body_str | Ok (H2_Response _) | Ok (Http1_Response _)
-   -> assert false | Error _err_str -> assert false *)
 let call ~meth ~headers ?body uri =
   send_request ~meth ~headers ?body uri >>= fun response ->
   (* Lwt.choose [ resp; err ] >>= fun p -> *)

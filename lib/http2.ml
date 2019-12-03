@@ -1,10 +1,22 @@
-module type HTTPS_2 =
-  S.HTTPS
-    with type Client.t = H2_lwt_unix.Client.SSL.t
-     and type 'a Body.t = 'a H2.Body.t
+module HTTPS : S.HTTPS = struct
+  module Body :
+    S.BASE.Body
+      with type Read.t = [ `read ] H2.Body.t
+       and type Write.t = [ `write ] H2.Body.t = struct
+    module Read = struct
+      type t = [ `read ] H2.Body.t
 
-module HTTPS = struct
-  module Body = H2.Body
+      include (
+        H2.Body : module type of H2.Body with type 'rw t := 'rw H2.Body.t)
+    end
+
+    module Write = struct
+      type t = [ `write ] H2.Body.t
+
+      include (
+        H2.Body : module type of H2.Body with type 'rw t := 'rw H2.Body.t)
+    end
+  end
 
   module Client = struct
     include H2_lwt_unix.Client.SSL
@@ -13,7 +25,7 @@ module HTTPS = struct
       let error_handler _ = assert false in
       create_connection ?client ~error_handler fd
 
-    type response_handler = Response.t -> [ `read ] Body.t -> unit
+    type response_handler = Response.t -> Body.Read.t -> unit
 
     let request t req ~error_handler ~response_handler =
       let response_handler response body =

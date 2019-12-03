@@ -22,10 +22,8 @@ let send_request
       -> Request.t
       -> (Response.t, 'err) Lwt_result.t
   =
- fun (module Http : S.HTTPCommon with type Client.t = a)
-     conn
-     ?body
-     request_headers ->
+ fun (module Http) conn ?body request_headers ->
+  let open Http in
   let response_received, notify_response_received = Lwt.wait () in
   let response_handler response response_body =
     Lwt.wakeup_later notify_response_received (Ok (response, response_body))
