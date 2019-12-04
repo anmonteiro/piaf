@@ -13,6 +13,9 @@ type t =
         (** Wether to allow insecure server connections when using SSL *)
   }
 
+let default_config =
+  { follow_redirects = false; max_redirects = 10; allow_insecure = false }
+
 let to_http1_config _ = None
 
 let to_http2_config _ = None

@@ -1,22 +1,20 @@
-type status =
-  [ Httpaf.Status.t
-  | H2.Status.t
-  ]
+module Status = H2.Status
 
 type t =
-  { status : status
+  { (* `H2.Status.t` is a strict superset of `Httpaf.Status.t` *)
+    status : Status.t
   ; headers : H2.Headers.t
   ; version : Httpaf.Version.t
   }
 
 let of_http1 { Httpaf.Response.status; version; headers; _ } =
-  { status = (status :> status)
+  { status = (status :> Status.t)
   ; headers = H2.Headers.of_rev_list (Httpaf.Headers.to_rev_list headers)
   ; version
   }
 
 let of_h2 { H2.Response.status; headers } =
-  { status = (status :> status); headers; version = { major = 2; minor = 0 } }
+  { status; headers; version = { major = 2; minor = 0 } }
 
 let pp_hum fmt { status; headers; version } =
   let status =

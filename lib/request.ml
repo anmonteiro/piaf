@@ -1,7 +1,7 @@
 module Version = Httpaf.Version
 
 type t =
-  { meth : Httpaf.Method.t
+  { meth : H2.Method.t
   ; target : string
   ; version : Version.t
   ; headers : H2.Headers.t
@@ -33,7 +33,7 @@ let pp_hum fmt { meth; target; version; headers; scheme } =
     fmt
     "((method \"%a\") (target %S) (version \"%a\") (scheme \"%s\") (headers \
      %a))"
-    Httpaf.Method.pp_hum
+    H2.Method.pp_hum
     meth
     target
     Httpaf.Version.pp_hum

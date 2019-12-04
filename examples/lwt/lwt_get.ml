@@ -1,8 +1,14 @@
 open Lwt.Infix
 
 let request host =
-  Piaf.Client.get (Uri.of_string host) >|= fun response ->
-  Format.eprintf "Response: %a@." Piaf.Response.pp_hum response
+  Piaf.Client.get
+    ~config:{ Piaf.Config.default_config with follow_redirects = true }
+    (Uri.of_string host)
+  >|= function
+  | Ok _response ->
+    ()
+  | Error e ->
+    failwith e
 
 let () =
   let host = ref None in

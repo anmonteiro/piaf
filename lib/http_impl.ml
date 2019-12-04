@@ -1,7 +1,7 @@
 (* This module uses the interfaces in `s.ml` to abstract over HTTP/1 and HTTP/2
  * and their respective insecure / secure versions. *)
 
-open Lwt.Infix
+open Monads
 
 let error_handler notify_response_received error =
   let error_str =
@@ -17,7 +17,7 @@ let error_handler notify_response_received error =
   in
   Lwt.wakeup notify_response_received (Error error_str)
 
-let read_body
+let stream_of_read_body
     : type a.
       (module S.BASE.Body with type Read.t = a) -> a -> string Lwt_stream.t
   =
@@ -49,15 +49,19 @@ let read_body
   in
   Lwt_stream.from read_fn
 
+let drain_stream stream = Lwt_stream.junk_while (fun _ -> true) stream
+
 let send_request
     : type a.
       (module S.HTTPCommon with type Client.t = a)
       -> a
       -> ?body:string
       -> Request.t
-      -> (Response.t, 'err) Lwt_result.t
+      -> (Response.t * string Lwt_stream.t, 'err) Lwt_result.t
   =
- fun (module Http) conn ?body request_headers ->
+ fun (module Http) conn ?body request ->
+  Format.eprintf "TOINE: %a@." Request.pp_hum request;
+  let open Lwt_result.Syntax in
   let open Http in
   let response_received, notify_response_received = Lwt.wait () in
   let response_handler response response_body =
@@ -66,8 +70,9 @@ let send_request
   let _error_received, notify_error_received = Lwt.wait () in
   let error_handler = error_handler notify_error_received in
   let request_body =
-    Http.Client.request conn request_headers ~error_handler ~response_handler
+    Http.Client.request conn request ~error_handler ~response_handler
   in
+  (* TODO: Async write Body *)
   (match body with
   | Some body ->
     Body.Write.write_string request_body body
@@ -75,15 +80,10 @@ let send_request
     ());
   Body.Write.flush request_body (fun () -> Body.Write.close_writer request_body);
   (* Lwt.return (response_received, error_received) *)
-  response_received >>= function
-  | Ok (response, response_body) ->
-    let body = read_body (module Body) response_body in
-    let b = Buffer.create 0x2000 in
-    Lwt_stream.iter_s
-      (fun x ->
-        Buffer.add_string b x;
-        Lwt.return_unit)
-      body
-    >|= fun () -> Ok response
-  | Error e ->
-    Lwt.return (Error e)
+  let+ response, response_body = response_received in
+  Format.eprintf "Response: %a@." Response.pp_hum response;
+  let body_stream = stream_of_read_body (module Body) response_body in
+  (* let b = Buffer.create 0x2000 in Lwt_stream.iter_s (fun x ->
+     Buffer.add_string b x; Lwt.return_unit) body >|= fun () -> let body_str =
+     Buffer.contents b in Format.eprintf "READ IT %s@." body_str; *)
+  response, body_stream

@@ -24,12 +24,12 @@
     "@opam/ocamlformat": "*"
   },
   "resolutions": {
-    "@opam/httpaf-lwt": "../httpaf/httpaf-lwt.opam",
-    "@opam/httpaf-lwt-unix": "../httpaf/httpaf-lwt-unix.opam",
-    "@opam/httpaf": "../httpaf/httpaf.opam",
-    "@opam/h2-lwt": "../ocaml-h2/h2-lwt.opam",
-    "@opam/h2-lwt-unix": "../ocaml-h2/h2-lwt-unix.opam",
-    "@opam/h2": "../ocaml-h2/h2.opam",
+    "@opam/httpaf-lwt": "link-dev:../httpaf/httpaf-lwt.opam",
+    "@opam/httpaf-lwt-unix": "link-dev:../httpaf/httpaf-lwt-unix.opam",
+    "@opam/httpaf": "link-dev:../httpaf/httpaf.opam",
+    "@opam/h2-lwt": "link-dev:../ocaml-h2/h2-lwt.opam",
+    "@opam/h2-lwt-unix": "link-dev:../ocaml-h2/h2-lwt-unix.opam",
+    "@opam/h2": "link-dev:../ocaml-h2/h2.opam",
     "@opam/conf-libssl": "esy-packages/esy-openssl#860ad7f"
   }
 }
