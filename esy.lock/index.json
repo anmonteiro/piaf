@@ -1,5 +1,5 @@
 {
-  "checksum": "465f565ee7a260e95ca55cf09db2028a",
+  "checksum": "380e07c626d264cb28e6bcb620fc01e5",
   "root": "piaf@link-dev:./esy.json",
   "node": {
     "yarn-pkg-config@github:esy-ocaml/yarn-pkg-config#cca65f99674ed2d954d28788edeb8c57fada5ed0@d41d8cd9": {
@@ -1037,6 +1037,35 @@
         "@opam/angstrom@opam:0.12.1@02015bad"
       ]
     },
+    "@opam/hex@opam:1.4.0@96b78cfa": {
+      "id": "@opam/hex@opam:1.4.0@96b78cfa",
+      "name": "@opam/hex",
+      "version": "opam:1.4.0",
+      "source": {
+        "type": "install",
+        "source": [
+          "archive:https://opam.ocaml.org/cache/md5/57/57103ff33e70f14171c46d88f5452d11#md5:57103ff33e70f14171c46d88f5452d11",
+          "archive:https://github.com/mirage/ocaml-hex/releases/download/v1.4.0/hex-v1.4.0.tbz#md5:57103ff33e70f14171c46d88f5452d11"
+        ],
+        "opam": {
+          "name": "hex",
+          "version": "1.4.0",
+          "path": "esy.lock/opam/hex.1.4.0"
+        }
+      },
+      "overrides": [],
+      "dependencies": [
+        "ocaml@4.9.0@d41d8cd9", "@opam/dune@opam:1.11.4@a7ccb7ae",
+        "@opam/cstruct@opam:5.1.1@e0b5aafd",
+        "@opam/bigarray-compat@opam:1.0.0@1faefa97",
+        "@esy-ocaml/substs@0.0.1@d41d8cd9"
+      ],
+      "devDependencies": [
+        "ocaml@4.9.0@d41d8cd9", "@opam/dune@opam:1.11.4@a7ccb7ae",
+        "@opam/cstruct@opam:5.1.1@e0b5aafd",
+        "@opam/bigarray-compat@opam:1.0.0@1faefa97"
+      ]
+    },
     "@opam/h2-lwt-unix@link-dev:../ocaml-h2/h2-lwt-unix.opam": {
       "id": "@opam/h2-lwt-unix@link-dev:../ocaml-h2/h2-lwt-unix.opam",
       "name": "@opam/h2-lwt-unix",
@@ -1103,13 +1132,15 @@
         "@esy-ocaml/substs@0.0.1@d41d8cd9"
       ],
       "devDependencies": [
-        "ocaml@4.9.0@d41d8cd9", "@opam/psq@opam:0.2.0@247756d4",
+        "ocaml@4.9.0@d41d8cd9", "@opam/yojson@opam:1.7.0@7056d985",
+        "@opam/psq@opam:0.2.0@247756d4",
         "@opam/httpaf@link-dev:../httpaf/httpaf.opam",
-        "@opam/hpack@opam:0.2.0@9f3eae78",
+        "@opam/hpack@opam:0.2.0@9f3eae78", "@opam/hex@opam:1.4.0@96b78cfa",
         "@opam/faraday@opam:0.7.0@6d4772f6",
         "@opam/dune@opam:1.11.4@a7ccb7ae",
         "@opam/bigstringaf@opam:0.6.0@971764fa",
-        "@opam/angstrom@opam:0.12.1@02015bad"
+        "@opam/angstrom@opam:0.12.1@02015bad",
+        "@opam/alcotest@opam:0.8.5@68e6c66c"
       ]
     },
     "@opam/fpath@opam:0.7.2@45477b93": {
@@ -1330,6 +1361,33 @@
       "devDependencies": [
         "ocaml@4.9.0@d41d8cd9", "@opam/base-unix@opam:base@87d0b2eb",
         "@opam/base-threads@opam:base@36803084"
+      ]
+    },
+    "@opam/cstruct@opam:5.1.1@e0b5aafd": {
+      "id": "@opam/cstruct@opam:5.1.1@e0b5aafd",
+      "name": "@opam/cstruct",
+      "version": "opam:5.1.1",
+      "source": {
+        "type": "install",
+        "source": [
+          "archive:https://opam.ocaml.org/cache/sha256/55/55d1f42cb85f7872fee499c5ed382aea17b06d55d1709e071d1ba85c7a09fef3#sha256:55d1f42cb85f7872fee499c5ed382aea17b06d55d1709e071d1ba85c7a09fef3",
+          "archive:https://github.com/mirage/ocaml-cstruct/releases/download/v5.1.1/cstruct-v5.1.1.tbz#sha256:55d1f42cb85f7872fee499c5ed382aea17b06d55d1709e071d1ba85c7a09fef3"
+        ],
+        "opam": {
+          "name": "cstruct",
+          "version": "5.1.1",
+          "path": "esy.lock/opam/cstruct.5.1.1"
+        }
+      },
+      "overrides": [],
+      "dependencies": [
+        "ocaml@4.9.0@d41d8cd9", "@opam/dune@opam:1.11.4@a7ccb7ae",
+        "@opam/bigarray-compat@opam:1.0.0@1faefa97",
+        "@esy-ocaml/substs@0.0.1@d41d8cd9"
+      ],
+      "devDependencies": [
+        "ocaml@4.9.0@d41d8cd9", "@opam/dune@opam:1.11.4@a7ccb7ae",
+        "@opam/bigarray-compat@opam:1.0.0@1faefa97"
       ]
     },
     "@opam/cppo@opam:1.6.6@f4f83858": {

@@ -1,5 +1,11 @@
 open Lwt.Infix
 
+let setup_log ?style_renderer level =
+  Fmt_tty.setup_std_outputs ?style_renderer ();
+  Logs.set_level level;
+  Logs.set_reporter (Logs_fmt.reporter ());
+  ()
+
 let request host =
   Piaf.Client.get
     ~config:{ Piaf.Config.default_config with follow_redirects = true }
@@ -11,6 +17,7 @@ let request host =
     failwith e
 
 let () =
+  setup_log (Some Logs.Debug);
   let host = ref None in
   Arg.parse
     []

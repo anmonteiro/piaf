@@ -1,5 +1,4 @@
 (*
- * - Follow redirects (assumes upgrading to https too)
  * - Functions for persistent / oneshot connections
  * - Logging
  * *)
@@ -81,9 +80,9 @@ let resolve_host ~port hostname =
   match addresses with
   | [] ->
     Error "Can't resolve hostname"
-  | { Unix.ai_addr; _ } :: _ ->
+  | xs ->
     (* TODO: add resolved canonical hostname *)
-    Ok ai_addr
+    Ok (List.map (fun { Unix.ai_addr; _ } -> ai_addr) xs)
 
 module Headers = struct
   let add_canonical_headers ~host ~version headers =
@@ -145,23 +144,32 @@ module Connection_info = struct
     { port : int
     ; scheme : Scheme.t
     ; host : string
-    ; address : Unix.sockaddr
+    ; addresses : Unix.sockaddr list
     }
 
   (* Only need the address and port to know whether the endpoint is the same or
    * not. *)
   let equal c1 c2 =
     c1.port = c2.port
-    &&
-    match c1.address, c2.address with
-    | ADDR_INET (addr1, _), ADDR_INET (addr2, _) ->
-      String.equal
-        (Unix.string_of_inet_addr addr1)
-        (Unix.string_of_inet_addr addr2)
-    | ADDR_UNIX addr1, ADDR_UNIX addr2 ->
-      String.equal addr1 addr2
-    | _ ->
-      false
+    && (* At least one can match *)
+    List.exists
+      (fun a1 ->
+        List.exists
+          (fun a2 ->
+            (* Note: this is slightly wrong if we allow both UNIX and Internet
+             * domain sockets but for now we filter by TCP sockets that we can
+             * connect to. *)
+            match a1, a2 with
+            | Unix.ADDR_INET (addr1, _), Unix.ADDR_INET (addr2, _) ->
+              String.equal
+                (Unix.string_of_inet_addr addr1)
+                (Unix.string_of_inet_addr addr2)
+            | ADDR_UNIX addr1, ADDR_UNIX addr2 ->
+              String.equal addr1 addr2
+            | _ ->
+              false)
+          c2.addresses)
+      c1.addresses
 
   (* Use this shortcut to avoid resolving the new address. Not 100% correct
    * because different hosts may point to the same address. *)
@@ -174,8 +182,8 @@ module Connection_info = struct
     let host = Uri.host_with_default uri in
     let* scheme = Lwt.return (Scheme.of_uri uri) in
     let port = infer_port ~scheme uri in
-    let+ address = resolve_host ~port host in
-    { scheme; host; port; address }
+    let+ addresses = resolve_host ~port host in
+    { scheme; host; port; addresses }
 end
 
 type t =
@@ -189,15 +197,23 @@ type t =
       }
       -> t
 
+let pp_address fmt = function
+  | Unix.ADDR_INET (addr, port) ->
+    Format.fprintf fmt "%s:%d" (Unix.string_of_inet_addr addr) port
+  | ADDR_UNIX addr ->
+    Format.fprintf fmt "%s" addr
+
 let open_connection ~config ~conn_info uri =
   let open Lwt.Syntax in
-  let { Connection_info.host; scheme; address; _ } = conn_info in
+  let { Connection_info.host; scheme; addresses; _ } = conn_info in
+  (* TODO: try addresses in e.g. a round robin fashion? *)
+  let address = List.hd addresses in
   let fd = Lwt_unix.socket Unix.PF_INET Unix.SOCK_STREAM 0 in
-  Format.eprintf "hst : %s %s@." host (Uri.path_and_query uri);
   let* (module HTTPImpl : S.HTTPCommon), version =
-    make_impl ~scheme ~address ~host fd
+    make_impl ~scheme ~address:(List.hd addresses) ~host fd
   in
   let+ conn = HTTPImpl.Client.create_connection fd in
+  Logs.info (fun m -> m "Connected to %s (%a)" host pp_address address);
   Ok (Conn { impl = (module HTTPImpl); conn; version; uri; conn_info; config })
 
 let rec build_request_and_handle_response
@@ -260,11 +276,11 @@ let rec build_request_and_handle_response
          * to re-establish a new connection. *)
         Lwt_result.return (Conn { t with uri = new_uri })
       else
-        let* new_address =
+        let* new_addresses =
           resolve_host ~port:new_conn_info.port new_conn_info.host
         in
         (* Now we know the new address *)
-        let new_conn_info = { new_conn_info with address = new_address } in
+        let new_conn_info = { new_conn_info with addresses = new_addresses } in
         (* Really avoiding having to establish a new connection here. If the
          * new host resolves to the same address and the port matches *)
         if Connection_info.equal conn_info new_conn_info then

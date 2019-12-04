@@ -60,7 +60,6 @@ let send_request
       -> (Response.t * string Lwt_stream.t, 'err) Lwt_result.t
   =
  fun (module Http) conn ?body request ->
-  Format.eprintf "TOINE: %a@." Request.pp_hum request;
   let open Lwt_result.Syntax in
   let open Http in
   let response_received, notify_response_received = Lwt.wait () in
@@ -69,6 +68,7 @@ let send_request
   in
   let _error_received, notify_error_received = Lwt.wait () in
   let error_handler = error_handler notify_error_received in
+  Logs.info (fun m -> m "Sending request: %a" Request.pp_hum request);
   let request_body =
     Http.Client.request conn request ~error_handler ~response_handler
   in
@@ -79,9 +79,8 @@ let send_request
   | None ->
     ());
   Body.Write.flush request_body (fun () -> Body.Write.close_writer request_body);
-  (* Lwt.return (response_received, error_received) *)
   let+ response, response_body = response_received in
-  Format.eprintf "Response: %a@." Response.pp_hum response;
+  Logs.info (fun m -> m "Received response: %a" Response.pp_hum response);
   let body_stream = stream_of_read_body (module Body) response_body in
   (* let b = Buffer.create 0x2000 in Lwt_stream.iter_s (fun x ->
      Buffer.add_string b x; Lwt.return_unit) body >|= fun () -> let body_str =
