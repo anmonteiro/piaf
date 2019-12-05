@@ -184,6 +184,16 @@ module Connection_info = struct
     let port = infer_port ~scheme uri in
     let+ addresses = resolve_host ~port host in
     { scheme; host; port; addresses }
+
+  let pp_address fmt = function
+    | Unix.ADDR_INET (addr, port) ->
+      Format.fprintf fmt "%s:%d" (Unix.string_of_inet_addr addr) port
+    | ADDR_UNIX addr ->
+      Format.fprintf fmt "%s" addr
+
+  let pp_hum fmt { addresses; host; _ } =
+    let address = List.hd addresses in
+    Format.fprintf fmt "%s (%a)" host pp_address address
 end
 
 type t =
@@ -197,12 +207,6 @@ type t =
       }
       -> t
 
-let pp_address fmt = function
-  | Unix.ADDR_INET (addr, port) ->
-    Format.fprintf fmt "%s:%d" (Unix.string_of_inet_addr addr) port
-  | ADDR_UNIX addr ->
-    Format.fprintf fmt "%s" addr
-
 let open_connection ~config ~conn_info uri =
   let open Lwt.Syntax in
   let { Connection_info.host; scheme; addresses; _ } = conn_info in
@@ -210,10 +214,10 @@ let open_connection ~config ~conn_info uri =
   let address = List.hd addresses in
   let fd = Lwt_unix.socket Unix.PF_INET Unix.SOCK_STREAM 0 in
   let* (module HTTPImpl : S.HTTPCommon), version =
-    make_impl ~scheme ~address:(List.hd addresses) ~host fd
+    make_impl ~scheme ~address ~host fd
   in
   let+ conn = HTTPImpl.Client.create_connection fd in
-  Logs.info (fun m -> m "Connected to %s (%a)" host pp_address address);
+  Logs.info (fun m -> m "Connected to %a" Connection_info.pp_hum conn_info);
   Ok (Conn { impl = (module HTTPImpl); conn; version; uri; conn_info; config })
 
 let rec build_request_and_handle_response
@@ -283,19 +287,48 @@ let rec build_request_and_handle_response
         let new_conn_info = { new_conn_info with addresses = new_addresses } in
         (* Really avoiding having to establish a new connection here. If the
          * new host resolves to the same address and the port matches *)
-        if Connection_info.equal conn_info new_conn_info then
+        if Connection_info.equal conn_info new_conn_info then (
+          Logs.debug (fun m -> m "Ignoring the response body");
+          (* In case the connection is going to be kept around, we wanna drain *
+             the response body entirely to avoid memory leaks. If we're *
+             communicating over HTTP/1.1 or HTTP/2 we can rely on pipelining or
+             * multiplexing, respectively, and drain the previous response body
+             * asynchronously. If the version is HTTP/1.0 (or lower) we need to
+             * wait for the promise to complete before sending the new request. *)
+          let open Lwt.Syntax in
+          let* () =
+            match version with
+            | { Httpaf.Version.major = 2; _ }
+            | { Httpaf.Version.major = 1; minor = 1 } ->
+              Lwt.async (fun () -> Http_impl.drain_stream response_body);
+              Lwt.return_unit
+            | { Httpaf.Version.major = 1; minor = 0 }
+            | { Httpaf.Version.major = 0; minor = _ } ->
+              Http_impl.drain_stream response_body
+            | _ ->
+              assert false
+          in
+          Logs.debug (fun m ->
+              m
+                "Reusing the same connection as the remote address didn't \
+                 change");
           Lwt_result.return
-            (Conn { t with uri = new_uri; conn_info = new_conn_info })
+            (Conn { t with uri = new_uri; conn_info = new_conn_info }))
         else (
           (* No way to avoid establishing a new connection. *)
+          Logs.debug (fun m -> m "Ignoring the response body");
+          (* Junk what's available because we're going to close the connection.
+           * This is to avoid leaking memory. We're not going to use this
+           * response body so it doesn't need to stay around. *)
+          Lwt.async (fun () -> Lwt_stream.junk_old response_body);
+          Logs.info (fun m ->
+              m "Tearing down connection to %a" Connection_info.pp_hum conn_info);
           HTTPImpl.Client.shutdown conn;
           open_connection ~config ~conn_info:new_conn_info new_uri)
     in
     build_request_and_handle_response ~meth ~headers ?body new_t
-  | true, true, None ->
+  | true, true, _, None ->
     failwith "Redirect without Location header?"
-  | _ ->
-    Lwt_result.return response
 
 let call ~config ~meth ~headers ?body uri =
   let open Lwt_result.Syntax in

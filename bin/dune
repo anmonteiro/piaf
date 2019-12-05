@@ -1,0 +1,4 @@
+(executable
+ (public_name carl)
+ (package piaf)
+ (libraries piaf cmdliner logs logs.fmt fmt.tty))

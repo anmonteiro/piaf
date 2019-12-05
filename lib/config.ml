@@ -4,7 +4,9 @@
  * - Authentication
  * - Buffer sizes (for http/af / h2)?
  * - Timeouts?
+ * - Referrer
  *)
+
 type t =
   { follow_redirects : bool  (** whether to follow redirects *)
   ; max_redirects : int
