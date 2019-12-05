@@ -23,12 +23,12 @@ module Client : sig
     :  ?config:Config.t
     -> ?headers:(string * string) list
     -> Uri.t
-    -> (Response.t, string) Lwt_result.t
+    -> (Response.t * string Lwt_stream.t, string) Lwt_result.t
 
   val request
     :  ?config:Config.t
     -> ?headers:(string * string) list
     -> meth:Method.t
     -> Uri.t
-    -> (Response.t, string) Lwt_result.t
+    -> (Response.t * string Lwt_stream.t, string) Lwt_result.t
 end

@@ -247,7 +247,7 @@ let rec build_request_and_handle_response
   with
   | false, _, _, _ | _, false, _, _ ->
     (* Either not a redirect, or we shouldn't follow redirects. *)
-    Lwt_result.return response
+    Lwt_result.return (response, response_body)
   | true, true, 0, _ ->
     (* Response is a redirect, but we can't follow any more. *)
     let msg =

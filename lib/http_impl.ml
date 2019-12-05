@@ -82,7 +82,4 @@ let send_request
   let+ response, response_body = response_received in
   Logs.info (fun m -> m "Received response: %a" Response.pp_hum response);
   let body_stream = stream_of_read_body (module Body) response_body in
-  (* let b = Buffer.create 0x2000 in Lwt_stream.iter_s (fun x ->
-     Buffer.add_string b x; Lwt.return_unit) body >|= fun () -> let body_str =
-     Buffer.contents b in Format.eprintf "READ IT %s@." body_str; *)
   response, body_stream

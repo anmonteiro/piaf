@@ -1,5 +1,4 @@
 open Async
-open Lwt.Infix
 open Cmdliner
 
 let setup_log ?style_renderer level =
@@ -9,12 +8,19 @@ let setup_log ?style_renderer level =
   ()
 
 let request ~config ~meth host =
+  let open Lwt.Syntax in
   let headers = [ "user-agent", "carl/0.0.0-experimental" ] in
-  Piaf.Client.request ~config ~meth ~headers (Uri.of_string host) >|= function
-  | Ok _response ->
+  let* res = Piaf.Client.request ~config ~meth ~headers (Uri.of_string host) in
+  match res with
+  | Ok (_response, response_body) ->
+    let+ () =
+      Lwt_stream.iter_s
+        (fun body_fragment -> Logs_lwt.app (fun m -> m "%s" body_fragment))
+        response_body
+    in
     `Ok ()
   | Error e ->
-    `Error (false, e)
+    Lwt.return (`Error (false, e))
 
 let log_level_of_list = function [] -> Logs.App | [ _ ] -> Info | _ -> Debug
 
