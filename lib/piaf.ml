@@ -1,4 +1,5 @@
 module Config = Config
 module Client = Client
-module Headers = H2.Headers
+module Headers = Headers
+module Method = Method
 module Response = Response

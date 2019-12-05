@@ -1,5 +1,3 @@
-module Version = Httpaf.Version
-
 type t =
   { meth : H2.Method.t
   ; target : string

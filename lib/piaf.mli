@@ -2,6 +2,8 @@ module Headers : module type of H2.Headers
 
 module Response : module type of Response
 
+module Method : module type of Method
+
 module Config : sig
   type t =
     { follow_redirects : bool  (** whether to follow redirects *)
@@ -20,6 +22,13 @@ module Client : sig
   val get
     :  ?config:Config.t
     -> ?headers:(string * string) list
+    -> Uri.t
+    -> (Response.t, string) Lwt_result.t
+
+  val request
+    :  ?config:Config.t
+    -> ?headers:(string * string) list
+    -> meth:Method.t
     -> Uri.t
     -> (Response.t, string) Lwt_result.t
 end

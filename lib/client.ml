@@ -84,17 +84,6 @@ let resolve_host ~port hostname =
     (* TODO: add resolved canonical hostname *)
     Ok (List.map (fun { Unix.ai_addr; _ } -> ai_addr) xs)
 
-module Headers = struct
-  let add_canonical_headers ~host ~version headers =
-    match version with
-    | { Version.major = 2; _ } ->
-      H2.Headers.of_list ((":authority", host) :: headers)
-    | { Version.major = 1; _ } ->
-      H2.Headers.of_list (("Host", host) :: headers)
-    | _ ->
-      failwith "unsupported version"
-end
-
 let make_impl ~scheme ~address ~host fd =
   let open Lwt.Syntax in
   match scheme with
@@ -236,9 +225,7 @@ let rec build_request_and_handle_response
   =
   let open Lwt_result.Syntax in
   let { Connection_info.host; scheme; remaining_redirects; _ } = conn_info in
-  let canonical_headers =
-    Headers.add_canonical_headers ~version ~host headers
-  in
+  let canonical_headers = Headers.canonicalize_headers ~version ~host headers in
   let request =
     Request.create
       meth
@@ -344,11 +331,12 @@ let rec build_request_and_handle_response
   | true, true, _, None ->
     failwith "Redirect without Location header?"
 
-let call ~config ~meth ~headers ?body uri =
+let call ?(config = Config.default_config) ~meth ?(headers = []) ?body uri =
   let open Lwt_result.Syntax in
   let* conn_info = Connection_info.of_uri ~config uri in
   let* connection = open_connection ~config ~conn_info uri in
   build_request_and_handle_response ~meth ~headers ?body connection
 
-let get ?(config = Config.default_config) ?(headers = []) uri =
-  call ~config ~meth:`GET ~headers uri
+let request ?config ?headers ~meth uri = call ?config ~meth ?headers uri
+
+let get ?config ?headers uri = call ?config ~meth:`GET ?headers uri
