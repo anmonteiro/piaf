@@ -145,6 +145,7 @@ module Connection_info = struct
     ; scheme : Scheme.t
     ; host : string
     ; addresses : Unix.sockaddr list
+    ; remaining_redirects : int
     }
 
   (* Only need the address and port to know whether the endpoint is the same or
@@ -176,14 +177,19 @@ module Connection_info = struct
   let equal_without_resolving c1 c2 =
     c1.port = c2.port && c1.scheme = c2.scheme && c1.host = c2.host
 
-  let of_uri uri =
+  let of_uri ~config uri =
     let open Lwt_result.Syntax in
     let uri = Uri.canonicalize uri in
     let host = Uri.host_with_default uri in
     let* scheme = Lwt.return (Scheme.of_uri uri) in
     let port = infer_port ~scheme uri in
     let+ addresses = resolve_host ~port host in
-    { scheme; host; port; addresses }
+    { scheme
+    ; host
+    ; port
+    ; addresses
+    ; remaining_redirects = config.Config.max_redirects
+    }
 
   let pp_address fmt = function
     | Unix.ADDR_INET (addr, port) ->
@@ -229,7 +235,7 @@ let rec build_request_and_handle_response
       t))
   =
   let open Lwt_result.Syntax in
-  let { Connection_info.host; scheme; _ } = conn_info in
+  let { Connection_info.host; scheme; remaining_redirects; _ } = conn_info in
   let canonical_headers =
     Headers.add_canonical_headers ~version ~host headers
   in
@@ -244,18 +250,25 @@ let rec build_request_and_handle_response
   let* response, response_body =
     Http_impl.send_request (module HTTPImpl) conn ?body request
   in
-  let open Lwt.Syntax in
   (* TODO: 201 created can also return a Location header. Should we follow
    * those? *)
-  (* TODO: redirects left? *)
   match
-    ( config.follow_redirects
-    , H2.Status.is_redirection response.status
+    ( H2.Status.is_redirection response.status
+    , config.follow_redirects
+    , remaining_redirects
     , H2.Headers.get response.headers "location" )
   with
-  | true, true, Some location ->
-    (* TODO: do this in an Lwt.async call if HTTP/2 / HTTP/1.1 pipelining? *)
-    let* () = Http_impl.drain_stream response_body in
+  | false, _, _, _ | _, false, _, _ ->
+    (* Either not a redirect, or we shouldn't follow redirects. *)
+    Lwt_result.return response
+  | true, true, 0, _ ->
+    (* Response is a redirect, but we can't follow any more. *)
+    let msg =
+      Format.asprintf "Maximum (%d) redirects followed" config.max_redirects
+    in
+    Logs.err (fun m -> m "%s" msg);
+    Lwt_result.fail msg
+  | true, true, _, Some location ->
     let location_uri = Uri.of_string location in
     let new_uri, new_host =
       match Uri.host location_uri with
@@ -272,6 +285,7 @@ let rec build_request_and_handle_response
         port = infer_port ~scheme:new_scheme new_uri
       ; scheme = new_scheme
       ; host = new_host
+      ; remaining_redirects = conn_info.remaining_redirects - 1
       }
     in
     let* new_t =
@@ -332,7 +346,7 @@ let rec build_request_and_handle_response
 
 let call ~config ~meth ~headers ?body uri =
   let open Lwt_result.Syntax in
-  let* conn_info = Connection_info.of_uri uri in
+  let* conn_info = Connection_info.of_uri ~config uri in
   let* connection = open_connection ~config ~conn_info uri in
   build_request_and_handle_response ~meth ~headers ?body connection
 
