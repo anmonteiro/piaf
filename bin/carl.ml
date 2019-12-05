@@ -7,10 +7,10 @@ let setup_log ?style_renderer level =
   Logs.set_reporter (Logs_fmt.reporter ());
   ()
 
-let request ~config ~meth host =
+let request ~config ~meth uri =
   let open Lwt.Syntax in
   let headers = [ "user-agent", "carl/0.0.0-experimental" ] in
-  let* res = Piaf.Client.request ~config ~meth ~headers (Uri.of_string host) in
+  let* res = Piaf.Client.request ~config ~meth ~headers uri in
   match res with
   | Ok (_response, response_body) ->
     let+ () =
@@ -30,16 +30,34 @@ type cli =
   ; meth : Piaf.Method.t
   ; log_level : Logs.level
   ; urls : string list
+  ; default_proto : string
   }
 
-let main { follow_redirects; max_redirects; meth; log_level; urls } =
+let rec uri_of_string ~scheme s =
+  let maybe_uri = Uri.of_string s in
+  match Uri.host maybe_uri, Uri.scheme maybe_uri with
+  | None, _ ->
+    (* If Uri.of_string didn't get a host it must mean that the scheme wasn't
+     * even present. *)
+    Logs.debug (fun m ->
+        m "Protocol not provided for %s. Using the default scheme: %s" s scheme);
+    uri_of_string ~scheme ("//" ^ s)
+  | Some _, None ->
+    (* e.g. `//example.com` *)
+    Uri.with_scheme maybe_uri (Some scheme)
+  | Some _, Some _ ->
+    maybe_uri
+
+let main
+    { follow_redirects; max_redirects; meth; log_level; urls; default_proto }
+  =
   setup_log (Some log_level);
   let config =
     { Piaf.Config.default_config with follow_redirects; max_redirects }
   in
   (* TODO: Issue requests for all URLs *)
-  let x = List.hd urls in
-  Lwt_main.run (request ~config ~meth x)
+  let uri = uri_of_string ~scheme:default_proto (List.hd urls) in
+  Lwt_main.run (request ~config ~meth uri)
 
 (* -H / --header
  * -d / --data
@@ -49,6 +67,11 @@ let main { follow_redirects; max_redirects; meth; log_level; urls } =
  * -i / --include
  * -I / --head
  * -k / --insecure
+ * --http0.9       Allow HTTP 0.9 responses
+ * -0 / --http1.0  Use HTTP 1.0
+ * --http1.1       Use HTTP 1.1
+ * --http2         Use HTTP 2
+ * --http2-prior-knowledge Use HTTP 2 without HTTP/1.1 Upgrade
  *)
 module CLI = struct
   let request =
@@ -61,6 +84,11 @@ module CLI = struct
     let docv = "method" in
     Arg.(
       value & opt (some request_conv) None & info [ "X"; "request" ] ~doc ~docv)
+
+  let default_proto =
+    let doc = "Use $(docv) for any URL missing a scheme (without `://`)" in
+    let docv = "protocol" in
+    Arg.(value & opt string "http" & info [ "proto-default" ] ~doc ~docv)
 
   let follow_redirects =
     let doc = "Follow redirects" in
@@ -82,7 +110,7 @@ module CLI = struct
     let docv = "URLs" in
     Arg.(non_empty & pos_all string [] & info [] ~docv)
 
-  let parse follow_redirects max_redirects request verbose urls =
+  let parse default_proto follow_redirects max_redirects request verbose urls =
     { follow_redirects
     ; max_redirects
     ; meth =
@@ -94,11 +122,18 @@ module CLI = struct
           meth)
     ; log_level = log_level_of_list verbose
     ; urls
+    ; default_proto
     }
 
   let default_cmd =
     Term.(
-      const parse $ follow_redirects $ max_redirects $ request $ verbose $ urls)
+      const parse
+      $ default_proto
+      $ follow_redirects
+      $ max_redirects
+      $ request
+      $ verbose
+      $ urls)
 
   let cmd =
     let doc = "Like curl, for caml" in
