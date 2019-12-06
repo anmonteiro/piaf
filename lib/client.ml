@@ -241,14 +241,24 @@ let open_connection ~config ~conn_info uri =
   Log.info (fun m -> m "Connected to %a" Connection_info.pp_hum conn_info);
   Ok (Conn { impl = (module HTTPImpl); conn; version; uri; conn_info; config })
 
-let reuse_or_set_up_new_connection
-    (Conn
-      ({ impl = (module HTTPImpl); conn; version; conn_info; config; uri; _ } as
-      t))
-    response
-    response_body
-    new_location
+let drain_response_body_and_shutdown
+    (Conn { impl = (module HTTPImpl); conn; conn_info; _ }) response_body
   =
+  let open Lwt.Syntax in
+  Log.debug (fun m -> m "Ignoring the response body");
+  (* Junk what's available because we're going to close the connection.
+   * This is to avoid leaking memory. We're not going to use this
+   * response body so it doesn't need to stay around. *)
+  Lwt.async (fun () ->
+      let+ () = Lwt_stream.junk_old response_body in
+      Log.info (fun m ->
+          m "Tearing down connection to %a" Connection_info.pp_hum conn_info);
+      HTTPImpl.Client.shutdown conn)
+
+let reuse_or_set_up_new_connection t response response_body new_location =
+  let (Conn ({ impl = (module HTTPImpl); conn_info; config; uri; _ } as state)) =
+    t
+  in
   let { Connection_info.host; scheme; remaining_redirects; _ } = conn_info in
   let location_uri = Uri.of_string new_location in
   let new_uri, new_host =
@@ -259,6 +269,7 @@ let reuse_or_set_up_new_connection
       (* relative URI, replace the path and query on the old URI. *)
       Uri.resolve (Scheme.to_string scheme) uri location_uri, host
   in
+  let new_uri = Uri.canonicalize new_uri in
   let open Lwt_result.Syntax in
   let* new_scheme = Lwt.return (Scheme.of_uri new_uri) in
   let new_conn_info =
@@ -269,17 +280,17 @@ let reuse_or_set_up_new_connection
     ; remaining_redirects = remaining_redirects - 1
     }
   in
-  let persistent = Response.persistent_connection response in
-  if
-    Connection_info.equal_without_resolving conn_info new_conn_info
-    && persistent
-  then (
+  match
+    ( Response.persistent_connection response
+    , Connection_info.equal_without_resolving conn_info new_conn_info )
+  with
+  | true, true ->
     (* If we're redirecting within the same host / port / scheme, no need
      * to re-establish a new connection. *)
     Log.debug (fun m ->
         m "Reusing the same connection as the host / port didn't change");
-    Lwt_result.return (Conn { t with uri = new_uri }))
-  else
+    Lwt_result.return (Conn { state with uri = new_uri })
+  | true, false ->
     let* new_addresses =
       resolve_host ~port:new_conn_info.port new_conn_info.host
     in
@@ -287,42 +298,22 @@ let reuse_or_set_up_new_connection
     let new_conn_info = { new_conn_info with addresses = new_addresses } in
     (* Really avoiding having to establish a new connection here. If the
      * new host resolves to the same address and the port matches *)
-    if Connection_info.equal conn_info new_conn_info && persistent then (
+    if Connection_info.equal conn_info new_conn_info then (
       Log.debug (fun m -> m "Ignoring the response body");
-      (* In case the connection is going to be kept around, we wanna drain * the
-         response body entirely to avoid memory leaks. If we're * communicating
-         over HTTP/1.1 or HTTP/2 we can rely on pipelining or * multiplexing,
-         respectively, and drain the previous response body * asynchronously. If
-         the version is HTTP/1.0 (or lower) we need to * wait for the promise to
-         complete before sending the new request. *)
-      let open Lwt.Syntax in
-      let* () =
-        match version with
-        | { Httpaf.Version.major = 2; _ }
-        | { Httpaf.Version.major = 1; minor = 1 } ->
-          Lwt.async (fun () -> Http_impl.drain_stream response_body);
-          Lwt.return_unit
-        | { Httpaf.Version.major = 1; minor = 0 }
-        | { Httpaf.Version.major = 0; minor = _ } ->
-          Http_impl.drain_stream response_body
-        | _ ->
-          assert false
-      in
+      Lwt.async (fun () -> Http_impl.drain_stream response_body);
       Log.debug (fun m ->
           m "Reusing the same connection as the remote address didn't change");
       Lwt_result.return
-        (Conn { t with uri = new_uri; conn_info = new_conn_info }))
+        (Conn { state with uri = new_uri; conn_info = new_conn_info }))
     else (
       (* No way to avoid establishing a new connection. *)
-      Log.debug (fun m -> m "Ignoring the response body");
-      (* Junk what's available because we're going to close the connection.
-       * This is to avoid leaking memory. We're not going to use this
-       * response body so it doesn't need to stay around. *)
-      Lwt.async (fun () -> Lwt_stream.junk_old response_body);
-      Log.info (fun m ->
-          m "Tearing down connection to %a" Connection_info.pp_hum conn_info);
-      HTTPImpl.Client.shutdown conn;
+      drain_response_body_and_shutdown t response_body;
       open_connection ~config ~conn_info:new_conn_info new_uri)
+  | false, _ ->
+    (* No way to avoid establishing a new connection if the previous one wasn't
+       persistent. *)
+    drain_response_body_and_shutdown t response_body;
+    open_connection ~config ~conn_info:new_conn_info new_uri
 
 let rec build_request_and_handle_response
     ~meth
