@@ -5,6 +5,10 @@
 open Monads
 module Version = Httpaf.Version
 
+let src = Logs.Src.create "piaf.client" ~doc:"Piaf Client module"
+
+module Log = (val Logs.src_log src : Logs.LOG)
+
 module SSL = struct
   let () =
     Ssl_threads.init ();
@@ -212,7 +216,7 @@ let open_connection ~config ~conn_info uri =
     make_impl ~scheme ~address ~host fd
   in
   let+ conn = HTTPImpl.Client.create_connection fd in
-  Logs.info (fun m -> m "Connected to %a" Connection_info.pp_hum conn_info);
+  Log.info (fun m -> m "Connected to %a" Connection_info.pp_hum conn_info);
   Ok (Conn { impl = (module HTTPImpl); conn; version; uri; conn_info; config })
 
 let rec build_request_and_handle_response
@@ -253,7 +257,7 @@ let rec build_request_and_handle_response
     let msg =
       Format.asprintf "Maximum (%d) redirects followed" config.max_redirects
     in
-    Logs.err (fun m -> m "%s" msg);
+    Log.err (fun m -> m "%s" msg);
     Lwt_result.fail msg
   | true, true, _, Some location ->
     let location_uri = Uri.of_string location in
@@ -289,7 +293,7 @@ let rec build_request_and_handle_response
         (* Really avoiding having to establish a new connection here. If the
          * new host resolves to the same address and the port matches *)
         if Connection_info.equal conn_info new_conn_info then (
-          Logs.debug (fun m -> m "Ignoring the response body");
+          Log.debug (fun m -> m "Ignoring the response body");
           (* In case the connection is going to be kept around, we wanna drain *
              the response body entirely to avoid memory leaks. If we're *
              communicating over HTTP/1.1 or HTTP/2 we can rely on pipelining or
@@ -309,7 +313,7 @@ let rec build_request_and_handle_response
             | _ ->
               assert false
           in
-          Logs.debug (fun m ->
+          Log.debug (fun m ->
               m
                 "Reusing the same connection as the remote address didn't \
                  change");
@@ -317,12 +321,12 @@ let rec build_request_and_handle_response
             (Conn { t with uri = new_uri; conn_info = new_conn_info }))
         else (
           (* No way to avoid establishing a new connection. *)
-          Logs.debug (fun m -> m "Ignoring the response body");
+          Log.debug (fun m -> m "Ignoring the response body");
           (* Junk what's available because we're going to close the connection.
            * This is to avoid leaking memory. We're not going to use this
            * response body so it doesn't need to stay around. *)
           Lwt.async (fun () -> Lwt_stream.junk_old response_body);
-          Logs.info (fun m ->
+          Log.info (fun m ->
               m "Tearing down connection to %a" Connection_info.pp_hum conn_info);
           HTTPImpl.Client.shutdown conn;
           open_connection ~config ~conn_info:new_conn_info new_uri)

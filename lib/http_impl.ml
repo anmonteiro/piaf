@@ -3,6 +3,10 @@
 
 open Monads
 
+let src = Logs.Src.create "piaf.http" ~doc:"Piaf HTTP module"
+
+module Log = (val Logs.src_log src : Logs.LOG)
+
 let error_handler notify_response_received error =
   let error_str =
     match error with
@@ -68,7 +72,7 @@ let send_request
   in
   let _error_received, notify_error_received = Lwt.wait () in
   let error_handler = error_handler notify_error_received in
-  Logs.info (fun m -> m "Sending request: %a" Request.pp_hum request);
+  Log.info (fun m -> m "Sending request: %a" Request.pp_hum request);
   let request_body =
     Http.Client.request conn request ~error_handler ~response_handler
   in
@@ -80,6 +84,6 @@ let send_request
     ());
   Body.Write.flush request_body (fun () -> Body.Write.close_writer request_body);
   let+ response, response_body = response_received in
-  Logs.info (fun m -> m "Received response: %a" Response.pp_hum response);
+  Log.info (fun m -> m "Received response: %a" Response.pp_hum response);
   let body_stream = stream_of_read_body (module Body) response_body in
   response, body_stream
