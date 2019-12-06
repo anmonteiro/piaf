@@ -4,6 +4,33 @@ module Response : module type of Response
 
 module Method : module type of Method
 
+module Versions : sig
+  module HTTP : sig
+    include module type of Httpaf.Version
+
+    val v1_0 : t
+
+    val v1_1 : t
+
+    val v2_0 : t
+  end
+
+  module ALPN : sig
+    type nonrec t =
+      | HTTP_1_0
+      | HTTP_1_1
+      | HTTP_2
+
+    val of_version : HTTP.t -> t option
+
+    val to_version : t -> HTTP.t
+
+    val of_string : string -> t option
+
+    val to_string : t -> string
+  end
+end
+
 module Config : sig
   type t =
     { follow_redirects : bool  (** whether to follow redirects *)
@@ -12,6 +39,8 @@ module Config : sig
               option *)
     ; allow_insecure : bool
           (** Wether to allow insecure server connections when using SSL *)
+    ; max_http_version : Versions.HTTP.t
+          (** Use this as the highest HTTP version when sending requests *)
     }
 
   val default_config : t

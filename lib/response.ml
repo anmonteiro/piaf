@@ -32,3 +32,6 @@ let pp_hum fmt { status; headers; version } =
     status
     H2.Headers.pp_hum
     headers
+
+let persistent_connection { version; headers; _ } =
+  Message.persistent_connection version headers

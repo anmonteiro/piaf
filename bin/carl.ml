@@ -56,6 +56,7 @@ type cli =
   ; log_level : Logs.level
   ; urls : string list
   ; default_proto : string
+  ; max_http_version : Piaf.Versions.HTTP.t
   }
 
 let rec uri_of_string ~scheme s =
@@ -73,13 +74,16 @@ let rec uri_of_string ~scheme s =
   | Some _, Some _ ->
     maybe_uri
 
-let main
-    { follow_redirects; max_redirects; meth; log_level; urls; default_proto }
-  =
+let piaf_config_of_cli { follow_redirects; max_redirects; max_http_version; _ } =
+  { Piaf.Config.default_config with
+    follow_redirects
+  ; max_redirects
+  ; max_http_version
+  }
+
+let main ({ meth; default_proto; log_level; urls; _ } as config) =
   setup_log (Some log_level);
-  let config =
-    { Piaf.Config.default_config with follow_redirects; max_redirects }
-  in
+  let config = piaf_config_of_cli config in
   (* TODO: Issue requests for all URLs *)
   let uri = uri_of_string ~scheme:default_proto (List.hd urls) in
   Lwt_main.run (request ~config ~meth uri)
@@ -92,10 +96,6 @@ let main
  * -i / --include
  * -I / --head
  * -k / --insecure
- * --http0.9       Allow HTTP 0.9 responses
- * -0 / --http1.0  Use HTTP 1.0
- * --http1.1       Use HTTP 1.1
- * --http2         Use HTTP 2
  * --http2-prior-knowledge Use HTTP 2 without HTTP/1.1 Upgrade
  *)
 module CLI = struct
@@ -127,6 +127,18 @@ module CLI = struct
       & opt int Piaf.Config.default_config.max_redirects
       & info [ "max-redirs" ] ~doc ~docv)
 
+  let use_http_1_0 =
+    let doc = "Use HTTP/1.0" in
+    Arg.(value & flag & info [ "0"; "http1.0" ] ~doc)
+
+  let use_http_1_1 =
+    let doc = "Use HTTP/1.1" in
+    Arg.(value & flag & info [ "http1.1" ] ~doc)
+
+  let use_http_2 =
+    let doc = "Use HTTP/2.0" in
+    Arg.(value & flag & info [ "http2" ] ~doc)
+
   let verbose =
     let doc = "Verbosity (use multiple times to increase)" in
     Arg.(value & flag_all & info [ "v"; "verbose" ] ~doc)
@@ -135,7 +147,17 @@ module CLI = struct
     let docv = "URLs" in
     Arg.(non_empty & pos_all string [] & info [] ~docv)
 
-  let parse default_proto follow_redirects max_redirects request verbose urls =
+  let parse
+      default_proto
+      follow_redirects
+      max_redirects
+      request
+      use_http_1_0
+      use_http_1_1
+      use_http_2
+      verbose
+      urls
+    =
     { follow_redirects
     ; max_redirects
     ; meth =
@@ -148,6 +170,16 @@ module CLI = struct
     ; log_level = log_level_of_list verbose
     ; urls
     ; default_proto
+    ; max_http_version =
+        (let open Piaf.Versions.HTTP in
+        match use_http_2, use_http_1_1, use_http_1_0 with
+        | true, _, _ | false, false, false ->
+          (* Default to the highest supported if no override specified. *)
+          v2_0
+        | false, true, _ ->
+          v1_1
+        | false, false, true ->
+          v1_0)
     }
 
   let default_cmd =
@@ -157,6 +189,9 @@ module CLI = struct
       $ follow_redirects
       $ max_redirects
       $ request
+      $ use_http_1_0
+      $ use_http_1_1
+      $ use_http_2
       $ verbose
       $ urls)
 

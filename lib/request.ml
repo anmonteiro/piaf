@@ -1,16 +1,10 @@
 type t =
   { meth : H2.Method.t
   ; target : string
-  ; version : Version.t
+  ; version : Versions.HTTP.t
   ; headers : H2.Headers.t
   ; scheme : string
   }
-
-let v1_0 = { Version.major = 1; minor = 0 }
-
-let v1_1 = { Version.major = 1; minor = 1 }
-
-let v2_0 = { Version.major = 2; minor = 0 }
 
 let create ~scheme ~version ?(headers = H2.Headers.empty) meth target =
   { meth; target; version; headers; scheme }
