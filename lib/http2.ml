@@ -1,6 +1,9 @@
-module HTTPS : S.HTTPS = struct
+module MakeHTTP2 (H2_client : H2_lwt.Client) :
+  S.HTTPCommon
+    with type Client.t = H2_client.t
+     and type Client.socket = H2_client.socket = struct
   module Body :
-    S.BASE.Body
+    S.Body
       with type Read.t = [ `read ] H2.Body.t
        and type Write.t = [ `write ] H2.Body.t = struct
     module Read = struct
@@ -19,11 +22,11 @@ module HTTPS : S.HTTPS = struct
   end
 
   module Client = struct
-    include H2_lwt_unix.Client.SSL
+    include H2_client
 
-    let create_connection ?client ?config:_ fd =
+    let create_connection ?config:_ fd =
       let error_handler _ = assert false in
-      create_connection ?client ~error_handler fd
+      create_connection ~error_handler fd
 
     type response_handler = Response.t -> Body.Read.t -> unit
 
@@ -44,3 +47,7 @@ module HTTPS : S.HTTPS = struct
       request t (Request.to_h2 req) ~error_handler ~response_handler
   end
 end
+
+module HTTP : S.HTTP = MakeHTTP2 (H2_lwt_unix.Client)
+
+module HTTPS : S.HTTPS = MakeHTTP2 (H2_lwt_unix.Client.SSL)

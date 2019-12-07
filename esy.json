@@ -18,19 +18,20 @@
     "@opam/logs": "*",
     "@opam/conf-openssl": "*",
     "@opam/uri": "*",
-    "@opam/cmdliner": "*"
+    "@opam/cmdliner": "*",
+    "@opam/fmt": "*"
   },
   "devDependencies": {
     "@opam/merlin": "*",
     "@opam/ocamlformat": "*"
   },
   "resolutions": {
-    "@opam/httpaf-lwt": "link-dev:../httpaf/httpaf-lwt.opam",
-    "@opam/httpaf-lwt-unix": "link-dev:../httpaf/httpaf-lwt-unix.opam",
-    "@opam/httpaf": "link-dev:../httpaf/httpaf.opam",
-    "@opam/h2-lwt": "link-dev:../ocaml-h2/h2-lwt.opam",
-    "@opam/h2-lwt-unix": "link-dev:../ocaml-h2/h2-lwt-unix.opam",
-    "@opam/h2": "link-dev:../ocaml-h2/h2.opam",
+    "@opam/httpaf": "anmonteiro/httpaf:httpaf.opam#f4bfd7c",
+    "@opam/httpaf-lwt": "anmonteiro/httpaf:httpaf-lwt.opam#f4bfd7c",
+    "@opam/httpaf-lwt-unix": "anmonteiro/httpaf:httpaf-lwt-unix.opam#f4bfd7c",
+    "@opam/h2": "anmonteiro/ocaml-h2:h2.opam#4a97f1c",
+    "@opam/h2-lwt": "anmonteiro/ocaml-h2:h2-lwt.opam#4a97f1c",
+    "@opam/h2-lwt-unix": "anmonteiro/ocaml-h2:h2-lwt-unix.opam#4a97f1c",
     "@opam/conf-libssl": "esy-packages/esy-openssl#860ad7f"
   },
   "esy": {

@@ -22,8 +22,7 @@ let error_handler notify_response_received error =
   Lwt.wakeup notify_response_received (Error error_str)
 
 let stream_of_read_body
-    : type a.
-      (module S.BASE.Body with type Read.t = a) -> a -> string Lwt_stream.t
+    : type a. (module S.Body with type Read.t = a) -> a -> string Lwt_stream.t
   =
  fun (module Body) body ->
   let module Body = Body.Read in
