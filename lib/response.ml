@@ -3,8 +3,8 @@ module Status = H2.Status
 type t =
   { (* `H2.Status.t` is a strict superset of `Httpaf.Status.t` *)
     status : Status.t
-  ; headers : H2.Headers.t
-  ; version : Httpaf.Version.t
+  ; headers : Headers.t
+  ; version : Versions.HTTP.t
   }
 
 let of_http1 { Httpaf.Response.status; version; headers; _ } =
@@ -14,6 +14,10 @@ let of_http1 { Httpaf.Response.status; version; headers; _ } =
   }
 
 let of_h2 { H2.Response.status; headers } =
+  (* Remove this header to make the output compatible with HTTP/1. This is the
+   * only pseudo-header that can appear in HTTP/2.0 responses, and H2 checks
+   * that there aren't others. *)
+  let headers = H2.Headers.remove headers ":status" in
   { status; headers; version = { major = 2; minor = 0 } }
 
 let pp_hum fmt { status; headers; version } =

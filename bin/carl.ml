@@ -32,23 +32,6 @@ let setup_log ?style_renderer level =
   Logs.set_level level;
   Logs.set_reporter format_reporter
 
-let request ~config ~meth uri =
-  let open Lwt.Syntax in
-  let headers = [ "user-agent", "carl/0.0.0-experimental" ] in
-  let* res = Piaf.Client.request ~config ~meth ~headers uri in
-  match res with
-  | Ok (_response, response_body) ->
-    let+ () =
-      Lwt_stream.iter_s
-        (fun body_fragment -> Logs_lwt.app (fun m -> m "%s" body_fragment))
-        response_body
-    in
-    `Ok ()
-  | Error e ->
-    Lwt.return (`Error (false, e))
-
-let log_level_of_list = function [] -> Logs.App | [ _ ] -> Info | _ -> Debug
-
 type cli =
   { follow_redirects : bool
   ; max_redirects : int
@@ -56,8 +39,51 @@ type cli =
   ; log_level : Logs.level
   ; urls : string list
   ; default_proto : string
+  ; head : bool
   ; max_http_version : Piaf.Versions.HTTP.t
+  ; cacert : string option
+  ; capath : string option
+  ; insecure : bool
   }
+
+let pp_response_headers formatter { Piaf.Response.headers; status; version } =
+  let format_header formatter (name, value) =
+    Format.fprintf formatter "%a: %s" Fmt.(styled `Bold string) name value
+  in
+  Format.fprintf
+    formatter
+    "@[%a %a@]@\n@[%a@]"
+    Piaf.Versions.HTTP.pp_hum
+    version
+    Piaf.Status.pp_hum
+    status
+    (Format.pp_print_list
+       ~pp_sep:(fun f () -> Format.fprintf f "@\n")
+       format_header)
+    (Piaf.Headers.to_list headers)
+
+let request ~cli_config:{ head; meth; _ } ~config uri =
+  let open Lwt.Syntax in
+  let headers = [ "user-agent", "carl/0.0.0-experimental" ] in
+  let* res = Piaf.Client.request ~config ~meth ~headers uri in
+  match res with
+  | Ok (response, response_body) ->
+    let+ () =
+      if head then (
+        Logs.app (fun m -> m "%a" pp_response_headers response);
+        Lwt.async (fun () ->
+            Lwt_stream.junk_while (fun _ -> true) response_body);
+        Lwt.return_unit)
+      else
+        Lwt_stream.iter_s
+          (fun body_fragment -> Logs_lwt.app (fun m -> m "%s" body_fragment))
+          response_body
+    in
+    `Ok ()
+  | Error e ->
+    Lwt.return (`Error (false, e))
+
+let log_level_of_list = function [] -> Logs.App | [ _ ] -> Info | _ -> Debug
 
 let rec uri_of_string ~scheme s =
   let maybe_uri = Uri.of_string s in
@@ -74,28 +100,36 @@ let rec uri_of_string ~scheme s =
   | Some _, Some _ ->
     maybe_uri
 
-let piaf_config_of_cli { follow_redirects; max_redirects; max_http_version; _ } =
-  { Piaf.Config.default_config with
-    follow_redirects
+let piaf_config_of_cli
+    { follow_redirects
+    ; max_redirects
+    ; max_http_version
+    ; cacert
+    ; capath
+    ; insecure
+    ; _
+    }
+  =
+  { Piaf.Config.follow_redirects
   ; max_redirects
   ; max_http_version
+  ; cacert
+  ; capath
+  ; allow_insecure = insecure
   }
 
-let main ({ meth; default_proto; log_level; urls; _ } as config) =
+let main ({ default_proto; log_level; urls; _ } as cli_config) =
   setup_log (Some log_level);
-  let config = piaf_config_of_cli config in
+  let config = piaf_config_of_cli cli_config in
   (* TODO: Issue requests for all URLs *)
   let uri = uri_of_string ~scheme:default_proto (List.hd urls) in
-  Lwt_main.run (request ~config ~meth uri)
+  Lwt_main.run (request ~cli_config ~config uri)
 
 (* -H / --header
  * -d / --data
  * --retry
  * --compressed
  * --connect-timeout
- * -i / --include
- * -I / --head
- * -k / --insecure
  * --http2-prior-knowledge Use HTTP 2 without HTTP/1.1 Upgrade
  *)
 module CLI = struct
@@ -110,10 +144,32 @@ module CLI = struct
     Arg.(
       value & opt (some request_conv) None & info [ "X"; "request" ] ~doc ~docv)
 
+  let cacert =
+    let doc = "CA certificate to verify peer against" in
+    let docv = "file" in
+    Arg.(
+      value
+      & opt (some string) (* lol nix *) None
+      (* (Some "/Users/anmonteiro/.nix-profile/etc/ssl/certs/ca-bundle.crt") *)
+      & info [ "cacert" ] ~doc ~docv)
+
+  let capath =
+    let doc = "CA directory to verify peer against" in
+    let docv = "dir" in
+    Arg.(value & opt (some string) None & info [ "capath" ] ~doc ~docv)
+
+  let insecure =
+    let doc = "Allow insecure server connections when using SSL" in
+    Arg.(value & flag & info [ "k"; "insecure" ] ~doc)
+
   let default_proto =
     let doc = "Use $(docv) for any URL missing a scheme (without `://`)" in
     let docv = "protocol" in
     Arg.(value & opt string "http" & info [ "proto-default" ] ~doc ~docv)
+
+  let head =
+    let doc = "Show document info only" in
+    Arg.(value & flag & info [ "I"; "head" ] ~doc)
 
   let follow_redirects =
     let doc = "Follow redirects" in
@@ -148,7 +204,11 @@ module CLI = struct
     Arg.(non_empty & pos_all string [] & info [] ~docv)
 
   let parse
+      cacert
+      capath
       default_proto
+      head
+      insecure
       follow_redirects
       max_redirects
       request
@@ -162,6 +222,8 @@ module CLI = struct
     ; max_redirects
     ; meth =
         (match request with
+        | None when head ->
+          `HEAD
         | None ->
           (* TODO: default to `POST` when we implement --data *)
           `GET
@@ -170,6 +232,7 @@ module CLI = struct
     ; log_level = log_level_of_list verbose
     ; urls
     ; default_proto
+    ; head
     ; max_http_version =
         (let open Piaf.Versions.HTTP in
         match use_http_2, use_http_1_1, use_http_1_0 with
@@ -180,12 +243,19 @@ module CLI = struct
           v1_1
         | false, false, true ->
           v1_0)
+    ; cacert
+    ; capath
+    ; insecure
     }
 
   let default_cmd =
     Term.(
       const parse
+      $ cacert
+      $ capath
       $ default_proto
+      $ head
+      $ insecure
       $ follow_redirects
       $ max_redirects
       $ request

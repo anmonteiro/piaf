@@ -59,6 +59,7 @@ module ALPN = struct
     | _ ->
       None
 
+  (* https://www.iana.org/assignments/tls-extensiontype-values/tls-extensiontype-values.xhtml#alpn-protocol-ids *)
   let to_string = function
     | HTTP_1_0 ->
       "http/1.0"

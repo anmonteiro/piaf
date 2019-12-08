@@ -3,7 +3,7 @@ type t =
   ; target : string
   ; version : Versions.HTTP.t
   ; headers : H2.Headers.t
-  ; scheme : string
+  ; scheme : Scheme.t
   }
 
 let create ~scheme ~version ?(headers = H2.Headers.empty) meth target =
@@ -23,13 +23,14 @@ let to_h2 { meth; target; headers; _ } =
 let pp_hum fmt { meth; target; version; headers; scheme } =
   Format.fprintf
     fmt
-    "((method \"%a\") (target %S) (version \"%a\") (scheme \"%s\") (headers \
+    "((method \"%a\") (target %S) (version \"%a\") (scheme \"%a\") (headers \
      %a))"
     H2.Method.pp_hum
     meth
     target
     Httpaf.Version.pp_hum
     version
+    Scheme.pp_hum
     scheme
     H2.Headers.pp_hum
     headers

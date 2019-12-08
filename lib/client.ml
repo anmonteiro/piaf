@@ -8,56 +8,6 @@ let src = Logs.Src.create "piaf.client" ~doc:"Piaf Client module"
 
 module Log = (val Logs.src_log src : Logs.LOG)
 
-(* https://www.iana.org/assignments/tls-extensiontype-values/tls-extensiontype-values.xhtml#alpn-protocol-ids *)
-module SSL = struct
-  let () = Ssl.init ()
-
-  let connect ?src ?hostname ~alpn_protocols sa fd =
-    let open Lwt.Syntax in
-    (* TODO: TLS version configuration / selection. *)
-    let ctx = Ssl.create_context Ssl.SSLv23 Ssl.Client_context in
-    Ssl.disable_protocols ctx [ Ssl.SSLv23 ];
-    List.iter
-      (fun proto -> Log.info (fun m -> m "ALPN: offering %s" proto))
-      alpn_protocols;
-    Ssl.set_context_alpn_protos ctx alpn_protocols;
-    Ssl.honor_cipher_order ctx;
-    let* () =
-      match src with
-      | None ->
-        Lwt.return_unit
-      | Some src_sa ->
-        Lwt_unix.bind fd src_sa
-    in
-    let* () = Lwt_unix.connect fd sa in
-    match hostname with
-    | Some host ->
-      let s = Lwt_ssl.embed_uninitialized_socket fd ctx in
-      let ssl_sock = Lwt_ssl.ssl_socket_of_uninitialized_socket s in
-      Ssl.set_client_SNI_hostname ssl_sock host;
-      Lwt_ssl.ssl_perform_handshake s
-    | None ->
-      Lwt_ssl.ssl_connect fd ctx
-end
-
-module Scheme = struct
-  type t =
-    | HTTP
-    | HTTPS
-
-  let of_uri uri =
-    match Uri.scheme uri with
-    | None | Some "http" ->
-      Ok HTTP
-    | Some "https" ->
-      Ok HTTPS
-    (* We don't support anything else *)
-    | Some other ->
-      Error (Format.asprintf "Unsupported scheme: %s" other)
-
-  let to_string = function HTTP -> "http" | HTTPS -> "https"
-end
-
 let infer_port ~scheme uri =
   match Uri.port uri, scheme with
   (* if a port is given, use it. *)
@@ -167,80 +117,99 @@ type t =
   ; config : Config.t
   }
 
-let make_impl ~config ~scheme ~address ~host fd =
+let create_http_connection ~config:_ ~conn_info:_ fd =
   let open Lwt.Syntax in
-  match scheme with
-  | Scheme.HTTP ->
-    let* () = Lwt_unix.connect fd address in
-    (* TODO: we should also be able to support HTTP/2 with prior knowledge /
-       HTTP/1.1 upgrade. For now, insecure HTTP/2 (h2c) is unsupported. *)
-    (* TODO: use the same logic for versions here... *)
-    let (module Http) = (module Http1.HTTP : S.HTTP) in
-    let+ conn = Http.Client.create_connection fd in
+  (* TODO: we should also be able to support HTTP/2 with prior knowledge /
+     HTTP/1.1 upgrade. For now, insecure HTTP/2 (h2c) is unsupported. *)
+  (* TODO: use the same logic for versions here... *)
+  let (module Http) = (module Http1.HTTP : S.HTTP) in
+  let+ conn = Http.Client.create_connection fd in
+  Ok
     ( Conn
         { impl = (module Http : S.HTTPCommon with type Client.t = Http.Client.t)
         ; conn
         }
     , Versions.HTTP.v1_1 )
-  | HTTPS ->
-    let alpn_protocols =
-      Versions.ALPN.protocols_of_version config.Config.max_http_version
-    in
-    let* ssl_client = SSL.connect ~hostname:host ~alpn_protocols address fd in
-    (match Lwt_ssl.ssl_socket ssl_client with
-    | None ->
-      failwith "handshake not established?"
-    | Some ssl_socket ->
-      let (module Https), version =
-        match Ssl.get_negotiated_alpn_protocol ssl_socket with
+
+let create_https_connection ~config ~conn_info fd =
+  let { Connection_info.host; _ } = conn_info in
+  let alpn_protocols =
+    Versions.ALPN.protocols_of_version config.Config.max_http_version
+  in
+  let open Lwt_result.Syntax in
+  let* ssl_client = Openssl.connect ~config ~hostname:host ~alpn_protocols fd in
+  match Lwt_ssl.ssl_socket ssl_client with
+  | None ->
+    failwith "handshake not established?"
+  | Some ssl_socket ->
+    let (module Https), version =
+      match Ssl.get_negotiated_alpn_protocol ssl_socket with
+      | None ->
+        (* Default to HTTP/1.x if the remote doesn't speak ALPN. *)
+        Log.warn (fun m ->
+            let protos =
+              String.concat
+                ", "
+                (List.map
+                   (fun proto -> Format.asprintf "%S" proto)
+                   alpn_protocols)
+            in
+            m "ALPN: Failed to negotiate requested protocols (%s)" protos);
+        Log.info (fun m ->
+            m
+              "Defaulting to maximum configured version: %a"
+              Versions.HTTP.pp_hum
+              config.max_http_version);
+        (module Http1.HTTPS : S.HTTPS), config.max_http_version
+      | Some negotiated_proto ->
+        Log.info (fun m -> m "ALPN: server agreed to use %s" negotiated_proto);
+        (match Versions.ALPN.of_string negotiated_proto with
+        | Some HTTP_1_0 ->
+          (module Http1.HTTPS : S.HTTPS), Versions.HTTP.v1_0
+        | Some HTTP_1_1 ->
+          (module Http1.HTTPS : S.HTTPS), Versions.HTTP.v1_1
+        | Some HTTP_2 ->
+          (module Http2.HTTPS : S.HTTPS), Versions.HTTP.v2_0
         | None ->
-          (* Default to HTTP/1.x if the remote doesn't speak ALPN. *)
-          Log.warn (fun m ->
-              let protos =
-                String.concat
-                  ", "
-                  (List.map
-                     (fun proto -> Format.asprintf "%S" proto)
-                     alpn_protocols)
-              in
-              m "ALPN: Failed to negotiate requested protocols (%s)" protos);
-          Log.info (fun m ->
-              m
-                "Defaulting to maximum configured version: %a"
-                Versions.HTTP.pp_hum
-                config.max_http_version);
-          (module Http1.HTTPS : S.HTTPS), config.max_http_version
-        | Some negotiated_proto ->
-          Log.info (fun m -> m "ALPN: server agreed to use %s" negotiated_proto);
-          (match Versions.ALPN.of_string negotiated_proto with
-          | Some HTTP_1_0 ->
-            (module Http1.HTTPS : S.HTTPS), Versions.HTTP.v1_0
-          | Some HTTP_1_1 ->
-            (module Http1.HTTPS : S.HTTPS), Versions.HTTP.v1_1
-          | Some HTTP_2 ->
-            (module Http2.HTTPS : S.HTTPS), Versions.HTTP.v2_0
-          | None ->
-            (* Can't really happen - would mean that TLS negotiated a
-             * protocol that we didn't specify. *)
-            assert false)
-      in
-      let+ conn = Https.Client.create_connection ssl_client in
+          (* Can't really happen - would mean that TLS negotiated a
+           * protocol that we didn't specify. *)
+          assert false)
+    in
+    let open Lwt.Syntax in
+    let+ conn = Https.Client.create_connection ssl_client in
+    Ok
       ( Conn
           { impl =
               (module Https : S.HTTPCommon with type Client.t = Https.Client.t)
           ; conn
           }
-      , version ))
+      , version )
 
-let open_connection ~config ~conn_info uri =
-  let open Lwt.Syntax in
-  let { Connection_info.host; scheme; addresses; _ } = conn_info in
+let make_impl ?src ~config ~conn_info fd =
+  let { Connection_info.scheme; addresses; _ } = conn_info in
   (* TODO: try addresses in e.g. a round robin fashion? *)
   let address = List.hd addresses in
-  let fd = Lwt_unix.socket Unix.PF_INET Unix.SOCK_STREAM 0 in
-  let+ conn, version = make_impl ~config ~scheme ~address ~host fd in
+  let open Lwt.Syntax in
+  let* () =
+    match src with
+    | None ->
+      Lwt.return_unit
+    | Some src_sa ->
+      Lwt_unix.bind fd src_sa
+  in
+  let* () = Lwt_unix.connect fd address in
   Log.info (fun m -> m "Connected to %a" Connection_info.pp_hum conn_info);
-  Ok { conn; version; uri; conn_info; config }
+  match scheme with
+  | Scheme.HTTP ->
+    create_http_connection ~config ~conn_info fd
+  | HTTPS ->
+    create_https_connection ~config ~conn_info fd
+
+let open_connection ~config ~conn_info uri =
+  let open Lwt_result.Syntax in
+  let fd = Lwt_unix.socket Unix.PF_INET Unix.SOCK_STREAM 0 in
+  let+ conn, version = make_impl ~config ~conn_info fd in
+  { conn; version; uri; conn_info; config }
 
 let drain_response_body_and_shutdown
     { conn = Conn { impl = (module HTTPImpl); conn }; conn_info; _ }
@@ -336,7 +305,7 @@ let rec build_request_and_handle_response
     Request.create
       meth
       ~version
-      ~scheme:(Scheme.to_string scheme)
+      ~scheme
       ~headers:canonical_headers
       (Uri.path_and_query uri)
   in
