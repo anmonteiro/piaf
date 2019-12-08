@@ -40,16 +40,17 @@ type cli =
   ; urls : string list
   ; default_proto : string
   ; head : bool
+  ; headers : (string * string) list
   ; max_http_version : Piaf.Versions.HTTP.t
   ; cacert : string option
   ; capath : string option
   ; insecure : bool
   }
 
+let format_header formatter (name, value) =
+  Format.fprintf formatter "%a: %s" Fmt.(styled `Bold string) name value
+
 let pp_response_headers formatter { Piaf.Response.headers; status; version } =
-  let format_header formatter (name, value) =
-    Format.fprintf formatter "%a: %s" Fmt.(styled `Bold string) name value
-  in
   Format.fprintf
     formatter
     "@[%a %a@]@\n@[%a@]"
@@ -62,9 +63,9 @@ let pp_response_headers formatter { Piaf.Response.headers; status; version } =
        format_header)
     (Piaf.Headers.to_list headers)
 
-let request ~cli_config:{ head; meth; _ } ~config uri =
+let request ~cli_config:{ head; headers; meth; _ } ~config uri =
   let open Lwt.Syntax in
-  let headers = [ "user-agent", "carl/0.0.0-experimental" ] in
+  let headers = ("user-agent", "carl/0.0.0-experimental") :: headers in
   let* res = Piaf.Client.request ~config ~meth ~headers uri in
   match res with
   | Ok (response, response_body) ->
@@ -125,8 +126,7 @@ let main ({ default_proto; log_level; urls; _ } as cli_config) =
   let uri = uri_of_string ~scheme:default_proto (List.hd urls) in
   Lwt_main.run (request ~cli_config ~config uri)
 
-(* -H / --header
- * -d / --data
+(* -d / --data
  * --retry
  * --compressed
  * --connect-timeout
@@ -135,7 +135,7 @@ let main ({ default_proto; log_level; urls; _ } as cli_config) =
 module CLI = struct
   let request =
     let request_conv =
-      let parse meth = Result.Ok (Piaf.Method.of_string meth) in
+      let parse meth = Ok (Piaf.Method.of_string meth) in
       let print = Piaf.Method.pp_hum in
       Arg.conv ~docv:"method" (parse, print)
     in
@@ -170,6 +170,33 @@ module CLI = struct
   let head =
     let doc = "Show document info only" in
     Arg.(value & flag & info [ "I"; "head" ] ~doc)
+
+  let headers =
+    let header_conv =
+      let parse header =
+        match String.split_on_char ':' header with
+        | [] ->
+          Error (`Msg "Header can't be the empty string")
+        | [ x ] ->
+          Error
+            (`Msg (Format.asprintf "Expecting `name: value` string, got: %s" x))
+        | name :: values ->
+          let value = String.concat ":" values in
+          let value =
+            (* `foo: bar` or `foo:bar` *)
+            if value.[0] = ' ' then
+              String.sub value 1 (String.length value - 1)
+            else
+              value
+          in
+          Ok (name, value)
+      in
+      let print = format_header in
+      Arg.conv ~docv:"method" (parse, print)
+    in
+    let doc = "Pass custom header(s) to server" in
+    let docv = "header" in
+    Arg.(value & opt_all header_conv [] & info [ "H"; "header" ] ~doc ~docv)
 
   let follow_redirects =
     let doc = "Follow redirects" in
@@ -208,6 +235,7 @@ module CLI = struct
       capath
       default_proto
       head
+      headers
       insecure
       follow_redirects
       max_redirects
@@ -233,6 +261,7 @@ module CLI = struct
     ; urls
     ; default_proto
     ; head
+    ; headers
     ; max_http_version =
         (let open Piaf.Versions.HTTP in
         match use_http_2, use_http_1_1, use_http_1_0 with
@@ -255,6 +284,7 @@ module CLI = struct
       $ capath
       $ default_proto
       $ head
+      $ headers
       $ insecure
       $ follow_redirects
       $ max_redirects
