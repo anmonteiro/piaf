@@ -181,14 +181,7 @@ module CLI = struct
           Error
             (`Msg (Format.asprintf "Expecting `name: value` string, got: %s" x))
         | name :: values ->
-          let value = String.concat ":" values in
-          let value =
-            (* `foo: bar` or `foo:bar` *)
-            if value.[0] = ' ' then
-              String.sub value 1 (String.length value - 1)
-            else
-              value
-          in
+          let value = Util.String.trim_left (String.concat ":" values) in
           Ok (name, value)
       in
       let print = format_header in
