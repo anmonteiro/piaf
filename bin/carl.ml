@@ -42,6 +42,7 @@ type cli =
   ; head : bool
   ; headers : (string * string) list
   ; max_http_version : Piaf.Versions.HTTP.t
+  ; http2_prior_knowledge : bool
   ; cacert : string option
   ; capath : string option
   ; insecure : bool
@@ -105,6 +106,7 @@ let piaf_config_of_cli
     { follow_redirects
     ; max_redirects
     ; max_http_version
+    ; http2_prior_knowledge
     ; cacert
     ; capath
     ; insecure
@@ -114,6 +116,7 @@ let piaf_config_of_cli
   { Piaf.Config.follow_redirects
   ; max_redirects
   ; max_http_version
+  ; http2_prior_knowledge
   ; cacert
   ; capath
   ; allow_insecure = insecure
@@ -204,16 +207,20 @@ module CLI = struct
       & info [ "max-redirs" ] ~doc ~docv)
 
   let use_http_1_0 =
-    let doc = "Use HTTP/1.0" in
+    let doc = "Use HTTP 1.0" in
     Arg.(value & flag & info [ "0"; "http1.0" ] ~doc)
 
   let use_http_1_1 =
-    let doc = "Use HTTP/1.1" in
+    let doc = "Use HTTP 1.1" in
     Arg.(value & flag & info [ "http1.1" ] ~doc)
 
   let use_http_2 =
-    let doc = "Use HTTP/2.0" in
+    let doc = "Use HTTP 2" in
     Arg.(value & flag & info [ "http2" ] ~doc)
+
+  let http_2_prior_knowledge =
+    let doc = "Use HTTP 2 without HTTP/1.1 Upgrade" in
+    Arg.(value & flag & info [ "http2-prior-knowledge" ] ~doc)
 
   let verbose =
     let doc = "Verbosity (use multiple times to increase)" in
@@ -236,6 +243,7 @@ module CLI = struct
       use_http_1_0
       use_http_1_1
       use_http_2
+      http2_prior_knowledge
       verbose
       urls
     =
@@ -265,6 +273,7 @@ module CLI = struct
           v1_1
         | false, false, true ->
           v1_0)
+    ; http2_prior_knowledge
     ; cacert
     ; capath
     ; insecure
@@ -285,6 +294,7 @@ module CLI = struct
       $ use_http_1_0
       $ use_http_1_1
       $ use_http_2
+      $ http_2_prior_knowledge
       $ verbose
       $ urls)
 

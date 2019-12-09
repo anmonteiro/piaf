@@ -145,7 +145,6 @@ let create_https_connection ~config ~conn_info fd =
     let (module Https), version =
       match Ssl.get_negotiated_alpn_protocol ssl_socket with
       | None ->
-        (* Default to HTTP/1.x if the remote doesn't speak ALPN. *)
         Log.warn (fun m ->
             let protos =
               String.concat
@@ -155,12 +154,21 @@ let create_https_connection ~config ~conn_info fd =
                    alpn_protocols)
             in
             m "ALPN: Failed to negotiate requested protocols (%s)" protos);
-        Log.info (fun m ->
-            m
-              "Defaulting to maximum configured version: %a"
-              Versions.HTTP.pp_hum
-              config.max_http_version);
-        (module Http1.HTTPS : S.HTTPS), config.max_http_version
+        (* Default to HTTP/2.0 if `http2_prior_knowledge` has been configured
+         * and the remote doesn't speak ALPN. Otherwise, use the maximal HTTP/1
+         * version configured. *)
+        let impl, version =
+          if config.http2_prior_knowledge then
+            (module Http2.HTTPS : S.HTTPS), Versions.HTTP.v2_0
+          else
+            ( (module Http1.HTTPS : S.HTTPS)
+            , if Versions.HTTP.(compare config.max_http_version v2_0) >= 0 then
+                Versions.HTTP.v1_1
+              else
+                config.max_http_version )
+        in
+        Log.info (fun m -> m "Defaulting to %a" Versions.HTTP.pp_hum version);
+        impl, version
       | Some negotiated_proto ->
         Log.info (fun m -> m "ALPN: server agreed to use %s" negotiated_proto);
         (match Versions.ALPN.of_string negotiated_proto with
