@@ -117,19 +117,35 @@ type t =
   ; config : Config.t
   }
 
-let create_http_connection ~config:_ ~conn_info:_ fd =
+let create_http_connection ~config fd =
   let open Lwt.Syntax in
-  (* TODO: we should also be able to support HTTP/2 with prior knowledge /
-     HTTP/1.1 upgrade. For now, insecure HTTP/2 (h2c) is unsupported. *)
-  (* TODO: use the same logic for versions here... *)
-  let (module Http) = (module Http1.HTTP : S.HTTP) in
+  (* TODO: support HTTP/2 with HTTP/1.1 upgrade. `upgrade` does nothing for now *)
+  let (module Http), version, _upgrade =
+    match
+      ( config.Config.http2_prior_knowledge
+      , config.max_http_version
+      , config.h2c_upgrade )
+    with
+    | true, _, _ ->
+      (module Http2.HTTP : S.HTTP), Versions.HTTP.v2_0, false
+    | false, { Versions.HTTP.major = 2; _ }, true ->
+      (module Http2.HTTP : S.HTTP), Versions.HTTP.v2_0, true
+    | false, _, _ ->
+      let version =
+        if Versions.HTTP.(compare config.max_http_version v2_0) >= 0 then
+          Versions.HTTP.v1_1
+        else
+          config.max_http_version
+      in
+      (module Http1.HTTP : S.HTTP), version, false
+  in
   let+ conn = Http.Client.create_connection fd in
   Ok
     ( Conn
         { impl = (module Http : S.HTTPCommon with type Client.t = Http.Client.t)
         ; conn
         }
-    , Versions.HTTP.v1_1 )
+    , version )
 
 let create_https_connection ~config ~conn_info fd =
   let { Connection_info.host; _ } = conn_info in
@@ -209,7 +225,7 @@ let make_impl ?src ~config ~conn_info fd =
   Log.info (fun m -> m "Connected to %a" Connection_info.pp_hum conn_info);
   match scheme with
   | Scheme.HTTP ->
-    create_http_connection ~config ~conn_info fd
+    create_http_connection ~config fd
   | HTTPS ->
     create_https_connection ~config ~conn_info fd
 

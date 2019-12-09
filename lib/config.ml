@@ -14,6 +14,9 @@ type t =
         (** Wether to allow insecure server connections when using SSL *)
   ; max_http_version : Versions.HTTP.t
         (** Use this as the highest HTTP version when sending requests *)
+  ; h2c_upgrade : bool
+        (** Send an upgrade to `h2c` (HTTP/2 over TCP) request to the server.
+            `http2_prior_knowledge` below ignores this option. *)
   ; http2_prior_knowledge : bool
         (** Assume HTTP/2 prior knowledge -- don't use HTTP/1.1 Upgrade when
             communicating with "http" URIs, default to HTTP/2.0 when we can't
@@ -30,6 +33,7 @@ let default_config =
   ; allow_insecure = false
   ; max_http_version = Versions.HTTP.v2_0
   ; http2_prior_knowledge = false
+  ; h2c_upgrade = false
   ; cacert = None
   ; capath = None
   }

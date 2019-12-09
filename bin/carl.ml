@@ -42,6 +42,7 @@ type cli =
   ; head : bool
   ; headers : (string * string) list
   ; max_http_version : Piaf.Versions.HTTP.t
+  ; h2c_upgrade : bool
   ; http2_prior_knowledge : bool
   ; cacert : string option
   ; capath : string option
@@ -106,6 +107,7 @@ let piaf_config_of_cli
     { follow_redirects
     ; max_redirects
     ; max_http_version
+    ; h2c_upgrade
     ; http2_prior_knowledge
     ; cacert
     ; capath
@@ -116,6 +118,7 @@ let piaf_config_of_cli
   { Piaf.Config.follow_redirects
   ; max_redirects
   ; max_http_version
+  ; h2c_upgrade
   ; http2_prior_knowledge
   ; cacert
   ; capath
@@ -273,6 +276,7 @@ module CLI = struct
           v1_1
         | false, false, true ->
           v1_0)
+    ; h2c_upgrade = use_http_2
     ; http2_prior_knowledge
     ; cacert
     ; capath
