@@ -146,7 +146,7 @@ let main ({ default_proto; log_level; urls; _ } as cli_config) =
  * --retry
  * --compressed
  * --connect-timeout
- * --http2-prior-knowledge Use HTTP 2 without HTTP/1.1 Upgrade
+ * -o, --output <file> Write to file instead of stdout
  *)
 module CLI = struct
   let request =
