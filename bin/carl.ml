@@ -127,11 +127,20 @@ let piaf_config_of_cli
   }
 
 let main ({ default_proto; log_level; urls; _ } as cli_config) =
+  let open Lwt.Syntax in
   setup_log (Some log_level);
   let config = piaf_config_of_cli cli_config in
-  (* TODO: Issue requests for all URLs *)
-  let uri = uri_of_string ~scheme:default_proto (List.hd urls) in
-  Lwt_main.run (request ~cli_config ~config uri)
+  let rec inner xs =
+    match xs with
+    | [] ->
+      Lwt.return (`Ok ())
+    | x :: xs ->
+      let uri = uri_of_string ~scheme:default_proto x in
+      let* r = request ~cli_config ~config uri in
+      (match r with `Ok () -> inner xs | _ -> Lwt.return r)
+  in
+  let p = inner urls in
+  Lwt_main.run p
 
 (* -d / --data
  * --retry
