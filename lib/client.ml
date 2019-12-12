@@ -379,10 +379,11 @@ let is_h2c_upgrade ~config ~version =
     false
 
 let make_request_info
-    { conn = Conn { version; _ }; conn_info; config; uri; _ }
-    ~remaining_redirects
+    { conn = Conn { version; _ }; conn_info; config; _ }
+    ?(remaining_redirects = config.max_redirects)
     ~meth
     ~headers
+    target
   =
   let { Connection_info.host; scheme; _ } = conn_info in
   let is_h2c_upgrade = is_h2c_upgrade ~config ~version in
@@ -390,7 +391,6 @@ let make_request_info
     (* TODO: send along desired connection settings (h2c). *)
     Headers.canonicalize_headers ~is_h2c_upgrade ~version ~host headers
   in
-  let target = Uri.path_and_query uri in
   let request =
     Request.create meth ~version ~scheme ~headers:canonical_headers target
   in
@@ -424,27 +424,67 @@ let rec send_request_and_handle_response
     let* t' =
       reuse_or_set_up_new_connection t response response_body location
     in
+    let target = Uri.path_and_query t'.uri in
     let request_info' =
       make_request_info
         t'
         ~remaining_redirects:(remaining_redirects - 1)
         ~meth
         ~headers
+        target
     in
     send_request_and_handle_response t' ?body request_info'
   (* Either not a redirect, or we shouldn't follow redirects. *)
   | false, _, _, _ | _, false, _, _ | true, true, _, None ->
     return_response t request_info response response_body
 
-let call ?(config = Config.default_config) ~meth ?(headers = []) ?body uri =
+let create ?(config = Config.default_config) uri =
   let open Lwt_result.Syntax in
   let* conn_info = Connection_info.of_uri uri in
-  let* t = open_connection ~config ~conn_info uri in
-  let request_info =
-    make_request_info t ~remaining_redirects:config.max_redirects ~meth ~headers
-  in
+  let+ t = open_connection ~config ~conn_info uri in
+  t
+
+let shutdown { conn = Conn { impl; conn; _ }; _ } =
+  Http_impl.shutdown (module (val impl)) conn
+
+let call t ~meth ?(headers = []) ?body target =
+  let request_info = make_request_info t ~meth ~headers target in
   send_request_and_handle_response t ?body request_info
 
-let request ?config ?headers ~meth uri = call ?config ~meth ?headers uri
+let request t ?headers ~meth target = call t ~meth ?headers target
 
-let get ?config ?headers uri = call ?config ~meth:`GET ?headers uri
+let head t ?headers target = call t ~meth:`HEAD ?headers target
+
+let get t ?headers target = call t ~meth:`GET ?headers target
+
+let post t ?headers target = call t ~meth:`POST ?headers target
+
+let put t ?headers target = call t ~meth:`PUT ?headers target
+
+let patch t ?headers target = call t ~meth:(`Other "PATCH") ?headers target
+
+let delete t ?headers target = call t ~meth:`DELETE ?headers target
+
+module Oneshot = struct
+  let call ?(config = Config.default_config) ~meth ?(headers = []) ?body uri =
+    let open Lwt_result.Syntax in
+    let* t = create ~config uri in
+    let target = Uri.path_and_query t.uri in
+    let request_info = make_request_info t ~meth ~headers target in
+    send_request_and_handle_response t ?body request_info
+
+  let request ?config ?headers ~meth uri = call ?config ~meth ?headers uri
+
+  let head ?config ?headers uri = call ?config ~meth:`HEAD ?headers uri
+
+  let get ?config ?headers uri = call ?config ~meth:`GET ?headers uri
+
+  let post ?config ?headers uri = call ?config ~meth:`POST ?headers uri
+
+  let put ?config ?headers uri = call ?config ~meth:`PUT ?headers uri
+
+  let patch ?config ?headers uri =
+    call ?config ~meth:(`Other "PATCH") ?headers uri
+
+  let delete ?config ?headers uri = call ?config ~meth:`DELETE ?headers uri
+end

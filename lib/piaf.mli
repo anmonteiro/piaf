@@ -38,20 +38,116 @@ module Response : sig
   val pp_hum : Format.formatter -> t -> unit [@@ocaml.toplevel_printer]
 end
 
+(** {2 Client -- Issuing requests} *)
+
+(** There are two options for issuing requests with Piaf:
+
+    + client: useful if multiple requests are going to be sent to the remote
+      endpoint, avoids setting up a TCP connection for each request.
+    + oneshot: issues a single request and tears down the underlying connection
+      once the request is done. Useful for isolated requests. *)
+
 module Client : sig
-  (* (Httpaf.Response.t * (string, 'a) result) Lwt.t *)
-  val get
-    :  ?config:Config.t
+  type t
+
+  val create : ?config:Config.t -> Uri.t -> (t, string) Lwt_result.t
+  (** [create ?config uri] opens a connection to [uri] (initially) that can be
+      used to issue multiple requests to the remote endpoint. *)
+
+  val head
+    :  t
     -> ?headers:(string * string) list
-    -> Uri.t
+    -> string
+    -> (Response.t * string Lwt_stream.t, string) Lwt_result.t
+
+  val get
+    :  t
+    -> ?headers:(string * string) list
+    -> string
+    -> (Response.t * string Lwt_stream.t, string) Lwt_result.t
+
+  val post
+    :  t
+    -> ?headers:(string * string) list
+    -> string
+    -> (Response.t * string Lwt_stream.t, string) Lwt_result.t
+
+  val put
+    :  t
+    -> ?headers:(string * string) list
+    -> string
+    -> (Response.t * string Lwt_stream.t, string) Lwt_result.t
+
+  val patch
+    :  t
+    -> ?headers:(string * string) list
+    -> string
+    -> (Response.t * string Lwt_stream.t, string) Lwt_result.t
+
+  val delete
+    :  t
+    -> ?headers:(string * string) list
+    -> string
     -> (Response.t * string Lwt_stream.t, string) Lwt_result.t
 
   val request
-    :  ?config:Config.t
+    :  t
     -> ?headers:(string * string) list
     -> meth:Method.t
-    -> Uri.t
+    -> string
     -> (Response.t * string Lwt_stream.t, string) Lwt_result.t
+
+  val shutdown : t -> unit
+  (** [shutdown t] tears down the connection [t] and frees up all the resources
+      associated with it. *)
+
+  module Oneshot : sig
+    val head
+      :  ?config:Config.t
+      -> ?headers:(string * string) list
+      -> Uri.t
+      -> (Response.t * string Lwt_stream.t, string) Lwt_result.t
+
+    val get
+      :  ?config:Config.t
+      -> ?headers:(string * string) list
+      -> Uri.t
+      -> (Response.t * string Lwt_stream.t, string) Lwt_result.t
+
+    val post
+      :  ?config:Config.t
+      -> ?headers:(string * string) list
+      -> Uri.t
+      -> (Response.t * string Lwt_stream.t, string) Lwt_result.t
+
+    val put
+      :  ?config:Config.t
+      -> ?headers:(string * string) list
+      -> Uri.t
+      -> (Response.t * string Lwt_stream.t, string) Lwt_result.t
+
+    val patch
+      :  ?config:Config.t
+      -> ?headers:(string * string) list
+      -> Uri.t
+      -> (Response.t * string Lwt_stream.t, string) Lwt_result.t
+
+    val delete
+      :  ?config:Config.t
+      -> ?headers:(string * string) list
+      -> Uri.t
+      -> (Response.t * string Lwt_stream.t, string) Lwt_result.t
+
+    val request
+      :  ?config:Config.t
+      -> ?headers:(string * string) list
+      -> meth:Method.t
+      -> Uri.t
+      -> (Response.t * string Lwt_stream.t, string) Lwt_result.t
+    (** Use another request method. *)
+  end
+
+  (* (Httpaf.Response.t * (string, 'a) result) Lwt.t *)
 end
 
 module Method : module type of Method

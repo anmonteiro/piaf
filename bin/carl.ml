@@ -66,6 +66,7 @@ let pp_response_headers formatter { Piaf.Response.headers; status; version } =
     (Piaf.Headers.to_list headers)
 
 let request ~cli_config:{ head; headers; meth; _ } ~config uri =
+  let module Client = Piaf.Client.Oneshot in
   let open Lwt.Syntax in
   let headers = ("user-agent", "carl/0.0.0-experimental") :: headers in
   let* res = Piaf.Client.request ~config ~meth ~headers uri in
