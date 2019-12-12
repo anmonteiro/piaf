@@ -15,7 +15,7 @@ let error_handler notify_response_received error =
     | `Exn exn ->
       Printexc.to_string exn
     | `Protocol_error (_code, msg) ->
-      Format.asprintf "Protocol Error: %s" msg
+      Format.asprintf "Protocol Error: %S" msg
     | `Invalid_response_body_length _ ->
       Format.asprintf "invalid response body length"
   in
@@ -86,3 +86,36 @@ let send_request
   Log.info (fun m -> m "Received response: %a" Response.pp_hum response);
   let body_stream = stream_of_read_body (module Body) response_body in
   response, body_stream
+
+let create_h2c_connection
+    : type a.
+      (module S.HTTP2 with type Client.t = a)
+      -> http_request:Request.t
+      -> Lwt_unix.file_descr
+      -> (a * Response.t * string Lwt_stream.t, 'err) Lwt_result.t
+  =
+ fun (module Http2) ~http_request fd ->
+  let open Lwt_result.Syntax in
+  let response_received, notify_response_received = Lwt.wait () in
+  let response_handler response response_body =
+    Lwt.wakeup_later notify_response_received (Ok (response, response_body))
+  in
+  let _error_received, notify_error_received = Lwt.wait () in
+  let error_handler = error_handler notify_error_received in
+  let http_request = Request.to_http1 http_request in
+  let* conn =
+    Http2.Client.create_h2c_connection
+      ~http_request
+      (response_handler, error_handler)
+      fd
+  in
+  (* Doesn't write the body by design. The server holds on to the HTTP/1.1 body
+   * that was sent as part of the upgrade. *)
+  let+ response, response_body = response_received in
+  Log.info (fun m -> m "Received response: %a" Response.pp_hum response);
+  let body_stream = stream_of_read_body (module Http2.Body) response_body in
+  conn, response, body_stream
+
+let shutdown : type a. (module S.HTTPCommon with type Client.t = a) -> a -> unit
+  =
+ fun (module Http) conn -> Http.Client.shutdown conn

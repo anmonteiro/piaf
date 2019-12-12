@@ -1,7 +1,9 @@
 module MakeHTTP1 (Httpaf_client : Httpaf_lwt.Client) :
   S.HTTPCommon
     with type Client.t = Httpaf_client.t
-     and type Client.socket = Httpaf_client.socket = struct
+     and type Client.socket = Httpaf_client.socket
+     and type Body.Read.t = [ `read ] Httpaf.Body.t
+     and type Body.Write.t = [ `write ] Httpaf.Body.t = struct
   module Body :
     S.Body
       with type Read.t = [ `read ] Httpaf.Body.t

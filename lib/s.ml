@@ -81,3 +81,23 @@ end
 module type HTTP = HTTPCommon with type Client.socket = Lwt_unix.file_descr
 
 module type HTTPS = HTTPCommon with type Client.socket = Lwt_ssl.socket
+
+module type HTTP2 = sig
+  module Body : Body
+
+  module Client : sig
+    include
+      Client
+        with type read_body := Body.Read.t
+         and type write_body := Body.Write.t
+
+    val create_h2c_connection
+      :  ?config:Config.t
+      -> ?push_handler:(Request.t -> (response_handler, unit) result)
+      -> http_request:Httpaf.Request.t (* -> error_handler:error_handler *)
+      -> response_handler * error_handler
+      -> socket
+      -> (t, string) result Lwt.t
+  end
+end
+with type Client.socket = Lwt_unix.file_descr

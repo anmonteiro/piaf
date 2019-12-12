@@ -1,7 +1,9 @@
 module MakeHTTP2 (H2_client : H2_lwt.Client) :
   S.HTTPCommon
     with type Client.t = H2_client.t
-     and type Client.socket = H2_client.socket = struct
+     and type Client.socket = H2_client.socket
+     and type Body.Read.t = [ `read ] H2.Body.t
+     and type Body.Write.t = [ `write ] H2.Body.t = struct
   module Body :
     S.Body
       with type Read.t = [ `read ] H2.Body.t
@@ -48,6 +50,58 @@ module MakeHTTP2 (H2_client : H2_lwt.Client) :
   end
 end
 
-module HTTP : S.HTTP = MakeHTTP2 (H2_lwt_unix.Client)
+module HTTP : S.HTTP2 = struct
+  module HTTP_X :
+    S.HTTPCommon
+      with type Client.t = H2_lwt_unix.Client.t
+       and type Client.socket = Lwt_unix.file_descr
+      with type Body.Read.t = [ `read ] H2.Body.t
+       and type Body.Write.t = [ `write ] H2.Body.t =
+    MakeHTTP2 (H2_lwt_unix.Client)
+
+  include HTTP_X
+
+  module Client = struct
+    include HTTP_X.Client
+
+    let create_h2c_connection
+        ?config:_
+        ?push_handler:_
+        ~http_request
+        (* ~error_handler:_ *)
+          (response_handler, response_error_handler)
+        fd
+      =
+      let response_handler : H2.Client_connection.response_handler =
+       fun response body -> response_handler (Response.of_h2 response) body
+      in
+      let error_handler = function
+        | `Exn exn ->
+          Format.eprintf "ugh : %S@." (Printexc.to_string exn);
+          assert false
+        | `Protocol_error (code, msg) ->
+          Format.eprintf "proto : %ld %s@." (H2__.Error_code.serialize code) msg;
+          ()
+        | _ ->
+          Format.eprintf "other err @.";
+          ()
+      in
+      let response_error_handler error =
+        let error : S.error =
+          match error with
+          | `Invalid_response_body_length response ->
+            `Invalid_response_body_length (Response.of_h2 response)
+          | (`Exn _ | `Malformed_response _ | `Protocol_error _) as other ->
+            other
+        in
+        response_error_handler error
+      in
+      H2_lwt_unix.Client.create_h2c_connection
+        ~http_request
+        ~error_handler:(Obj.magic error_handler)
+        (response_handler, response_error_handler)
+        fd
+  end
+end
 
 module HTTPS : S.HTTPS = MakeHTTP2 (H2_lwt_unix.Client.SSL)

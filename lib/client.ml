@@ -44,7 +44,6 @@ module Connection_info = struct
     ; scheme : Scheme.t
     ; host : string
     ; addresses : Unix.sockaddr list
-    ; remaining_redirects : int
     }
 
   (* Only need the address and port to know whether the endpoint is the same or
@@ -76,19 +75,14 @@ module Connection_info = struct
   let equal_without_resolving c1 c2 =
     c1.port = c2.port && c1.scheme = c2.scheme && c1.host = c2.host
 
-  let of_uri ~config uri =
+  let of_uri uri =
     let open Lwt_result.Syntax in
     let uri = Uri.canonicalize uri in
     let host = Uri.host_with_default uri in
     let* scheme = Lwt.return (Scheme.of_uri uri) in
     let port = infer_port ~scheme uri in
     let+ addresses = resolve_host ~port host in
-    { scheme
-    ; host
-    ; port
-    ; addresses
-    ; remaining_redirects = config.Config.max_redirects
-    }
+    { scheme; host; port; addresses }
 
   let pp_address fmt = function
     | Unix.ADDR_INET (addr, port) ->
@@ -106,30 +100,30 @@ type connection =
       { impl : (module S.HTTPCommon with type Client.t = 'a)
             (* TODO: call this something else, maybe connection handle? *)
       ; conn : 'a
+      ; fd : Lwt_unix.file_descr
+      ; version : Version.t  (** HTTP version that this connection speaks *)
       }
       -> connection
 
 type t =
-  { conn : connection
-  ; conn_info : Connection_info.t
-  ; version : Version.t
+  { mutable conn : connection
+  ; mutable conn_info : Connection_info.t
   ; uri : Uri.t
   ; config : Config.t
   }
 
 let create_http_connection ~config fd =
   let open Lwt.Syntax in
-  (* TODO: support HTTP/2 with HTTP/1.1 upgrade. `upgrade` does nothing for now *)
-  let (module Http), version, _upgrade =
+  let (module Http), version =
     match
       ( config.Config.http2_prior_knowledge
       , config.max_http_version
       , config.h2c_upgrade )
     with
     | true, _, _ ->
-      (module Http2.HTTP : S.HTTP), Versions.HTTP.v2_0, false
+      (module Http2.HTTP : S.HTTP), Versions.HTTP.v2_0
     | false, { Versions.HTTP.major = 2; _ }, true ->
-      (module Http2.HTTP : S.HTTP), Versions.HTTP.v2_0, true
+      (module Http1.HTTP : S.HTTP), Versions.HTTP.v1_1
     | false, _, _ ->
       let version =
         if Versions.HTTP.(compare config.max_http_version v2_0) >= 0 then
@@ -137,15 +131,16 @@ let create_http_connection ~config fd =
         else
           config.max_http_version
       in
-      (module Http1.HTTP : S.HTTP), version, false
+      (module Http1.HTTP : S.HTTP), version
   in
   let+ conn = Http.Client.create_connection fd in
   Ok
-    ( Conn
-        { impl = (module Http : S.HTTPCommon with type Client.t = Http.Client.t)
-        ; conn
-        }
-    , version )
+    (Conn
+       { impl = (module Http : S.HTTPCommon with type Client.t = Http.Client.t)
+       ; conn
+       ; fd
+       ; version
+       })
 
 let create_https_connection ~config ~conn_info fd =
   let { Connection_info.host; _ } = conn_info in
@@ -202,12 +197,13 @@ let create_https_connection ~config ~conn_info fd =
     let open Lwt.Syntax in
     let+ conn = Https.Client.create_connection ssl_client in
     Ok
-      ( Conn
-          { impl =
-              (module Https : S.HTTPCommon with type Client.t = Https.Client.t)
-          ; conn
-          }
-      , version )
+      (Conn
+         { impl =
+             (module Https : S.HTTPCommon with type Client.t = Https.Client.t)
+         ; conn
+         ; fd
+         ; version
+         })
 
 let make_impl ?src ~config ~conn_info fd =
   let { Connection_info.scheme; addresses; _ } = conn_info in
@@ -232,11 +228,11 @@ let make_impl ?src ~config ~conn_info fd =
 let open_connection ~config ~conn_info uri =
   let open Lwt_result.Syntax in
   let fd = Lwt_unix.socket Unix.PF_INET Unix.SOCK_STREAM 0 in
-  let+ conn, version = make_impl ~config ~conn_info fd in
-  { conn; version; uri; conn_info; config }
+  let+ conn = make_impl ~config ~conn_info fd in
+  { conn; uri; conn_info; config }
 
 let drain_response_body_and_shutdown
-    { conn = Conn { impl = (module HTTPImpl); conn }; conn_info; _ }
+    { conn = Conn { impl = (module HTTPImpl); conn; _ }; conn_info; _ }
     response_body
   =
   let open Lwt.Syntax in
@@ -255,7 +251,7 @@ let reuse_or_set_up_new_connection t response response_body new_location =
     =
     t
   in
-  let { Connection_info.host; scheme; remaining_redirects; _ } = conn_info in
+  let { Connection_info.host; scheme; _ } = conn_info in
   let location_uri = Uri.of_string new_location in
   let new_uri, new_host =
     match Uri.host location_uri with
@@ -273,7 +269,6 @@ let reuse_or_set_up_new_connection t response response_body new_location =
       port = infer_port ~scheme:new_scheme new_uri
     ; scheme = new_scheme
     ; host = new_host
-    ; remaining_redirects = remaining_redirects - 1
     }
   in
   match
@@ -310,29 +305,103 @@ let reuse_or_set_up_new_connection t response response_body new_location =
     drain_response_body_and_shutdown t response_body;
     open_connection ~config ~conn_info:new_conn_info new_uri
 
-let rec build_request_and_handle_response
-    ~meth
-    ~headers
-    ?body
-    ({ conn = Conn { impl = (module HTTPImpl); conn }
-     ; version
+type request_info =
+  { remaining_redirects : int
+  ; headers : (string * string) list
+  ; request : Request.t
+  ; meth : H2.Method.t
+  ; target : string
+  ; is_h2c_upgrade : bool
+  }
+
+let rec return_response
+    ({ conn = Conn ({ impl = (module Http); fd; _ } as conn_state)
      ; conn_info
      ; config
-     ; uri
      ; _
      } as t)
+    ({ request; _ } as request_info)
+    ({ Response.status; headers; version; _ } as response)
+    response_body
+  =
+  let open Lwt.Syntax in
+  let { Connection_info.scheme; _ } = conn_info in
+  (* A particular set of conditions must be true: we're receiving an HTTP
+   * response, over HTTP/1.1, that has status 101, and we've asked to upgrade
+   * to HTTP/2 via h2c. `http2_prior_knowledge` must also be false, because
+   * if it were true we would have started an HTTP/2 connection. *)
+  match request_info.is_h2c_upgrade, scheme, version, status, config with
+  | ( true
+    , Scheme.HTTP
+    , { Versions.HTTP.major = 1; minor = 1 }
+    , `Switching_protocols
+    , { Config.h2c_upgrade = true
+      ; max_http_version = { Versions.HTTP.major = 2; minor = 0 }
+      ; http2_prior_knowledge = false
+      ; _
+      } ) ->
+    (match Headers.(get headers "connection", get headers "upgrade") with
+    | Some ("Upgrade" | "upgrade"), Some "h2c" ->
+      (* TODO: this case needs to shutdown the HTTP/1.1 connection when it's
+       * done using it. *)
+      let (module Http2) = (module Http2.HTTP : S.HTTP2) in
+      let* () = Http_impl.drain_stream response_body in
+      let open Lwt_result.Syntax in
+      let* conn, response, response_body' =
+        Http_impl.create_h2c_connection (module Http2) ~http_request:request fd
+      in
+      t.conn <-
+        Conn
+          { impl =
+              (module Http2 : S.HTTPCommon with type Client.t = Http2.Client.t)
+          ; conn
+          ; fd
+          ; version = Versions.HTTP.v2_0
+          };
+      return_response t request_info response response_body'
+    | _ ->
+      Lwt_result.return (response, response_body))
+  | _ ->
+    Lwt_result.return (response, response_body)
+
+let is_h2c_upgrade ~config ~version =
+  match
+    ( config.Config.http2_prior_knowledge
+    , version
+    , config.max_http_version
+    , config.h2c_upgrade )
+  with
+  | false, cur_version, max_version, true
+    when Versions.HTTP.(
+           compare max_version v2_0 = 0 && compare cur_version v1_1 = 0) ->
+    true
+  | _ ->
+    false
+
+let make_request_info
+    { conn = Conn { version; _ }; conn_info; config; uri; _ }
+    ~remaining_redirects
+    ~meth
+    ~headers
+  =
+  let { Connection_info.host; scheme; _ } = conn_info in
+  let is_h2c_upgrade = is_h2c_upgrade ~config ~version in
+  let canonical_headers =
+    (* TODO: send along desired connection settings (h2c). *)
+    Headers.canonicalize_headers ~is_h2c_upgrade ~version ~host headers
+  in
+  let target = Uri.path_and_query uri in
+  let request =
+    Request.create meth ~version ~scheme ~headers:canonical_headers target
+  in
+  { remaining_redirects; headers; request; meth; target; is_h2c_upgrade }
+
+let rec send_request_and_handle_response
+    ({ conn = Conn { impl = (module HTTPImpl); conn; _ }; config; _ } as t)
+    ?body
+    ({ remaining_redirects; request; headers; meth; _ } as request_info)
   =
   let open Lwt_result.Syntax in
-  let { Connection_info.host; scheme; remaining_redirects; _ } = conn_info in
-  let canonical_headers = Headers.canonicalize_headers ~version ~host headers in
-  let request =
-    Request.create
-      meth
-      ~version
-      ~scheme
-      ~headers:canonical_headers
-      (Uri.path_and_query uri)
-  in
   let* response, response_body =
     Http_impl.send_request (module HTTPImpl) conn ?body request
   in
@@ -342,11 +411,8 @@ let rec build_request_and_handle_response
     ( H2.Status.is_redirection response.status
     , config.follow_redirects
     , remaining_redirects
-    , H2.Headers.get response.headers "location" )
+    , Headers.get response.headers "location" )
   with
-  | false, _, _, _ | _, false, _, _ ->
-    (* Either not a redirect, or we shouldn't follow redirects. *)
-    Lwt_result.return (response, response_body)
   | true, true, 0, _ ->
     (* Response is a redirect, but we can't follow any more. *)
     let msg =
@@ -358,17 +424,26 @@ let rec build_request_and_handle_response
     let* t' =
       reuse_or_set_up_new_connection t response response_body location
     in
-    build_request_and_handle_response ~meth ~headers ?body t'
-  | true, true, _, None ->
-    (* TODO: No Location header means we can't follow the redirect, so we should
-     * just return the response intead of erroring. *)
-    failwith "Redirect without Location header?"
+    let request_info' =
+      make_request_info
+        t'
+        ~remaining_redirects:(remaining_redirects - 1)
+        ~meth
+        ~headers
+    in
+    send_request_and_handle_response t' ?body request_info'
+  (* Either not a redirect, or we shouldn't follow redirects. *)
+  | false, _, _, _ | _, false, _, _ | true, true, _, None ->
+    return_response t request_info response response_body
 
 let call ?(config = Config.default_config) ~meth ?(headers = []) ?body uri =
   let open Lwt_result.Syntax in
-  let* conn_info = Connection_info.of_uri ~config uri in
-  let* connection = open_connection ~config ~conn_info uri in
-  build_request_and_handle_response ~meth ~headers ?body connection
+  let* conn_info = Connection_info.of_uri uri in
+  let* t = open_connection ~config ~conn_info uri in
+  let request_info =
+    make_request_info t ~remaining_redirects:config.max_redirects ~meth ~headers
+  in
+  send_request_and_handle_response t ?body request_info
 
 let request ?config ?headers ~meth uri = call ?config ~meth ?headers uri
 
