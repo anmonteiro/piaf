@@ -7,7 +7,7 @@ let setup_log ?style_renderer level =
   ()
 
 let request host =
-  Piaf.Client.get
+  Piaf.Client.Oneshot.get
     ~config:{ Piaf.Config.default_config with follow_redirects = true }
     (Uri.of_string host)
   >|= function
