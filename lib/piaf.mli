@@ -43,7 +43,8 @@ end
 (** There are two options for issuing requests with Piaf:
 
     + client: useful if multiple requests are going to be sent to the remote
-      endpoint, avoids setting up a TCP connection for each request.
+      endpoint, avoids setting up a TCP connection for each request. Or if
+      HTTP/1.0, you can think of this as effectively a connection manager.
     + oneshot: issues a single request and tears down the underlying connection
       once the request is done. Useful for isolated requests. *)
 

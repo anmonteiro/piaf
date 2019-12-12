@@ -1,12 +1,32 @@
-(*
- * - Functions for persistent / oneshot connections
- *)
 open Monads
 module Version = Httpaf.Version
 
 let src = Logs.Src.create "piaf.client" ~doc:"Piaf Client module"
 
 module Log = (val Logs.src_log src : Logs.LOG)
+
+module Uri = struct
+  include Uri
+
+  let host_exn uri =
+    match Uri.host uri with
+    | Some host ->
+      host
+    | None ->
+      raise (Failure "host_exn")
+
+  let parse_with_base_uri ~scheme ~uri location =
+    let location_uri = Uri.of_string location in
+    let new_uri =
+      match Uri.host location_uri with
+      | Some _ ->
+        location_uri
+      | None ->
+        (* relative URI, replace the path and query on the old URI. *)
+        Uri.resolve (Scheme.to_string scheme) uri location_uri
+    in
+    Uri.canonicalize new_uri
+end
 
 let infer_port ~scheme uri =
   match Uri.port uri, scheme with
@@ -42,8 +62,13 @@ module Connection_info = struct
   type t =
     { port : int
     ; scheme : Scheme.t
-    ; host : string
     ; addresses : Unix.sockaddr list
+    ; uri : Uri.t
+          (** Current URI the connection is connected to. A redirect could've
+              made the remote endpoint change.
+
+              Guaranteed to have a host part. *)
+    ; host : string  (** `Uri.host t.uri` but makes our life easier. *)
     }
 
   (* Only need the address and port to know whether the endpoint is the same or
@@ -73,16 +98,22 @@ module Connection_info = struct
   (* Use this shortcut to avoid resolving the new address. Not 100% correct
    * because different hosts may point to the same address. *)
   let equal_without_resolving c1 c2 =
-    c1.port = c2.port && c1.scheme = c2.scheme && c1.host = c2.host
+    c1.port = c2.port
+    && c1.scheme = c2.scheme
+    && Uri.host_exn c1.uri = Uri.host_exn c2.uri
 
   let of_uri uri =
     let open Lwt_result.Syntax in
     let uri = Uri.canonicalize uri in
-    let host = Uri.host_with_default uri in
-    let* scheme = Lwt.return (Scheme.of_uri uri) in
-    let port = infer_port ~scheme uri in
-    let+ addresses = resolve_host ~port host in
-    { scheme; host; port; addresses }
+    match Uri.host uri with
+    | Some host ->
+      let* scheme = Lwt.return (Scheme.of_uri uri) in
+      let port = infer_port ~scheme uri in
+      let+ addresses = resolve_host ~port host in
+      { scheme; uri; host; port; addresses }
+    | None ->
+      Lwt_result.fail
+        (Format.asprintf "Missing host part for: %a" Uri.pp_hum uri)
 
   let pp_address fmt = function
     | Unix.ADDR_INET (addr, port) ->
@@ -98,17 +129,19 @@ end
 type connection =
   | Conn :
       { impl : (module S.HTTPCommon with type Client.t = 'a)
-            (* TODO: call this something else, maybe connection handle? *)
-      ; conn : 'a
+      ; handle : 'a
       ; fd : Lwt_unix.file_descr
       ; version : Version.t  (** HTTP version that this connection speaks *)
       }
       -> connection
 
+(* TODO: could probably think about keeping the original connection around
+ * forever since every subsequent request is going to use it. *)
 type t =
   { mutable conn : connection
   ; mutable conn_info : Connection_info.t
-  ; uri : Uri.t
+  ; mutable persistent : bool
+  ; uri : Uri.t (* The connection URI. Request entrypoints connect here. *)
   ; config : Config.t
   }
 
@@ -133,11 +166,11 @@ let create_http_connection ~config fd =
       in
       (module Http1.HTTP : S.HTTP), version
   in
-  let+ conn = Http.Client.create_connection fd in
+  let+ handle = Http.Client.create_connection fd in
   Ok
     (Conn
        { impl = (module Http : S.HTTPCommon with type Client.t = Http.Client.t)
-       ; conn
+       ; handle
        ; fd
        ; version
        })
@@ -195,12 +228,12 @@ let create_https_connection ~config ~conn_info fd =
           assert false)
     in
     let open Lwt.Syntax in
-    let+ conn = Https.Client.create_connection ssl_client in
+    let+ handle = Https.Client.create_connection ssl_client in
     Ok
       (Conn
          { impl =
              (module Https : S.HTTPCommon with type Client.t = Https.Client.t)
-         ; conn
+         ; handle
          ; fd
          ; version
          })
@@ -225,15 +258,18 @@ let make_impl ?src ~config ~conn_info fd =
   | HTTPS ->
     create_https_connection ~config ~conn_info fd
 
-let open_connection ~config ~conn_info uri =
-  let open Lwt_result.Syntax in
+let open_connection ~config conn_info =
   let fd = Lwt_unix.socket Unix.PF_INET Unix.SOCK_STREAM 0 in
-  let+ conn = make_impl ~config ~conn_info fd in
-  { conn; uri; conn_info; config }
+  make_impl ~config ~conn_info fd
+
+let change_connection t conn_info =
+  let open Lwt_result.Syntax in
+  let+ conn' = open_connection ~config:t.config conn_info in
+  t.conn <- conn';
+  t.conn_info <- conn_info
 
 let drain_response_body_and_shutdown
-    { conn = Conn { impl = (module HTTPImpl); conn; _ }; conn_info; _ }
-    response_body
+    (Conn { impl = (module HTTPImpl); handle; _ }) ~conn_info response_body
   =
   let open Lwt.Syntax in
   Log.debug (fun m -> m "Ignoring the response body");
@@ -244,35 +280,24 @@ let drain_response_body_and_shutdown
       let+ () = Lwt_stream.junk_old response_body in
       Log.info (fun m ->
           m "Tearing down connection to %a" Connection_info.pp_hum conn_info);
-      HTTPImpl.Client.shutdown conn)
+      HTTPImpl.Client.shutdown handle)
 
-let reuse_or_set_up_new_connection t response response_body new_location =
-  let { conn = Conn { impl = (module HTTPImpl); _ }; conn_info; config; uri; _ }
-    =
-    t
-  in
-  let { Connection_info.host; scheme; _ } = conn_info in
-  let location_uri = Uri.of_string new_location in
-  let new_uri, new_host =
-    match Uri.host location_uri with
-    | Some new_host ->
-      location_uri, new_host
-    | None ->
-      (* relative URI, replace the path and query on the old URI. *)
-      Uri.resolve (Scheme.to_string scheme) uri location_uri, host
-  in
-  let new_uri = Uri.canonicalize new_uri in
+(* returns true if it succeeding in reusing the connection, false otherwise. *)
+let reuse_or_set_up_new_connection
+    ({ conn = Conn { impl = (module HTTPImpl); _ }; conn_info; _ } as t) new_uri
+  =
   let open Lwt_result.Syntax in
   let* new_scheme = Lwt.return (Scheme.of_uri new_uri) in
   let new_conn_info =
     { conn_info with
       port = infer_port ~scheme:new_scheme new_uri
     ; scheme = new_scheme
-    ; host = new_host
+    ; host = Uri.host_exn new_uri
+    ; uri = new_uri
     }
   in
   match
-    ( Response.persistent_connection response
+    ( t.persistent
     , Connection_info.equal_without_resolving conn_info new_conn_info )
   with
   | true, true ->
@@ -280,7 +305,9 @@ let reuse_or_set_up_new_connection t response response_body new_location =
      * to re-establish a new connection. *)
     Log.debug (fun m ->
         m "Reusing the same connection as the host / port didn't change");
-    Lwt_result.return { t with uri = new_uri }
+    (* URI could've changed *)
+    t.conn_info <- new_conn_info;
+    Lwt_result.return true
   | true, false ->
     let* new_addresses =
       resolve_host ~port:new_conn_info.port new_conn_info.host
@@ -290,20 +317,19 @@ let reuse_or_set_up_new_connection t response response_body new_location =
     (* Really avoiding having to establish a new connection here. If the
      * new host resolves to the same address and the port matches *)
     if Connection_info.equal conn_info new_conn_info then (
-      Log.debug (fun m -> m "Ignoring the response body");
-      Lwt.async (fun () -> Http_impl.drain_stream response_body);
       Log.debug (fun m ->
           m "Reusing the same connection as the remote address didn't change");
-      Lwt_result.return { t with uri = new_uri; conn_info = new_conn_info })
-    else (
-      (* No way to avoid establishing a new connection. *)
-      drain_response_body_and_shutdown t response_body;
-      open_connection ~config ~conn_info:new_conn_info new_uri)
+      (* URI could've changed *)
+      t.conn_info <- new_conn_info;
+      Lwt_result.return true)
+    else (* No way to avoid establishing a new connection. *)
+      let+ () = change_connection t new_conn_info in
+      false
   | false, _ ->
     (* No way to avoid establishing a new connection if the previous one wasn't
        persistent. *)
-    drain_response_body_and_shutdown t response_body;
-    open_connection ~config ~conn_info:new_conn_info new_uri
+    let+ () = change_connection t new_conn_info in
+    false
 
 type request_info =
   { remaining_redirects : int
@@ -347,14 +373,14 @@ let rec return_response
       let (module Http2) = (module Http2.HTTP : S.HTTP2) in
       let* () = Http_impl.drain_stream response_body in
       let open Lwt_result.Syntax in
-      let* conn, response, response_body' =
+      let* handle, response, response_body' =
         Http_impl.create_h2c_connection (module Http2) ~http_request:request fd
       in
       t.conn <-
         Conn
           { impl =
               (module Http2 : S.HTTPCommon with type Client.t = Http2.Client.t)
-          ; conn
+          ; handle
           ; fd
           ; version = Versions.HTTP.v2_0
           };
@@ -397,14 +423,17 @@ let make_request_info
   { remaining_redirects; headers; request; meth; target; is_h2c_upgrade }
 
 let rec send_request_and_handle_response
-    ({ conn = Conn { impl = (module HTTPImpl); conn; _ }; config; _ } as t)
+    ({ conn; conn_info; uri; config; _ } as t)
     ?body
     ({ remaining_redirects; request; headers; meth; _ } as request_info)
   =
   let open Lwt_result.Syntax in
+  let (Conn { impl = (module HTTPImpl); handle; _ }) = conn in
   let* response, response_body =
-    Http_impl.send_request (module HTTPImpl) conn ?body request
+    Http_impl.send_request (module HTTPImpl) handle ?body request
   in
+  if t.persistent then
+    t.persistent <- Response.persistent_connection response;
   (* TODO: 201 created can also return a Location header. Should we follow
    * those? *)
   match
@@ -421,19 +450,29 @@ let rec send_request_and_handle_response
     Log.err (fun m -> m "%s" msg);
     Lwt_result.fail msg
   | true, true, _, Some location ->
-    let* t' =
-      reuse_or_set_up_new_connection t response response_body location
-    in
-    let target = Uri.path_and_query t'.uri in
+    let { Connection_info.scheme; _ } = conn_info in
+    let new_uri = Uri.parse_with_base_uri ~scheme ~uri location in
+    let* did_reuse = reuse_or_set_up_new_connection t new_uri in
+    (* If we reused the connection, and this is a persistent connection (we
+     * only reuse if persistent), throw away the response body, because we're
+     * not going to expose it to consumers.
+     *
+     * Otherwise, if we couldn't reuse the connection, drain the response body
+     * and additionally shut down the old connection. *)
+    if did_reuse then
+      Lwt.async (fun () -> Http_impl.drain_stream response_body)
+    else
+      drain_response_body_and_shutdown conn ~conn_info response_body;
+    let target = Uri.path_and_query new_uri in
     let request_info' =
       make_request_info
-        t'
+        t
         ~remaining_redirects:(remaining_redirects - 1)
         ~meth
         ~headers
         target
     in
-    send_request_and_handle_response t' ?body request_info'
+    send_request_and_handle_response t ?body request_info'
   (* Either not a redirect, or we shouldn't follow redirects. *)
   | false, _, _, _ | _, false, _, _ | true, true, _, None ->
     return_response t request_info response response_body
@@ -441,14 +480,25 @@ let rec send_request_and_handle_response
 let create ?(config = Config.default_config) uri =
   let open Lwt_result.Syntax in
   let* conn_info = Connection_info.of_uri uri in
-  let+ t = open_connection ~config ~conn_info uri in
-  t
+  let+ conn = open_connection ~config conn_info in
+  { conn; conn_info; persistent = true; uri; config }
 
-let shutdown { conn = Conn { impl; conn; _ }; _ } =
-  Http_impl.shutdown (module (val impl)) conn
+let shutdown { conn = Conn { impl; handle; _ }; _ } =
+  Http_impl.shutdown (module (val impl)) handle
 
 let call t ~meth ?(headers = []) ?body target =
+  let open Lwt_result.Syntax in
+  (* Need to try to reconnect to the base host on every call, if redirects are
+   * enabled, because the connection manager could have tried to follow a
+   * redirect. *)
+  let* _did_reuse =
+    if t.config.follow_redirects then
+      reuse_or_set_up_new_connection t t.uri
+    else
+      Lwt_result.return true
+  in
   let request_info = make_request_info t ~meth ~headers target in
+  t.persistent <- Request.persistent_connection request_info.request;
   send_request_and_handle_response t ?body request_info
 
 let request t ?headers ~meth target = call t ~meth ?headers target
@@ -471,6 +521,7 @@ module Oneshot = struct
     let* t = create ~config uri in
     let target = Uri.path_and_query t.uri in
     let request_info = make_request_info t ~meth ~headers target in
+    t.persistent <- Request.persistent_connection request_info.request;
     send_request_and_handle_response t ?body request_info
 
   let request ?config ?headers ~meth uri = call ?config ~meth ?headers uri

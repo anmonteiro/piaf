@@ -20,6 +20,9 @@ let of_h2 { H2.Response.status; headers } =
   let headers = H2.Headers.remove headers ":status" in
   { status; headers; version = { major = 2; minor = 0 } }
 
+let persistent_connection { version; headers; _ } =
+  Message.persistent_connection version headers
+
 let pp_hum fmt { status; headers; version } =
   let status =
     match (status : [< Httpaf.Status.t | H2.Status.t ]) with
@@ -36,6 +39,3 @@ let pp_hum fmt { status; headers; version } =
     status
     H2.Headers.pp_hum
     headers
-
-let persistent_connection { version; headers; _ } =
-  Message.persistent_connection version headers

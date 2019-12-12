@@ -20,6 +20,9 @@ let to_h2 { meth; target; headers; _ } =
    * TODO: this can be relaxed *)
   H2.Request.create ~scheme:"https" ~headers meth target
 
+let persistent_connection { version; headers; _ } =
+  Message.persistent_connection version headers
+
 let pp_hum fmt { meth; target; version; headers; scheme } =
   Format.fprintf
     fmt
