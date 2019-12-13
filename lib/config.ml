@@ -25,6 +25,7 @@ type t =
         (** The path to a CA certificates file in PEM format *)
   ; capath : string option
         (** The path to a directory which contains CA certificates in PEM format *)
+  ; tcp_nodelay : bool
   }
 
 let default_config =
@@ -36,6 +37,7 @@ let default_config =
   ; h2c_upgrade = false
   ; cacert = None
   ; capath = None
+  ; tcp_nodelay = true
   }
 
 let to_http1_config _ = None

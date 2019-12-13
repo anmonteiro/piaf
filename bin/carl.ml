@@ -44,6 +44,7 @@ type cli =
   ; max_http_version : Piaf.Versions.HTTP.t
   ; h2c_upgrade : bool
   ; http2_prior_knowledge : bool
+  ; tcp_nodelay : bool
   ; cacert : string option
   ; capath : string option
   ; insecure : bool
@@ -110,6 +111,7 @@ let piaf_config_of_cli
     ; max_http_version
     ; h2c_upgrade
     ; http2_prior_knowledge
+    ; tcp_nodelay
     ; cacert
     ; capath
     ; insecure
@@ -121,6 +123,7 @@ let piaf_config_of_cli
   ; max_http_version
   ; h2c_upgrade
   ; http2_prior_knowledge
+  ; tcp_nodelay
   ; cacert
   ; capath
   ; allow_insecure = insecure
@@ -239,6 +242,10 @@ module CLI = struct
     let doc = "Verbosity (use multiple times to increase)" in
     Arg.(value & flag_all & info [ "v"; "verbose" ] ~doc)
 
+  let tcp_nodelay =
+    let doc = "Use the TCP_NODELAY option" in
+    Arg.(value & flag & info [ "tcp-nodelay" ] ~doc)
+
   let urls =
     let docv = "URLs" in
     Arg.(non_empty & pos_all string [] & info [] ~docv)
@@ -257,6 +264,7 @@ module CLI = struct
       use_http_1_1
       use_http_2
       http2_prior_knowledge
+      tcp_nodelay
       verbose
       urls
     =
@@ -291,6 +299,7 @@ module CLI = struct
     ; cacert
     ; capath
     ; insecure
+    ; tcp_nodelay
     }
 
   let default_cmd =
@@ -309,6 +318,7 @@ module CLI = struct
       $ use_http_1_1
       $ use_http_2
       $ http_2_prior_knowledge
+      $ tcp_nodelay
       $ verbose
       $ urls)
 

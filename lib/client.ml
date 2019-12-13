@@ -260,6 +260,9 @@ let make_impl ?src ~config ~conn_info fd =
 
 let open_connection ~config conn_info =
   let fd = Lwt_unix.socket Unix.PF_INET Unix.SOCK_STREAM 0 in
+  if config.Config.tcp_nodelay then (
+    Logs.debug (fun m -> m "Setting TCP_NODELAY");
+    Lwt_unix.setsockopt fd Lwt_unix.TCP_NODELAY true);
   make_impl ~config ~conn_info fd
 
 let change_connection t conn_info =

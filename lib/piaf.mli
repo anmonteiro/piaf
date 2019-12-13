@@ -20,6 +20,7 @@ module Config : sig
     ; capath : string option
           (** The path to a directory which contains CA certificates in PEM
               format *)
+    ; tcp_nodelay : bool
     }
 
   val default_config : t
