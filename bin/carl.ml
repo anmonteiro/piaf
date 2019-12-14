@@ -52,6 +52,7 @@ type cli =
   ; insecure : bool
   ; user_agent : string
   ; connect_timeout : float
+  ; referer : string option
   }
 
 let format_header formatter (name, value) =
@@ -70,10 +71,36 @@ let pp_response_headers formatter { Piaf.Response.headers; status; version } =
        format_header)
     (Piaf.Headers.to_list headers)
 
-let request ~cli_config:{ head; headers; meth; user_agent; _ } ~config uri =
+let rec uri_of_string ~scheme s =
+  let maybe_uri = Uri.of_string s in
+  match Uri.host maybe_uri, Uri.scheme maybe_uri with
+  | None, _ ->
+    (* If Uri.of_string didn't get a host it must mean that the scheme wasn't
+     * even present. *)
+    Logs.debug (fun m ->
+        m "Protocol not provided for %s. Using the default scheme: %s" s scheme);
+    uri_of_string ~scheme ("//" ^ s)
+  | Some _, None ->
+    (* e.g. `//example.com` *)
+    Uri.with_scheme maybe_uri (Some scheme)
+  | Some _, Some _ ->
+    maybe_uri
+
+let build_headers ~cli:{ headers; user_agent; referer; _ } =
+  let headers =
+    match referer with
+    | None ->
+      headers
+    | Some referer ->
+      ("referer", referer) :: headers
+  in
+  ("user-agent", user_agent) :: headers
+
+let request ~cli ~config uri =
   let module Client = Piaf.Client.Oneshot in
   let open Lwt.Syntax in
-  let headers = ("user-agent", user_agent) :: headers in
+  let { head; meth; _ } = cli in
+  let headers = build_headers ~cli in
   let* res = Client.request ~config ~meth ~headers uri in
   match res with
   | Ok (response, response_body) ->
@@ -92,22 +119,18 @@ let request ~cli_config:{ head; headers; meth; user_agent; _ } ~config uri =
   | Error e ->
     Lwt.return (`Error (false, e))
 
-let log_level_of_list = function [] -> Logs.App | [ _ ] -> Info | _ -> Debug
+let rec request_many ~cli ~config urls =
+  let open Lwt.Syntax in
+  let { default_proto; _ } = cli in
+  match urls with
+  | [] ->
+    Lwt.return (`Ok ())
+  | x :: xs ->
+    let uri = uri_of_string ~scheme:default_proto x in
+    let* r = request ~cli ~config uri in
+    (match r with `Ok () -> request_many ~cli ~config xs | _ -> Lwt.return r)
 
-let rec uri_of_string ~scheme s =
-  let maybe_uri = Uri.of_string s in
-  match Uri.host maybe_uri, Uri.scheme maybe_uri with
-  | None, _ ->
-    (* If Uri.of_string didn't get a host it must mean that the scheme wasn't
-     * even present. *)
-    Logs.debug (fun m ->
-        m "Protocol not provided for %s. Using the default scheme: %s" s scheme);
-    uri_of_string ~scheme ("//" ^ s)
-  | Some _, None ->
-    (* e.g. `//example.com` *)
-    Uri.with_scheme maybe_uri (Some scheme)
-  | Some _, Some _ ->
-    maybe_uri
+let log_level_of_list = function [] -> Logs.App | [ _ ] -> Info | _ -> Debug
 
 let piaf_config_of_cli
     { follow_redirects
@@ -139,21 +162,10 @@ let piaf_config_of_cli
   ; connect_timeout
   }
 
-let main ({ default_proto; log_level; urls; _ } as cli_config) =
-  let open Lwt.Syntax in
+let main ({ log_level; urls; _ } as cli) =
   setup_log (Some log_level);
-  let config = piaf_config_of_cli cli_config in
-  let rec inner xs =
-    match xs with
-    | [] ->
-      Lwt.return (`Ok ())
-    | x :: xs ->
-      let uri = uri_of_string ~scheme:default_proto x in
-      let* r = request ~cli_config ~config uri in
-      (match r with `Ok () -> inner xs | _ -> Lwt.return r)
-  in
-  let p = inner urls in
-  Lwt_main.run p
+  let config = piaf_config_of_cli cli in
+  Lwt_main.run (request_many ~cli ~config urls)
 
 (* -d / --data
  * --compressed
@@ -164,7 +176,6 @@ let main ({ default_proto; log_level; urls; _ } as cli_config) =
  * --retry-connrefused Retry on connection refused (use with --retry)
  * --retry-delay <seconds> Wait time between retries
  * --retry-max-time <seconds> Retry only within this period
- * -e, --referer <URL> Referrer URL
  *)
 module CLI = struct
   let request =
@@ -258,6 +269,11 @@ module CLI = struct
     let doc = "Use HTTP 2 without HTTP/1.1 Upgrade" in
     Arg.(value & flag & info [ "http2-prior-knowledge" ] ~doc)
 
+  let referer =
+    let doc = "Referrer URL" in
+    let docv = "URL" in
+    Arg.(value & opt (some string) None & info [ "e"; "referer" ] ~doc ~docv)
+
   let verbose =
     let doc = "Verbosity (use multiple times to increase)" in
     Arg.(value & flag_all & info [ "v"; "verbose" ] ~doc)
@@ -336,6 +352,7 @@ module CLI = struct
       use_http_1_1
       use_http_2
       http2_prior_knowledge
+      referer
       tcp_nodelay
       sslv3
       tlsv1
@@ -401,6 +418,7 @@ module CLI = struct
     ; tcp_nodelay
     ; user_agent
     ; connect_timeout
+    ; referer
     }
 
   let default_cmd =
@@ -420,6 +438,7 @@ module CLI = struct
       $ use_http_1_1
       $ use_http_2
       $ http_2_prior_knowledge
+      $ referer
       $ tcp_nodelay
       $ sslv3
       $ tlsv1
