@@ -50,7 +50,8 @@ let resolve_host ~port hostname =
   in
   match addresses with
   | [] ->
-    Error "Can't resolve hostname"
+    let msg = Format.asprintf "Can't resolve hostname: %s" hostname in
+    Error msg
   | xs ->
     (* TODO: add resolved canonical hostname *)
     Ok (List.map (fun { Unix.ai_addr; _ } -> ai_addr) xs)
@@ -238,10 +239,13 @@ let create_https_connection ~config ~conn_info fd =
          ; version
          })
 
-let make_impl ?src ~config ~conn_info fd =
-  let { Connection_info.scheme; addresses; _ } = conn_info in
-  (* TODO: try addresses in e.g. a round robin fashion? *)
-  let address = List.hd addresses in
+let close_connection ~conn_info fd =
+  Log.info (fun m ->
+      m "Closing connection to %a" Connection_info.pp_hum conn_info);
+  Lwt_unix.close fd
+
+let connect ?src ~config ~conn_info fd =
+  let { Connection_info.addresses; _ } = conn_info in
   let open Lwt.Syntax in
   let* () =
     match src with
@@ -250,10 +254,31 @@ let make_impl ?src ~config ~conn_info fd =
     | Some src_sa ->
       Lwt_unix.bind fd src_sa
   in
-  let* () = Lwt_unix.connect fd address in
+  (* TODO: try addresses in e.g. a round robin fashion? *)
+  let address = List.hd addresses in
+  Lwt.catch
+    (fun () ->
+      Lwt_unix.with_timeout config.Config.connect_timeout (fun () ->
+          Lwt_result.ok (Lwt_unix.connect fd address)))
+    (function
+      | Lwt_unix.Timeout ->
+        let msg =
+          Format.asprintf
+            "Connection timed out after %.0f milliseconds"
+            (config.connect_timeout *. 1000.)
+        in
+        Logs.err (fun m -> m "%s" msg);
+        Lwt_result.fail msg
+      | _ ->
+        Lwt_result.fail "FIXME: unhandled connection error")
+
+let make_impl ?src ~config ~conn_info fd =
+  let open Lwt_result.Syntax in
+  let* () = connect ?src ~config ~conn_info fd in
   Log.info (fun m -> m "Connected to %a" Connection_info.pp_hum conn_info);
+  let open Lwt.Syntax in
   let* impl =
-    match scheme with
+    match conn_info.scheme with
     | Scheme.HTTP ->
       create_http_connection ~config fd
     | HTTPS ->
@@ -263,16 +288,14 @@ let make_impl ?src ~config ~conn_info fd =
   | Ok _ ->
     Lwt.return impl
   | Error _ ->
-    Log.info (fun m ->
-        m "Closing connection to %a" Connection_info.pp_hum conn_info);
-    let+ () = Lwt_unix.close fd in
+    let+ () = close_connection ~conn_info fd in
     impl
 
 let open_connection ~config conn_info =
   let fd = Lwt_unix.socket Unix.PF_INET Unix.SOCK_STREAM 0 in
   if config.Config.tcp_nodelay then (
-    Logs.debug (fun m -> m "Setting TCP_NODELAY");
-    Lwt_unix.setsockopt fd Lwt_unix.TCP_NODELAY true);
+    Lwt_unix.setsockopt fd Lwt_unix.TCP_NODELAY true;
+    Logs.debug (fun m -> m "TCP_NODELAY set"));
   make_impl ~config ~conn_info fd
 
 let change_connection t conn_info =

@@ -2,7 +2,6 @@
  * - Authentication
  * - Buffer sizes (for http/af / h2)?
  * - Timeouts?
- * - Referrer
  *)
 
 type t =
@@ -27,6 +26,7 @@ type t =
   ; min_tls_version : Versions.TLS.t
   ; max_tls_version : Versions.TLS.t
   ; tcp_nodelay : bool
+  ; connect_timeout : float
   }
 
 let default =
@@ -41,6 +41,7 @@ let default =
   ; min_tls_version = TLSv1_0
   ; max_tls_version = TLSv1_3
   ; tcp_nodelay = true
+  ; connect_timeout = 30.0
   }
 
 let to_http1_config _ = None

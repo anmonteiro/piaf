@@ -68,6 +68,7 @@ module Config : sig
     ; min_tls_version : Versions.TLS.t
     ; max_tls_version : Versions.TLS.t
     ; tcp_nodelay : bool
+    ; connect_timeout : float
     }
 
   val default : t

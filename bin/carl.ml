@@ -51,6 +51,7 @@ type cli =
   ; max_tls_version : Piaf.Versions.TLS.t
   ; insecure : bool
   ; user_agent : string
+  ; connect_timeout : float
   }
 
 let format_header formatter (name, value) =
@@ -120,6 +121,7 @@ let piaf_config_of_cli
     ; insecure
     ; min_tls_version
     ; max_tls_version
+    ; connect_timeout
     ; _
     }
   =
@@ -134,6 +136,7 @@ let piaf_config_of_cli
   ; allow_insecure = insecure
   ; min_tls_version
   ; max_tls_version
+  ; connect_timeout
   }
 
 let main ({ default_proto; log_level; urls; _ } as cli_config) =
@@ -154,15 +157,14 @@ let main ({ default_proto; log_level; urls; _ } as cli_config) =
 
 (* -d / --data
  * --compressed
- * --connect-timeout
  * -o, --output <file> Write to file instead of stdout
  * -T, --upload-file <file> Transfer local FILE to destination
- * --request-target Specify the target for this request
  * --resolve <host:port:address[,address]...> Resolve the host+port to this address
  * --retry <num>   Retry request if transient problems occur
  * --retry-connrefused Retry on connection refused (use with --retry)
  * --retry-delay <seconds> Wait time between retries
  * --retry-max-time <seconds> Retry only within this period
+ * -e, --referer <URL> Referrer URL
  *)
 module CLI = struct
   let request =
@@ -189,6 +191,11 @@ module CLI = struct
     let doc = "CA directory to verify peer against" in
     let docv = "dir" in
     Arg.(value & opt (some string) None & info [ "capath" ] ~doc ~docv)
+
+  let connect_timeout =
+    let doc = "Maximum time allowed for connection" in
+    let docv = "seconds" in
+    Arg.(value & opt float 30. & info [ "connect-timeout" ] ~doc ~docv)
 
   let insecure =
     let doc = "Allow insecure server connections when using SSL" in
@@ -317,6 +324,7 @@ module CLI = struct
   let parse
       cacert
       capath
+      connect_timeout
       default_proto
       head
       headers
@@ -392,6 +400,7 @@ module CLI = struct
     ; insecure
     ; tcp_nodelay
     ; user_agent
+    ; connect_timeout
     }
 
   let default_cmd =
@@ -399,6 +408,7 @@ module CLI = struct
       const parse
       $ cacert
       $ capath
+      $ connect_timeout
       $ default_proto
       $ head
       $ headers
