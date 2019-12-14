@@ -252,11 +252,21 @@ let make_impl ?src ~config ~conn_info fd =
   in
   let* () = Lwt_unix.connect fd address in
   Log.info (fun m -> m "Connected to %a" Connection_info.pp_hum conn_info);
-  match scheme with
-  | Scheme.HTTP ->
-    create_http_connection ~config fd
-  | HTTPS ->
-    create_https_connection ~config ~conn_info fd
+  let* impl =
+    match scheme with
+    | Scheme.HTTP ->
+      create_http_connection ~config fd
+    | HTTPS ->
+      create_https_connection ~config ~conn_info fd
+  in
+  match impl with
+  | Ok _ ->
+    Lwt.return impl
+  | Error _ ->
+    Log.info (fun m ->
+        m "Closing connection to %a" Connection_info.pp_hum conn_info);
+    let+ () = Lwt_unix.close fd in
+    impl
 
 let open_connection ~config conn_info =
   let fd = Lwt_unix.socket Unix.PF_INET Unix.SOCK_STREAM 0 in
@@ -480,7 +490,7 @@ let rec send_request_and_handle_response
   | false, _, _, _ | _, false, _, _ | true, true, _, None ->
     return_response t request_info response response_body
 
-let create ?(config = Config.default_config) uri =
+let create ?(config = Config.default) uri =
   let open Lwt_result.Syntax in
   let* conn_info = Connection_info.of_uri uri in
   let+ conn = open_connection ~config conn_info in
@@ -519,7 +529,7 @@ let patch t ?headers target = call t ~meth:(`Other "PATCH") ?headers target
 let delete t ?headers target = call t ~meth:`DELETE ?headers target
 
 module Oneshot = struct
-  let call ?(config = Config.default_config) ~meth ?(headers = []) ?body uri =
+  let call ?(config = Config.default) ~meth ?(headers = []) ?body uri =
     let open Lwt_result.Syntax in
     let* t = create ~config uri in
     let target = Uri.path_and_query t.uri in

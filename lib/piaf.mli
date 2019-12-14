@@ -1,3 +1,48 @@
+module Versions : sig
+  module HTTP : sig
+    include module type of struct
+      include Httpaf.Version
+    end
+
+    val v1_0 : t
+
+    val v1_1 : t
+
+    val v2_0 : t
+  end
+
+  module TLS : sig
+    type t =
+      | Any
+      | SSLv3
+      | TLSv1_0
+      | TLSv1_1
+      | TLSv1_2
+      | TLSv1_3
+
+    val compare : t -> t -> int
+
+    val of_string : string -> (t, string) result
+
+    val pp_hum : Format.formatter -> t -> unit
+  end
+
+  module ALPN : sig
+    type nonrec t =
+      | HTTP_1_0
+      | HTTP_1_1
+      | HTTP_2
+
+    val of_version : HTTP.t -> t option
+
+    val to_version : t -> HTTP.t
+
+    val of_string : string -> t option
+
+    val to_string : t -> string
+  end
+end
+
 module Config : sig
   type t =
     { follow_redirects : bool  (** whether to follow redirects *)
@@ -20,10 +65,12 @@ module Config : sig
     ; capath : string option
           (** The path to a directory which contains CA certificates in PEM
               format *)
+    ; min_tls_version : Versions.TLS.t
+    ; max_tls_version : Versions.TLS.t
     ; tcp_nodelay : bool
     }
 
-  val default_config : t
+  val default : t
 end
 
 module Response : sig
@@ -172,33 +219,4 @@ end
 
 module Status : module type of struct
   include H2.Status
-end
-
-module Versions : sig
-  module HTTP : sig
-    include module type of struct
-      include Httpaf.Version
-    end
-
-    val v1_0 : t
-
-    val v1_1 : t
-
-    val v2_0 : t
-  end
-
-  module ALPN : sig
-    type nonrec t =
-      | HTTP_1_0
-      | HTTP_1_1
-      | HTTP_2
-
-    val of_version : HTTP.t -> t option
-
-    val to_version : t -> HTTP.t
-
-    val of_string : string -> t option
-
-    val to_string : t -> string
-  end
 end

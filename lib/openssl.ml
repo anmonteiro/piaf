@@ -103,96 +103,178 @@ let configure_verify_locations ctx cacert capath =
       Lwt.return_unit);
   promise
 
+let version_of_ssl = function
+  | Ssl.SSLv23 ->
+    Versions.TLS.Any
+  | SSLv3 ->
+    SSLv3
+  | TLSv1 ->
+    TLSv1_0
+  | TLSv1_1 ->
+    TLSv1_1
+  | TLSv1_2 ->
+    TLSv1_2
+  | TLSv1_3 ->
+    TLSv1_3
+
+let version_to_ssl = function
+  | Versions.TLS.Any ->
+    Ssl.SSLv23
+  | SSLv3 ->
+    SSLv3
+  | TLSv1_0 ->
+    TLSv1
+  | TLSv1_1 ->
+    TLSv1_1
+  | TLSv1_2 ->
+    TLSv1_2
+  | TLSv1_3 ->
+    TLSv1_3
+
+let protocols_to_disable min max =
+  let f =
+    match min, max with
+    | Versions.TLS.Any, _ ->
+      fun x -> Versions.TLS.compare x max > 0
+    | _, Versions.TLS.Any ->
+      fun x -> Versions.TLS.compare x min < 0
+    | _ ->
+      fun x -> Versions.TLS.compare x min < 0 || Versions.TLS.compare x max > 0
+  in
+  let protocols, _ = List.partition f Versions.TLS.ordered in
+  protocols
+
+let ssl_error_to_string = function
+  | Ssl.Error_none ->
+    "Error_none"
+  | Error_ssl ->
+    "Error_ssl"
+  | Error_want_read ->
+    "Error_want_read"
+  | Error_want_write ->
+    "Error_want_write"
+  | Error_want_x509_lookup ->
+    "Error_want_x509_lookup"
+  | Error_syscall ->
+    "Error_syscall"
+  | Error_zero_return ->
+    "Error_zero_return"
+  | Error_want_connect ->
+    "Error_want_connect"
+  | Error_want_accept ->
+    "Error_want_accept"
+
 (* Assumes Lwt_unix.connect has already been called. *)
 (* TODO: hostname validation as per
  * https://github.com/savonet/ocaml-ssl/pull/49 *)
 let connect ~hostname ~config ~alpn_protocols fd =
   let open Lwt_result.Syntax in
-  let { Config.allow_insecure; cacert; capath; _ } = config in
-  (* TODO: TLS version configuration / selection. *)
-  let ctx = Ssl.(create_context SSLv23 Client_context) in
-  Ssl.disable_protocols ctx [ Ssl.SSLv23 ];
-  List.iter
-    (fun proto -> Log.info (fun m -> m "ALPN: offering %s" proto))
-    alpn_protocols;
-  Ssl.set_context_alpn_protos ctx alpn_protocols;
-  (* Use the server's preferences rather than the client's *)
-  Ssl.honor_cipher_order ctx;
-  let* () =
-    if not allow_insecure then (
-      (* Fail connecting if peer verification fails:
-       * SSL always tries to verify the peer, this only says whether it should
-       * fail connecting if the verification fails, or if it should continue
-       * anyway. In any case, we check the result of verification below with
-       * Ssl.get_verify_result.
-       * https://www.openssl.org/docs/man1.1.1/man3/SSL_CTX_set_verify.html *)
-      Ssl.set_verify ctx [ Ssl.Verify_peer ] None;
-      (* Don't bother configuring verify locations if we're not going to be
-         verifying the peer. *)
-      configure_verify_locations ctx cacert capath)
-    else
-      Lwt_result.return ()
+  let { Config.allow_insecure
+      ; cacert
+      ; capath
+      ; min_tls_version
+      ; max_tls_version
+      ; _
+      }
+    =
+    config
   in
-  let s = Lwt_ssl.embed_uninitialized_socket fd ctx in
-  let ssl_sock = Lwt_ssl.ssl_socket_of_uninitialized_socket s in
-  Ssl.set_client_SNI_hostname ssl_sock hostname;
-  let open Lwt.Syntax in
-  let+ socket_or_error =
-    Lwt.catch
-      (fun () -> Lwt_result.ok (Lwt_ssl.ssl_perform_handshake s))
-      (function
-        | Ssl.Connection_error ssl_error ->
-          Lwt_result.fail ssl_error
-        | _ ->
-          assert false)
-  in
-  match socket_or_error with
-  | Ok ssl_socket ->
-    (* Verification succeeded, or `allow_insecure` is true *)
-    log_cert_info ~allow_insecure ssl_sock;
-    Ok ssl_socket
-  | Error _ssl_error ->
-    (* If we're here, `allow_insecure` better be false, otherwise we forgot to
-     * handle some failure mode. The assert below will make use remember. *)
-    assert (not allow_insecure);
-    let verify_result = Ssl.get_verify_result ssl_sock in
+  if Versions.TLS.compare min_tls_version max_tls_version > 0 then (
     let msg =
-      Format.asprintf "%a" (pp_cert_verify_result ~allow_insecure) verify_result
+      Format.asprintf
+        "Minimum configured TLS version (%a) can't be higher than maximum TLS \
+         version (%a)"
+        Versions.TLS.pp_hum
+        min_tls_version
+        Versions.TLS.pp_hum
+        max_tls_version
     in
     Log.err (fun m -> m "%s" msg);
-    Error msg
-
-let x = function
-  | Ssl.Error_v_unable_to_get_issuer_cert
-  | Error_v_unable_to_get_ctl
-  | Error_v_unable_to_decrypt_cert_signature
-  | Error_v_unable_to_decrypt_CRL_signature
-  | Error_v_unable_to_decode_issuer_public_key
-  | Error_v_cert_signature_failure
-  | Error_v_CRL_signature_failure
-  | Error_v_cert_not_yet_valid
-  | Error_v_cert_has_expired
-  | Error_v_CRL_not_yet_valid
-  | Error_v_CRL_has_expired
-  | Error_v_error_in_cert_not_before_field
-  | Error_v_error_in_cert_not_after_field
-  | Error_v_error_in_CRL_last_update_field
-  | Error_v_error_in_CRL_next_update_field
-  | Error_v_out_of_mem
-  | Error_v_depth_zero_self_signed_cert
-  | Error_v_self_signed_cert_in_chain
-  | Error_v_unable_to_get_issuer_cert_locally
-  | Error_v_unable_to_verify_leaf_signature
-  | Error_v_cert_chain_too_long
-  | Error_v_cert_revoked
-  | Error_v_invalid_CA
-  | Error_v_path_length_exceeded
-  | Error_v_invalid_purpose
-  | Error_v_cert_untrusted
-  | Error_v_cert_rejected
-  | Error_v_subject_issuer_mismatch
-  | Error_v_akid_skid_mismatch
-  | Error_v_akid_issuer_serial_mismatch
-  | Error_v_keyusage_no_certsign
-  | Error_v_application_verification ->
-    ()
+    Lwt_result.fail msg)
+  else
+    match
+      Ssl.(
+        create_context
+          (Versions.TLS.to_max_version max_tls_version)
+          Client_context)
+    with
+    | (exception Ssl.Method_error) | (exception Invalid_argument _) ->
+      let reason =
+        Format.asprintf
+          "OpenSSL wasn't compiled with %a support"
+          Versions.TLS.pp_hum
+          max_tls_version
+      in
+      Lwt_result.fail reason
+    | ctx ->
+      let disabled_protocols =
+        List.map
+          version_to_ssl
+          (protocols_to_disable min_tls_version max_tls_version)
+      in
+      Ssl.disable_protocols ctx disabled_protocols;
+      List.iter
+        (fun proto -> Log.info (fun m -> m "ALPN: offering %s" proto))
+        alpn_protocols;
+      Ssl.set_context_alpn_protos ctx alpn_protocols;
+      (* Use the server's preferences rather than the client's *)
+      Ssl.honor_cipher_order ctx;
+      let* () =
+        if not allow_insecure then (
+          (* Fail connecting if peer verification fails:
+           * SSL always tries to verify the peer, this only says whether it should
+           * fail connecting if the verification fails, or if it should continue
+           * anyway. In any case, we check the result of verification below with
+           * Ssl.get_verify_result.
+           * https://www.openssl.org/docs/man1.1.1/man3/SSL_CTX_set_verify.html *)
+          Ssl.set_verify ctx [ Ssl.Verify_peer ] None;
+          (* Don't bother configuring verify locations if we're not going to be
+             verifying the peer. *)
+          configure_verify_locations ctx cacert capath)
+        else
+          Lwt_result.return ()
+      in
+      let s = Lwt_ssl.embed_uninitialized_socket fd ctx in
+      let ssl_sock = Lwt_ssl.ssl_socket_of_uninitialized_socket s in
+      Ssl.set_client_SNI_hostname ssl_sock hostname;
+      let open Lwt.Syntax in
+      let+ socket_or_error =
+        Lwt.catch
+          (fun () -> Lwt_result.ok (Lwt_ssl.ssl_perform_handshake s))
+          (function
+            | Ssl.Connection_error ssl_error as exn ->
+              Format.eprintf
+                "ERR: %s: %S@\n(%s)@."
+                (ssl_error_to_string ssl_error)
+                (Ssl.get_error_string ())
+                (Printexc.to_string exn);
+              Lwt_result.fail ssl_error
+            | _ ->
+              assert false)
+      in
+      (match socket_or_error with
+      | Ok ssl_socket ->
+        let ssl_version = version_of_ssl (Ssl.version ssl_sock) in
+        let ssl_cipher = Ssl.get_cipher ssl_sock in
+        Log.info (fun m ->
+            m
+              "SSL connection using %a / %s"
+              Versions.TLS.pp_hum
+              ssl_version
+              (Ssl.get_cipher_name ssl_cipher));
+        (* Verification succeeded, or `allow_insecure` is true *)
+        log_cert_info ~allow_insecure ssl_sock;
+        Ok ssl_socket
+      | Error _ssl_error ->
+        (* If we're here, `allow_insecure` better be false, otherwise we forgot to
+         * handle some failure mode. The assert below will make use remember. *)
+        assert (not allow_insecure);
+        let verify_result = Ssl.get_verify_result ssl_sock in
+        let msg =
+          Format.asprintf
+            "%a"
+            (pp_cert_verify_result ~allow_insecure)
+            verify_result
+        in
+        Log.err (fun m -> m "%s" msg);
+        Error msg)

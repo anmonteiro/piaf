@@ -47,7 +47,10 @@ type cli =
   ; tcp_nodelay : bool
   ; cacert : string option
   ; capath : string option
+  ; min_tls_version : Piaf.Versions.TLS.t
+  ; max_tls_version : Piaf.Versions.TLS.t
   ; insecure : bool
+  ; user_agent : string
   }
 
 let format_header formatter (name, value) =
@@ -66,11 +69,11 @@ let pp_response_headers formatter { Piaf.Response.headers; status; version } =
        format_header)
     (Piaf.Headers.to_list headers)
 
-let request ~cli_config:{ head; headers; meth; _ } ~config uri =
+let request ~cli_config:{ head; headers; meth; user_agent; _ } ~config uri =
   let module Client = Piaf.Client.Oneshot in
   let open Lwt.Syntax in
-  let headers = ("user-agent", "carl/0.0.0-experimental") :: headers in
-  let* res = Piaf.Client.request ~config ~meth ~headers uri in
+  let headers = ("user-agent", user_agent) :: headers in
+  let* res = Client.request ~config ~meth ~headers uri in
   match res with
   | Ok (response, response_body) ->
     let+ () =
@@ -115,6 +118,8 @@ let piaf_config_of_cli
     ; cacert
     ; capath
     ; insecure
+    ; min_tls_version
+    ; max_tls_version
     ; _
     }
   =
@@ -127,6 +132,8 @@ let piaf_config_of_cli
   ; cacert
   ; capath
   ; allow_insecure = insecure
+  ; min_tls_version
+  ; max_tls_version
   }
 
 let main ({ default_proto; log_level; urls; _ } as cli_config) =
@@ -146,10 +153,16 @@ let main ({ default_proto; log_level; urls; _ } as cli_config) =
   Lwt_main.run p
 
 (* -d / --data
- * --retry
  * --compressed
  * --connect-timeout
  * -o, --output <file> Write to file instead of stdout
+ * -T, --upload-file <file> Transfer local FILE to destination
+ * --request-target Specify the target for this request
+ * --resolve <host:port:address[,address]...> Resolve the host+port to this address
+ * --retry <num>   Retry request if transient problems occur
+ * --retry-connrefused Retry on connection refused (use with --retry)
+ * --retry-delay <seconds> Wait time between retries
+ * --retry-max-time <seconds> Retry only within this period
  *)
 module CLI = struct
   let request =
@@ -219,7 +232,7 @@ module CLI = struct
     let docv = "int" in
     Arg.(
       value
-      & opt int Piaf.Config.default_config.max_redirects
+      & opt int Piaf.Config.default.max_redirects
       & info [ "max-redirs" ] ~doc ~docv)
 
   let use_http_1_0 =
@@ -242,9 +255,60 @@ module CLI = struct
     let doc = "Verbosity (use multiple times to increase)" in
     Arg.(value & flag_all & info [ "v"; "verbose" ] ~doc)
 
+  let sslv3 =
+    let doc = "Use SSLv3" in
+    Arg.(value & flag & info [ "3"; "sslv3" ] ~doc)
+
+  let tlsv1 =
+    let doc = "Use TLSv1.0 or greater" in
+    Arg.(value & flag & info [ "1"; "tlsv1" ] ~doc)
+
+  let tlsv1_0 =
+    let doc = "Use TLSv1.0 or greater" in
+    Arg.(value & flag & info [ "tlsv1.0" ] ~doc)
+
+  let tlsv1_1 =
+    let doc = "Use TLSv1.1 or greater" in
+    Arg.(value & flag & info [ "tlsv1.1" ] ~doc)
+
+  let tlsv1_2 =
+    let doc = "Use TLSv1.2 or greater" in
+    Arg.(value & flag & info [ "tlsv1.2" ] ~doc)
+
+  let tlsv1_3 =
+    let doc = "Use TLSv1.3 or greater" in
+    Arg.(value & flag & info [ "tlsv1.3" ] ~doc)
+
+  let tls_max_version =
+    let tls_conv =
+      let parse s =
+        match Piaf.Versions.TLS.of_string s with
+        | Ok v ->
+          Ok v
+        | Error msg ->
+          Error (`Msg msg)
+      in
+      let print = Piaf.Versions.TLS.pp_hum in
+      Arg.conv ~docv:"" (parse, print)
+    in
+    let doc = "Set maximum allowed TLS version" in
+    let docv = "version" in
+    Arg.(
+      value
+      & opt tls_conv Piaf.Versions.TLS.TLSv1_3
+      & info [ "tls-max" ] ~doc ~docv)
+
   let tcp_nodelay =
     let doc = "Use the TCP_NODELAY option" in
     Arg.(value & flag & info [ "tcp-nodelay" ] ~doc)
+
+  let user_agent =
+    let doc = "Send User-Agent $(docv) to server" in
+    let docv = "name" in
+    Arg.(
+      value
+      & opt string "carl/0.0.0-experimental"
+      & info [ "A"; "user-agent" ] ~doc ~docv)
 
   let urls =
     let docv = "URLs" in
@@ -265,6 +329,14 @@ module CLI = struct
       use_http_2
       http2_prior_knowledge
       tcp_nodelay
+      sslv3
+      tlsv1
+      tlsv1_0
+      tlsv1_1
+      tlsv1_2
+      tlsv1_3
+      max_tls_version
+      user_agent
       verbose
       urls
     =
@@ -298,8 +370,28 @@ module CLI = struct
     ; http2_prior_knowledge
     ; cacert
     ; capath
+    ; min_tls_version =
+        (* select the _maximum_ min version *)
+        Piaf.Versions.TLS.(
+          match tlsv1_3, tlsv1_2, tlsv1_1, tlsv1_0, tlsv1, sslv3 with
+          | true, _, _, _, _, _ ->
+            TLSv1_3
+          | _, true, _, _, _, _ ->
+            TLSv1_2
+          | _, _, true, _, _, _ ->
+            TLSv1_1
+          | _, _, _, true, _, _ ->
+            TLSv1_0
+          | _, _, _, _, true, _ ->
+            TLSv1_0
+          | _, _, _, _, _, true ->
+            SSLv3
+          | _, _, _, _, _, _ ->
+            TLSv1_0)
+    ; max_tls_version
     ; insecure
     ; tcp_nodelay
+    ; user_agent
     }
 
   let default_cmd =
@@ -319,6 +411,14 @@ module CLI = struct
       $ use_http_2
       $ http_2_prior_knowledge
       $ tcp_nodelay
+      $ sslv3
+      $ tlsv1
+      $ tlsv1_0
+      $ tlsv1_1
+      $ tlsv1_2
+      $ tlsv1_3
+      $ tls_max_version
+      $ user_agent
       $ verbose
       $ urls)
 

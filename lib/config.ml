@@ -1,5 +1,4 @@
 (* TODO:
- * - TLS versions
  * - Authentication
  * - Buffer sizes (for http/af / h2)?
  * - Timeouts?
@@ -25,10 +24,12 @@ type t =
         (** The path to a CA certificates file in PEM format *)
   ; capath : string option
         (** The path to a directory which contains CA certificates in PEM format *)
+  ; min_tls_version : Versions.TLS.t
+  ; max_tls_version : Versions.TLS.t
   ; tcp_nodelay : bool
   }
 
-let default_config =
+let default =
   { follow_redirects = false
   ; max_redirects = 10
   ; allow_insecure = false
@@ -37,6 +38,8 @@ let default_config =
   ; h2c_upgrade = false
   ; cacert = None
   ; capath = None
+  ; min_tls_version = TLSv1_0
+  ; max_tls_version = TLSv1_3
   ; tcp_nodelay = true
   }
 
