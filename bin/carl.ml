@@ -1,5 +1,6 @@
 open Async
 open Cmdliner
+open Piaf
 
 let setup_log ?style_renderer level =
   let pp_header src ppf (l, h) =
@@ -35,20 +36,20 @@ let setup_log ?style_renderer level =
 type cli =
   { follow_redirects : bool
   ; max_redirects : int
-  ; meth : Piaf.Method.t
+  ; meth : Method.t
   ; log_level : Logs.level
   ; urls : string list
   ; default_proto : string
   ; head : bool
   ; headers : (string * string) list
-  ; max_http_version : Piaf.Versions.HTTP.t
+  ; max_http_version : Versions.HTTP.t
   ; h2c_upgrade : bool
   ; http2_prior_knowledge : bool
   ; tcp_nodelay : bool
   ; cacert : string option
   ; capath : string option
-  ; min_tls_version : Piaf.Versions.TLS.t
-  ; max_tls_version : Piaf.Versions.TLS.t
+  ; min_tls_version : Versions.TLS.t
+  ; max_tls_version : Versions.TLS.t
   ; insecure : bool
   ; user_agent : string
   ; connect_timeout : float
@@ -58,18 +59,18 @@ type cli =
 let format_header formatter (name, value) =
   Format.fprintf formatter "%a: %s" Fmt.(styled `Bold string) name value
 
-let pp_response_headers formatter { Piaf.Response.headers; status; version } =
+let pp_response_headers formatter { Response.headers; status; version; _ } =
   Format.fprintf
     formatter
     "@[%a %a@]@\n@[%a@]"
-    Piaf.Versions.HTTP.pp_hum
+    Versions.HTTP.pp_hum
     version
-    Piaf.Status.pp_hum
+    Status.pp_hum
     status
     (Format.pp_print_list
        ~pp_sep:(fun f () -> Format.fprintf f "@\n")
        format_header)
-    (Piaf.Headers.to_list headers)
+    (Headers.to_list headers)
 
 let rec uri_of_string ~scheme s =
   let maybe_uri = Uri.of_string s in
@@ -97,7 +98,7 @@ let build_headers ~cli:{ headers; user_agent; referer; _ } =
   ("user-agent", user_agent) :: headers
 
 let request ~cli ~config uri =
-  let module Client = Piaf.Client.Oneshot in
+  let module Client = Client.Oneshot in
   let open Lwt.Syntax in
   let { head; meth; _ } = cli in
   let headers = build_headers ~cli in
@@ -107,13 +108,12 @@ let request ~cli ~config uri =
     let+ () =
       if head then (
         Logs.app (fun m -> m "%a" pp_response_headers response);
-        Lwt.async (fun () ->
-            Lwt_stream.junk_while (fun _ -> true) response_body);
+        Lwt.async (fun () -> Body.drain response_body);
         Lwt.return_unit)
       else
-        Lwt_stream.iter_s
-          (fun body_fragment -> Logs_lwt.app (fun m -> m "%s" body_fragment))
-          response_body
+        Lwt_stream.iter
+          (fun body_fragment -> Logs.app (fun m -> m "%s" body_fragment))
+          (Body.to_string_stream response_body)
     in
     `Ok ()
   | Error e ->
@@ -148,7 +148,7 @@ let piaf_config_of_cli
     ; _
     }
   =
-  { Piaf.Config.follow_redirects
+  { Config.follow_redirects
   ; max_redirects
   ; max_http_version
   ; h2c_upgrade
@@ -180,8 +180,8 @@ let main ({ log_level; urls; _ } as cli) =
 module CLI = struct
   let request =
     let request_conv =
-      let parse meth = Ok (Piaf.Method.of_string meth) in
-      let print = Piaf.Method.pp_hum in
+      let parse meth = Ok (Method.of_string meth) in
+      let print = Method.pp_hum in
       Arg.conv ~docv:"method" (parse, print)
     in
     let doc = "Specify request method to use" in
@@ -250,7 +250,7 @@ module CLI = struct
     let docv = "int" in
     Arg.(
       value
-      & opt int Piaf.Config.default.max_redirects
+      & opt int Config.default.max_redirects
       & info [ "max-redirs" ] ~doc ~docv)
 
   let use_http_1_0 =
@@ -305,21 +305,19 @@ module CLI = struct
   let tls_max_version =
     let tls_conv =
       let parse s =
-        match Piaf.Versions.TLS.of_string s with
+        match Versions.TLS.of_string s with
         | Ok v ->
           Ok v
         | Error msg ->
           Error (`Msg msg)
       in
-      let print = Piaf.Versions.TLS.pp_hum in
+      let print = Versions.TLS.pp_hum in
       Arg.conv ~docv:"" (parse, print)
     in
     let doc = "Set maximum allowed TLS version" in
     let docv = "version" in
     Arg.(
-      value
-      & opt tls_conv Piaf.Versions.TLS.TLSv1_3
-      & info [ "tls-max" ] ~doc ~docv)
+      value & opt tls_conv Versions.TLS.TLSv1_3 & info [ "tls-max" ] ~doc ~docv)
 
   let tcp_nodelay =
     let doc = "Use the TCP_NODELAY option" in
@@ -382,7 +380,7 @@ module CLI = struct
     ; head
     ; headers
     ; max_http_version =
-        (let open Piaf.Versions.HTTP in
+        (let open Versions.HTTP in
         match use_http_2, use_http_1_1, use_http_1_0 with
         | true, _, _ | false, false, false ->
           (* Default to the highest supported if no override specified. *)
@@ -397,7 +395,7 @@ module CLI = struct
     ; capath
     ; min_tls_version =
         (* select the _maximum_ min version *)
-        Piaf.Versions.TLS.(
+        Versions.TLS.(
           match tlsv1_3, tlsv1_2, tlsv1_1, tlsv1_0, tlsv1, sslv3 with
           | true, _, _, _, _, _ ->
             TLSv1_3

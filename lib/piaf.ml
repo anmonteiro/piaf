@@ -1,3 +1,4 @@
+module Body = Body
 module Config = Config
 module Client = Client
 module Headers = Headers

@@ -2,6 +2,7 @@
  * and their respective insecure / secure versions. *)
 
 open Monads
+module IOVec = H2.IOVec
 
 let src = Logs.Src.create "piaf.http" ~doc:"Piaf HTTP module"
 
@@ -21,38 +22,33 @@ let error_handler notify_response_received error =
   in
   Lwt.wakeup notify_response_received (Error error_str)
 
-let stream_of_read_body
-    : type a. (module S.Body with type Read.t = a) -> a -> string Lwt_stream.t
+let create_response_body
+    : type a.
+      (module S.Body with type Read.t = a)
+      -> body_length:Body.length
+      -> a
+      -> Body.t
   =
- fun (module Body) body ->
-  let module Body = Body.Read in
+ fun (module Http_body) ~body_length body ->
+  let module Http_body = Http_body.Read in
   let read_fn () =
     let r, notify = Lwt.wait () in
-    Body.schedule_read
+    Http_body.schedule_read
       body
       ~on_eof:(fun () ->
-        Body.close_reader body;
+        Http_body.close_reader body;
         Lwt.wakeup_later notify None)
-      ~on_read:(fun response_fragment ~off ~len ->
+      ~on_read:(fun fragment ~off ~len ->
         (* Note: we always need to make a copy here for now. See the following
          * comment for an explanation why:
          * https://github.com/inhabitedtype/httpaf/issues/140#issuecomment-517072327
          *)
-        let response_fragment_bytes = Bytes.create len in
-        (* TODO: decide on the type of Body, and on the type of the stream
-         * elements. For now they're always strings. *)
-        Lwt_bytes.blit_to_bytes
-          response_fragment
-          off
-          response_fragment_bytes
-          0
-          len;
-        Lwt.wakeup_later notify (Some (Bytes.to_string response_fragment_bytes)));
+        let fragment_copy = Bigstringaf.copy ~off ~len fragment in
+        let iovec = { IOVec.buffer = fragment_copy; off = 0; len } in
+        Lwt.wakeup_later notify (Some iovec));
     r
   in
-  Lwt_stream.from read_fn
-
-let drain_stream stream = Lwt_stream.junk_while (fun _ -> true) stream
+  Body.create ~body_length (Lwt_stream.from read_fn)
 
 let send_request
     : type a.
@@ -60,7 +56,7 @@ let send_request
       -> a
       -> ?body:string
       -> Request.t
-      -> (Response.t * string Lwt_stream.t, 'err) Lwt_result.t
+      -> (Response.t * Body.t, 'err) Lwt_result.t
   =
  fun (module Http) conn ?body request ->
   let open Lwt_result.Syntax in
@@ -84,15 +80,20 @@ let send_request
   Body.Write.flush request_body (fun () -> Body.Write.close_writer request_body);
   let+ response, response_body = response_received in
   Log.info (fun m -> m "Received response: %a" Response.pp_hum response);
-  let body_stream = stream_of_read_body (module Body) response_body in
-  response, body_stream
+  let body =
+    create_response_body
+      (module Body)
+      ~body_length:response.body_length
+      response_body
+  in
+  response, body
 
 let create_h2c_connection
     : type a.
       (module S.HTTP2 with type Client.t = a)
       -> http_request:Request.t
       -> Lwt_unix.file_descr
-      -> (a * Response.t * string Lwt_stream.t, 'err) Lwt_result.t
+      -> (a * Response.t * Body.t, 'err) Lwt_result.t
   =
  fun (module Http2) ~http_request fd ->
   let open Lwt_result.Syntax in
@@ -113,8 +114,13 @@ let create_h2c_connection
    * that was sent as part of the upgrade. *)
   let+ response, response_body = response_received in
   Log.info (fun m -> m "Received response: %a" Response.pp_hum response);
-  let body_stream = stream_of_read_body (module Http2.Body) response_body in
-  conn, response, body_stream
+  let body =
+    create_response_body
+      (module Http2.Body)
+      ~body_length:response.body_length
+      response_body
+  in
+  conn, response, body
 
 let shutdown : type a. (module S.HTTPCommon with type Client.t = a) -> a -> unit
   =

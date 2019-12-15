@@ -29,15 +29,15 @@
     "@opam/httpaf": "anmonteiro/httpaf:httpaf.opam#b30d005",
     "@opam/httpaf-lwt": "anmonteiro/httpaf:httpaf-lwt.opam#b30d005",
     "@opam/httpaf-lwt-unix": "anmonteiro/httpaf:httpaf-lwt-unix.opam#b30d005",
-    "@opam/h2": "anmonteiro/ocaml-h2:h2.opam#f1438af",
-    "@opam/h2-lwt": "anmonteiro/ocaml-h2:h2-lwt.opam#f1438af",
-    "@opam/h2-lwt-unix": "anmonteiro/ocaml-h2:h2-lwt-unix.opam#f1438af",
+    "@opam/h2": "anmonteiro/ocaml-h2:h2.opam#2cd6666",
+    "@opam/h2-lwt": "anmonteiro/ocaml-h2:h2-lwt.opam#2cd6666",
+    "@opam/h2-lwt-unix": "anmonteiro/ocaml-h2:h2-lwt-unix.opam#2cd6666",
     "@opam/conf-libssl": "esy-packages/esy-openssl#860ad7f",
     "@opam/ssl": "savonet/ocaml-ssl:ssl.opam#fbffa9b"
   },
   "esy": {
     "build": [
-      "dune build --root . --only-packages #{self.name} --ignore-promoted-rules --no-config"
+      "dune build --root . --only-packages #{self.name}"
     ]
   }
 }

@@ -313,7 +313,7 @@ let drain_response_body_and_shutdown
    * This is to avoid leaking memory. We're not going to use this
    * response body so it doesn't need to stay around. *)
   Lwt.async (fun () ->
-      let+ () = Lwt_stream.junk_old response_body in
+      let+ () = Lwt_stream.junk_old response_body.Body.stream in
       Log.info (fun m ->
           m "Tearing down connection to %a" Connection_info.pp_hum conn_info);
       HTTPImpl.Client.shutdown handle)
@@ -407,7 +407,7 @@ let rec return_response
       (* TODO: this case needs to shutdown the HTTP/1.1 connection when it's
        * done using it. *)
       let (module Http2) = (module Http2.HTTP : S.HTTP2) in
-      let* () = Http_impl.drain_stream response_body in
+      let* () = Body.drain response_body in
       let open Lwt_result.Syntax in
       let* handle, response, response_body' =
         Http_impl.create_h2c_connection (module Http2) ~http_request:request fd
@@ -496,7 +496,7 @@ let rec send_request_and_handle_response
      * Otherwise, if we couldn't reuse the connection, drain the response body
      * and additionally shut down the old connection. *)
     if did_reuse then
-      Lwt.async (fun () -> Http_impl.drain_stream response_body)
+      Lwt.async (fun () -> Body.drain response_body)
     else
       drain_response_body_and_shutdown conn ~conn_info response_body;
     let target = Uri.path_and_query new_uri in

@@ -74,12 +74,31 @@ module Config : sig
   val default : t
 end
 
+module Body : sig
+  type t
+
+  type length =
+    [ `Fixed of Int64.t
+    | `Chunked
+    | `Error of [ `Bad_request | `Bad_gateway | `Internal_server_error ]
+    | `Unknown
+    | `Close_delimited
+    ]
+
+  val to_string : t -> string Lwt.t
+
+  val to_string_stream : t -> string Lwt_stream.t
+
+  val drain : t -> unit Lwt.t
+end
+
 module Response : sig
-  type t =
+  type t = private
     { (* `H2.Status.t` is a strict superset of `Httpaf.Status.t` *)
       status : H2.Status.t
     ; headers : H2.Headers.t
     ; version : Versions.HTTP.t
+    ; body_length : Body.length
     }
 
   val persistent_connection : t -> bool
@@ -108,44 +127,44 @@ module Client : sig
     :  t
     -> ?headers:(string * string) list
     -> string
-    -> (Response.t * string Lwt_stream.t, string) Lwt_result.t
+    -> (Response.t * Body.t, string) Lwt_result.t
 
   val get
     :  t
     -> ?headers:(string * string) list
     -> string
-    -> (Response.t * string Lwt_stream.t, string) Lwt_result.t
+    -> (Response.t * Body.t, string) Lwt_result.t
 
   val post
     :  t
     -> ?headers:(string * string) list
     -> string
-    -> (Response.t * string Lwt_stream.t, string) Lwt_result.t
+    -> (Response.t * Body.t, string) Lwt_result.t
 
   val put
     :  t
     -> ?headers:(string * string) list
     -> string
-    -> (Response.t * string Lwt_stream.t, string) Lwt_result.t
+    -> (Response.t * Body.t, string) Lwt_result.t
 
   val patch
     :  t
     -> ?headers:(string * string) list
     -> string
-    -> (Response.t * string Lwt_stream.t, string) Lwt_result.t
+    -> (Response.t * Body.t, string) Lwt_result.t
 
   val delete
     :  t
     -> ?headers:(string * string) list
     -> string
-    -> (Response.t * string Lwt_stream.t, string) Lwt_result.t
+    -> (Response.t * Body.t, string) Lwt_result.t
 
   val request
     :  t
     -> ?headers:(string * string) list
     -> meth:Method.t
     -> string
-    -> (Response.t * string Lwt_stream.t, string) Lwt_result.t
+    -> (Response.t * Body.t, string) Lwt_result.t
 
   val shutdown : t -> unit
   (** [shutdown t] tears down the connection [t] and frees up all the resources
@@ -156,44 +175,44 @@ module Client : sig
       :  ?config:Config.t
       -> ?headers:(string * string) list
       -> Uri.t
-      -> (Response.t * string Lwt_stream.t, string) Lwt_result.t
+      -> (Response.t * Body.t, string) Lwt_result.t
 
     val get
       :  ?config:Config.t
       -> ?headers:(string * string) list
       -> Uri.t
-      -> (Response.t * string Lwt_stream.t, string) Lwt_result.t
+      -> (Response.t * Body.t, string) Lwt_result.t
 
     val post
       :  ?config:Config.t
       -> ?headers:(string * string) list
       -> Uri.t
-      -> (Response.t * string Lwt_stream.t, string) Lwt_result.t
+      -> (Response.t * Body.t, string) Lwt_result.t
 
     val put
       :  ?config:Config.t
       -> ?headers:(string * string) list
       -> Uri.t
-      -> (Response.t * string Lwt_stream.t, string) Lwt_result.t
+      -> (Response.t * Body.t, string) Lwt_result.t
 
     val patch
       :  ?config:Config.t
       -> ?headers:(string * string) list
       -> Uri.t
-      -> (Response.t * string Lwt_stream.t, string) Lwt_result.t
+      -> (Response.t * Body.t, string) Lwt_result.t
 
     val delete
       :  ?config:Config.t
       -> ?headers:(string * string) list
       -> Uri.t
-      -> (Response.t * string Lwt_stream.t, string) Lwt_result.t
+      -> (Response.t * Body.t, string) Lwt_result.t
 
     val request
       :  ?config:Config.t
       -> ?headers:(string * string) list
       -> meth:Method.t
       -> Uri.t
-      -> (Response.t * string Lwt_stream.t, string) Lwt_result.t
+      -> (Response.t * Body.t, string) Lwt_result.t
     (** Use another request method. *)
   end
 
