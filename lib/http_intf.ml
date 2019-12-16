@@ -50,7 +50,11 @@ module type Client = sig
 
   type write_body
 
-  val create_connection : ?config:Config.t -> socket -> t Lwt.t
+  val create_connection
+    :  ?config:Config.t
+    -> error_handler:error_handler
+    -> socket
+    -> t Lwt.t
 
   type response_handler = Response.t -> read_body -> unit
 

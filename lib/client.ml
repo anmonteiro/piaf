@@ -167,16 +167,8 @@ let create_http_connection ~config fd =
       in
       (module Http1.HTTP : Http_intf.HTTP), version
   in
-  let+ handle = Http.Client.create_connection fd in
-  Ok
-    (Conn
-       { impl =
-           (module Http : Http_intf.HTTPCommon
-             with type Client.t = Http.Client.t)
-       ; handle
-       ; fd
-       ; version
-       })
+  let+ handle = Http_impl.create_connection (module Http) fd in
+  Ok (Conn { impl = (module Http); handle; fd; version })
 
 let create_https_connection ~config ~conn_info fd =
   let { Connection_info.host; _ } = conn_info in
@@ -231,16 +223,8 @@ let create_https_connection ~config ~conn_info fd =
           assert false)
     in
     let open Lwt.Syntax in
-    let+ handle = Https.Client.create_connection ssl_client in
-    Ok
-      (Conn
-         { impl =
-             (module Https : Http_intf.HTTPCommon
-               with type Client.t = Https.Client.t)
-         ; handle
-         ; fd
-         ; version
-         })
+    let+ handle = Http_impl.create_connection (module Https) ssl_client in
+    Ok (Conn { impl = (module Https); handle; fd; version })
 
 let close_connection ~conn_info fd =
   Log.info (fun m ->

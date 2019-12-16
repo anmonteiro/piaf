@@ -22,6 +22,18 @@ let error_handler notify_response_received error =
   in
   Lwt.wakeup notify_response_received (Error error_str)
 
+let create_connection
+    : type a b.
+      (module Http_intf.HTTPCommon
+         with type Client.t = a
+          and type Client.socket = b)
+      -> b
+      -> a Lwt.t
+  =
+ fun (module Http) fd ->
+  let error_handler _ = assert false in
+  Http.Client.create_connection ~error_handler fd
+
 let create_response_body
     : type a.
       (module Http_intf.Body with type Read.t = a)
@@ -50,6 +62,16 @@ let create_response_body
   in
   Body.of_stream ~length:body_length (Lwt_stream.from read_fn)
 
+let flush_and_close
+    : type a. (module Http_intf.Body with type Write.t = a) -> a -> unit
+  =
+ fun (module Http_body) request_body ->
+  let module Bodyw = Http_body.Write in
+  Bodyw.flush request_body (fun () ->
+      Bodyw.close_writer request_body;
+      Log.info (fun m ->
+          m "Request body has been completely and successfully uploaded"))
+
 let send_request
     : type a.
       (module Http_intf.HTTPCommon with type Client.t = a)
@@ -59,14 +81,14 @@ let send_request
       -> (Response.t * Body.t, 'err) Lwt_result.t
   =
  fun (module Http) conn ~body request ->
-  let open Lwt_result.Syntax in
+  let open Lwt.Syntax in
   let module Client = Http.Client in
   let module Bodyw = Http.Body.Write in
   let response_received, notify_response_received = Lwt.wait () in
   let response_handler response response_body =
     Lwt.wakeup_later notify_response_received (Ok (response, response_body))
   in
-  let _error_received, notify_error_received = Lwt.wait () in
+  let error_received, notify_error_received = Lwt.wait () in
   let error_handler = error_handler notify_error_received in
   Log.info (fun m -> m "Sending request: %a" Request.pp_hum request);
   let request_body =
@@ -75,30 +97,33 @@ let send_request
   Lwt.async (fun () ->
       match body.body with
       | `Empty ->
-        Bodyw.flush request_body (fun () -> Bodyw.close_writer request_body);
+        Bodyw.close_writer request_body;
         Lwt.return_unit
       | `String s ->
         Bodyw.write_string request_body s;
-        Bodyw.flush request_body (fun () -> Bodyw.close_writer request_body);
+        flush_and_close (module Http.Body) request_body;
         Lwt.return_unit
       | `Stream stream ->
         Lwt.async (fun () ->
-            let open Lwt.Syntax in
             let+ () = Lwt_stream.closed stream in
-            Bodyw.flush request_body (fun () -> Bodyw.close_writer request_body));
+            flush_and_close (module Http.Body) request_body);
         Lwt_stream.iter
           (fun { IOVec.buffer; off; len } ->
             Bodyw.schedule_bigstring request_body ~off ~len buffer)
           stream);
-  let+ response, response_body = response_received in
-  Log.info (fun m -> m "Received response: %a" Response.pp_hum response);
-  let body =
-    create_response_body
-      (module Http.Body)
-      ~body_length:response.body_length
-      response_body
-  in
-  response, body
+  let+ result = Lwt.choose [ response_received; error_received ] in
+  match result with
+  | Ok (response, response_body) ->
+    Log.info (fun m -> m "Received response: %a" Response.pp_hum response);
+    let body =
+      create_response_body
+        (module Http.Body)
+        ~body_length:response.body_length
+        response_body
+    in
+    Ok (response, body)
+  | Error _ as x ->
+    x
 
 let create_h2c_connection
     : type a.

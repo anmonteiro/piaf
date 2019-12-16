@@ -26,9 +26,18 @@ module MakeHTTP2 (H2_client : H2_lwt.Client) :
   module Client = struct
     include H2_client
 
-    let create_connection ?config:_ fd =
-      let error_handler _ = assert false in
-      create_connection ~error_handler fd
+    let make_error_handler real_handler error =
+      let error : Http_intf.error =
+        match error with
+        | `Invalid_response_body_length response ->
+          `Invalid_response_body_length (Response.of_h2 response)
+        | (`Exn _ | `Malformed_response _ | `Protocol_error _) as other ->
+          other
+      in
+      real_handler error
+
+    let create_connection ?config:_ ~error_handler fd =
+      create_connection ~error_handler:(make_error_handler error_handler) fd
 
     type response_handler = Response.t -> Body.Read.t -> unit
 
@@ -36,17 +45,11 @@ module MakeHTTP2 (H2_client : H2_lwt.Client) :
       let response_handler response body =
         response_handler (Response.of_h2 response) body
       in
-      let error_handler error =
-        let error : Http_intf.error =
-          match error with
-          | `Invalid_response_body_length response ->
-            `Invalid_response_body_length (Response.of_h2 response)
-          | (`Exn _ | `Malformed_response _ | `Protocol_error _) as other ->
-            other
-        in
-        error_handler error
-      in
-      request t (Request.to_h2 req) ~error_handler ~response_handler
+      request
+        t
+        (Request.to_h2 req)
+        ~error_handler:(make_error_handler error_handler)
+        ~response_handler
   end
 end
 
