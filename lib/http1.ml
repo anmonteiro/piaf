@@ -1,11 +1,11 @@
 module MakeHTTP1 (Httpaf_client : Httpaf_lwt.Client) :
-  S.HTTPCommon
+  Http_intf.HTTPCommon
     with type Client.t = Httpaf_client.t
      and type Client.socket = Httpaf_client.socket
      and type Body.Read.t = [ `read ] Httpaf.Body.t
      and type Body.Write.t = [ `write ] Httpaf.Body.t = struct
   module Body :
-    S.Body
+    Http_intf.Body
       with type Read.t = [ `read ] Httpaf.Body.t
        and type Write.t = [ `write ] Httpaf.Body.t = struct
     module Read = struct
@@ -58,6 +58,6 @@ module MakeHTTP1 (Httpaf_client : Httpaf_lwt.Client) :
   end
 end
 
-module HTTP : S.HTTP = MakeHTTP1 (Httpaf_lwt_unix.Client)
+module HTTP : Http_intf.HTTP = MakeHTTP1 (Httpaf_lwt_unix.Client)
 
-module HTTPS : S.HTTPS = MakeHTTP1 (Httpaf_lwt_unix.Client.SSL)
+module HTTPS : Http_intf.HTTPS = MakeHTTP1 (Httpaf_lwt_unix.Client.SSL)

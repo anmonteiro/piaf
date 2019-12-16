@@ -68,7 +68,7 @@ module type Client = sig
   val is_closed : t -> bool
 end
 
-(* The above + a single signature for creating a connection. *)
+(* Common signature for sharing HTTP/1.X / HTTP/2 implementations. *)
 module type HTTPCommon = sig
   module Body : Body
 
@@ -82,6 +82,7 @@ module type HTTP = HTTPCommon with type Client.socket = Lwt_unix.file_descr
 
 module type HTTPS = HTTPCommon with type Client.socket = Lwt_ssl.socket
 
+(* Only needed for h2c upgrades (insecure HTTP/2) *)
 module type HTTP2 = sig
   module Body : Body
 

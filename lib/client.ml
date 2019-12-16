@@ -129,7 +129,7 @@ end
 
 type connection =
   | Conn :
-      { impl : (module S.HTTPCommon with type Client.t = 'a)
+      { impl : (module Http_intf.HTTPCommon with type Client.t = 'a)
       ; handle : 'a
       ; fd : Lwt_unix.file_descr
       ; version : Version.t  (** HTTP version that this connection speaks *)
@@ -155,9 +155,9 @@ let create_http_connection ~config fd =
       , config.h2c_upgrade )
     with
     | true, _, _ ->
-      (module Http2.HTTP : S.HTTP), Versions.HTTP.v2_0
+      (module Http2.HTTP : Http_intf.HTTP), Versions.HTTP.v2_0
     | false, { Versions.HTTP.major = 2; _ }, true ->
-      (module Http1.HTTP : S.HTTP), Versions.HTTP.v1_1
+      (module Http1.HTTP : Http_intf.HTTP), Versions.HTTP.v1_1
     | false, _, _ ->
       let version =
         if Versions.HTTP.(compare config.max_http_version v2_0) >= 0 then
@@ -165,12 +165,14 @@ let create_http_connection ~config fd =
         else
           config.max_http_version
       in
-      (module Http1.HTTP : S.HTTP), version
+      (module Http1.HTTP : Http_intf.HTTP), version
   in
   let+ handle = Http.Client.create_connection fd in
   Ok
     (Conn
-       { impl = (module Http : S.HTTPCommon with type Client.t = Http.Client.t)
+       { impl =
+           (module Http : Http_intf.HTTPCommon
+             with type Client.t = Http.Client.t)
        ; handle
        ; fd
        ; version
@@ -204,9 +206,9 @@ let create_https_connection ~config ~conn_info fd =
          * version configured. *)
         let impl, version =
           if config.http2_prior_knowledge then
-            (module Http2.HTTPS : S.HTTPS), Versions.HTTP.v2_0
+            (module Http2.HTTPS : Http_intf.HTTPS), Versions.HTTP.v2_0
           else
-            ( (module Http1.HTTPS : S.HTTPS)
+            ( (module Http1.HTTPS : Http_intf.HTTPS)
             , if Versions.HTTP.(compare config.max_http_version v2_0) >= 0 then
                 Versions.HTTP.v1_1
               else
@@ -218,11 +220,11 @@ let create_https_connection ~config ~conn_info fd =
         Log.info (fun m -> m "ALPN: server agreed to use %s" negotiated_proto);
         (match Versions.ALPN.of_string negotiated_proto with
         | Some HTTP_1_0 ->
-          (module Http1.HTTPS : S.HTTPS), Versions.HTTP.v1_0
+          (module Http1.HTTPS : Http_intf.HTTPS), Versions.HTTP.v1_0
         | Some HTTP_1_1 ->
-          (module Http1.HTTPS : S.HTTPS), Versions.HTTP.v1_1
+          (module Http1.HTTPS : Http_intf.HTTPS), Versions.HTTP.v1_1
         | Some HTTP_2 ->
-          (module Http2.HTTPS : S.HTTPS), Versions.HTTP.v2_0
+          (module Http2.HTTPS : Http_intf.HTTPS), Versions.HTTP.v2_0
         | None ->
           (* Can't really happen - would mean that TLS negotiated a
            * protocol that we didn't specify. *)
@@ -233,7 +235,8 @@ let create_https_connection ~config ~conn_info fd =
     Ok
       (Conn
          { impl =
-             (module Https : S.HTTPCommon with type Client.t = Https.Client.t)
+             (module Https : Http_intf.HTTPCommon
+               with type Client.t = Https.Client.t)
          ; handle
          ; fd
          ; version
@@ -406,7 +409,7 @@ let rec return_response
     | Some ("Upgrade" | "upgrade"), Some "h2c" ->
       (* TODO: this case needs to shutdown the HTTP/1.1 connection when it's
        * done using it. *)
-      let (module Http2) = (module Http2.HTTP : S.HTTP2) in
+      let (module Http2) = (module Http2.HTTP : Http_intf.HTTP2) in
       let* () = Body.drain response_body in
       let open Lwt_result.Syntax in
       let* handle, response, response_body' =
@@ -415,7 +418,8 @@ let rec return_response
       t.conn <-
         Conn
           { impl =
-              (module Http2 : S.HTTPCommon with type Client.t = Http2.Client.t)
+              (module Http2 : Http_intf.HTTPCommon
+                with type Client.t = Http2.Client.t)
           ; handle
           ; fd
           ; version = Versions.HTTP.v2_0

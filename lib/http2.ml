@@ -1,11 +1,11 @@
 module MakeHTTP2 (H2_client : H2_lwt.Client) :
-  S.HTTPCommon
+  Http_intf.HTTPCommon
     with type Client.t = H2_client.t
      and type Client.socket = H2_client.socket
      and type Body.Read.t = [ `read ] H2.Body.t
      and type Body.Write.t = [ `write ] H2.Body.t = struct
   module Body :
-    S.Body
+    Http_intf.Body
       with type Read.t = [ `read ] H2.Body.t
        and type Write.t = [ `write ] H2.Body.t = struct
     module Read = struct
@@ -37,7 +37,7 @@ module MakeHTTP2 (H2_client : H2_lwt.Client) :
         response_handler (Response.of_h2 response) body
       in
       let error_handler error =
-        let error : S.error =
+        let error : Http_intf.error =
           match error with
           | `Invalid_response_body_length response ->
             `Invalid_response_body_length (Response.of_h2 response)
@@ -50,9 +50,9 @@ module MakeHTTP2 (H2_client : H2_lwt.Client) :
   end
 end
 
-module HTTP : S.HTTP2 = struct
+module HTTP : Http_intf.HTTP2 = struct
   module HTTP_X :
-    S.HTTPCommon
+    Http_intf.HTTPCommon
       with type Client.t = H2_lwt_unix.Client.t
        and type Client.socket = Lwt_unix.file_descr
       with type Body.Read.t = [ `read ] H2.Body.t
@@ -87,7 +87,7 @@ module HTTP : S.HTTP2 = struct
           ()
       in
       let response_error_handler error =
-        let error : S.error =
+        let error : Http_intf.error =
           match error with
           | `Invalid_response_body_length response ->
             `Invalid_response_body_length (Response.of_h2 response)
@@ -104,4 +104,4 @@ module HTTP : S.HTTP2 = struct
   end
 end
 
-module HTTPS : S.HTTPS = MakeHTTP2 (H2_lwt_unix.Client.SSL)
+module HTTPS : Http_intf.HTTPS = MakeHTTP2 (H2_lwt_unix.Client.SSL)

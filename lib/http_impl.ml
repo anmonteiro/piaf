@@ -24,7 +24,7 @@ let error_handler notify_response_received error =
 
 let create_response_body
     : type a.
-      (module S.Body with type Read.t = a)
+      (module Http_intf.Body with type Read.t = a)
       -> body_length:Body.length
       -> a
       -> Body.t
@@ -52,7 +52,7 @@ let create_response_body
 
 let send_request
     : type a.
-      (module S.HTTPCommon with type Client.t = a)
+      (module Http_intf.HTTPCommon with type Client.t = a)
       -> a
       -> body:Body.t
       -> Request.t
@@ -102,7 +102,7 @@ let send_request
 
 let create_h2c_connection
     : type a.
-      (module S.HTTP2 with type Client.t = a)
+      (module Http_intf.HTTP2 with type Client.t = a)
       -> http_request:Request.t
       -> Lwt_unix.file_descr
       -> (a * Response.t * Body.t, 'err) Lwt_result.t
@@ -134,6 +134,7 @@ let create_h2c_connection
   in
   conn, response, body
 
-let shutdown : type a. (module S.HTTPCommon with type Client.t = a) -> a -> unit
+let shutdown
+    : type a. (module Http_intf.HTTPCommon with type Client.t = a) -> a -> unit
   =
  fun (module Http) conn -> Http.Client.shutdown conn
