@@ -261,6 +261,8 @@ let connect ?src ~config ~conn_info fd =
   let address = List.hd addresses in
   Lwt.catch
     (fun () ->
+      Log.debug (fun m ->
+          m "Trying connection to %a" Connection_info.pp_hum conn_info);
       Lwt_unix.with_timeout config.Config.connect_timeout (fun () ->
           Lwt_result.ok (Lwt_unix.connect fd address)))
     (function
@@ -272,8 +274,17 @@ let connect ?src ~config ~conn_info fd =
         in
         Logs.err (fun m -> m "%s" msg);
         Lwt_result.fail msg
-      | _ ->
-        Lwt_result.fail "FIXME: unhandled connection error")
+      | Unix.Unix_error (ECONNREFUSED, _, _) ->
+        Lwt_result.fail
+          (Format.asprintf
+             "Failed connecting to %a: connection refused"
+             Connection_info.pp_hum
+             conn_info)
+      | exn ->
+        Lwt_result.fail
+          (Format.asprintf
+             "FIXME: unhandled connection error (%s)"
+             (Printexc.to_string exn)))
 
 let make_impl ?src ~config ~conn_info fd =
   let open Lwt_result.Syntax in
