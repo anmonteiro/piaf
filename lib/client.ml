@@ -445,13 +445,19 @@ let make_request_info
     ?(remaining_redirects = config.max_redirects)
     ~meth
     ~headers
+    ~body
     target
   =
   let { Connection_info.host; scheme; _ } = conn_info in
   let is_h2c_upgrade = is_h2c_upgrade ~config ~version in
   let canonical_headers =
     (* TODO: send along desired connection settings (h2c). *)
-    Headers.canonicalize_headers ~is_h2c_upgrade ~version ~host headers
+    Headers.canonicalize_headers
+      ~is_h2c_upgrade
+      ~version
+      ~host
+      ~body_length:body.Body.length
+      headers
   in
   let request =
     Request.create meth ~version ~scheme ~headers:canonical_headers target
@@ -506,6 +512,7 @@ let rec send_request_and_handle_response
         ~remaining_redirects:(remaining_redirects - 1)
         ~meth
         ~headers
+        ~body
         target
     in
     send_request_and_handle_response t ~body request_info'
@@ -533,7 +540,7 @@ let call t ~meth ?(headers = []) ?(body = Body.empty) target =
     else
       Lwt_result.return true
   in
-  let request_info = make_request_info t ~meth ~headers target in
+  let request_info = make_request_info t ~meth ~headers ~body target in
   t.persistent <- Request.persistent_connection request_info.request;
   send_request_and_handle_response t ~body request_info
 
@@ -559,7 +566,7 @@ module Oneshot = struct
     let open Lwt_result.Syntax in
     let* t = create ~config uri in
     let target = Uri.path_and_query t.uri in
-    let request_info = make_request_info t ~meth ~headers target in
+    let request_info = make_request_info t ~meth ~headers ~body target in
     t.persistent <- Request.persistent_connection request_info.request;
     send_request_and_handle_response t ~body request_info
 
