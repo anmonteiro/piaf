@@ -85,9 +85,19 @@ module Body : sig
     | `Close_delimited
     ]
 
-  val to_string : t -> string Lwt.t
+  val empty : t
+
+  val of_stream : ?length:length -> Bigstringaf.t H2.IOVec.t Lwt_stream.t -> t
+
+  val of_string_stream : ?length:length -> string Lwt_stream.t -> t
+
+  val of_string : string -> t
+
+  val to_stream : t -> Bigstringaf.t Lwt_stream.t
 
   val to_string_stream : t -> string Lwt_stream.t
+
+  val to_string : t -> string Lwt.t
 
   val drain : t -> unit Lwt.t
 end
@@ -138,30 +148,35 @@ module Client : sig
   val post
     :  t
     -> ?headers:(string * string) list
+    -> ?body:Body.t
     -> string
     -> (Response.t * Body.t, string) Lwt_result.t
 
   val put
     :  t
     -> ?headers:(string * string) list
+    -> ?body:Body.t
     -> string
     -> (Response.t * Body.t, string) Lwt_result.t
 
   val patch
     :  t
     -> ?headers:(string * string) list
+    -> ?body:Body.t
     -> string
     -> (Response.t * Body.t, string) Lwt_result.t
 
   val delete
     :  t
     -> ?headers:(string * string) list
+    -> ?body:Body.t
     -> string
     -> (Response.t * Body.t, string) Lwt_result.t
 
   val request
     :  t
     -> ?headers:(string * string) list
+    -> ?body:Body.t
     -> meth:Method.t
     -> string
     -> (Response.t * Body.t, string) Lwt_result.t
@@ -186,30 +201,35 @@ module Client : sig
     val post
       :  ?config:Config.t
       -> ?headers:(string * string) list
+      -> ?body:Body.t
       -> Uri.t
       -> (Response.t * Body.t, string) Lwt_result.t
 
     val put
       :  ?config:Config.t
       -> ?headers:(string * string) list
+      -> ?body:Body.t
       -> Uri.t
       -> (Response.t * Body.t, string) Lwt_result.t
 
     val patch
       :  ?config:Config.t
       -> ?headers:(string * string) list
+      -> ?body:Body.t
       -> Uri.t
       -> (Response.t * Body.t, string) Lwt_result.t
 
     val delete
       :  ?config:Config.t
       -> ?headers:(string * string) list
+      -> ?body:Body.t
       -> Uri.t
       -> (Response.t * Body.t, string) Lwt_result.t
 
     val request
       :  ?config:Config.t
       -> ?headers:(string * string) list
+      -> ?body:Body.t
       -> meth:Method.t
       -> Uri.t
       -> (Response.t * Body.t, string) Lwt_result.t

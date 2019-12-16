@@ -313,7 +313,7 @@ let drain_response_body_and_shutdown
    * This is to avoid leaking memory. We're not going to use this
    * response body so it doesn't need to stay around. *)
   Lwt.async (fun () ->
-      let+ () = Lwt_stream.junk_old response_body.Body.stream in
+      let+ () = Body.drain_available response_body in
       Log.info (fun m ->
           m "Tearing down connection to %a" Connection_info.pp_hum conn_info);
       HTTPImpl.Client.shutdown handle)
@@ -460,13 +460,13 @@ let make_request_info
 
 let rec send_request_and_handle_response
     ({ conn; conn_info; uri; config; _ } as t)
-    ?body
+    ~body
     ({ remaining_redirects; request; headers; meth; _ } as request_info)
   =
   let open Lwt_result.Syntax in
   let (Conn { impl = (module HTTPImpl); handle; _ }) = conn in
   let* response, response_body =
-    Http_impl.send_request (module HTTPImpl) handle ?body request
+    Http_impl.send_request (module HTTPImpl) handle ~body request
   in
   if t.persistent then
     t.persistent <- Response.persistent_connection response;
@@ -508,7 +508,7 @@ let rec send_request_and_handle_response
         ~headers
         target
     in
-    send_request_and_handle_response t ?body request_info'
+    send_request_and_handle_response t ~body request_info'
   (* Either not a redirect, or we shouldn't follow redirects. *)
   | false, _, _, _ | _, false, _, _ | true, true, _, None ->
     return_response t request_info response response_body
@@ -522,7 +522,7 @@ let create ?(config = Config.default) uri =
 let shutdown { conn = Conn { impl; handle; _ }; _ } =
   Http_impl.shutdown (module (val impl)) handle
 
-let call t ~meth ?(headers = []) ?body target =
+let call t ~meth ?(headers = []) ?(body = Body.empty) target =
   let open Lwt_result.Syntax in
   (* Need to try to reconnect to the base host on every call, if redirects are
    * enabled, because the connection manager could have tried to follow a
@@ -535,43 +535,50 @@ let call t ~meth ?(headers = []) ?body target =
   in
   let request_info = make_request_info t ~meth ~headers target in
   t.persistent <- Request.persistent_connection request_info.request;
-  send_request_and_handle_response t ?body request_info
+  send_request_and_handle_response t ~body request_info
 
-let request t ?headers ~meth target = call t ~meth ?headers target
+let request t ?headers ?body ~meth target = call t ?headers ?body ~meth target
 
-let head t ?headers target = call t ~meth:`HEAD ?headers target
+let head t ?headers target = call t ?headers ~meth:`HEAD target
 
-let get t ?headers target = call t ~meth:`GET ?headers target
+let get t ?headers target = call t ?headers ~meth:`GET target
 
-let post t ?headers target = call t ~meth:`POST ?headers target
+let post t ?headers ?body target = call t ?headers ?body ~meth:`POST target
 
-let put t ?headers target = call t ~meth:`PUT ?headers target
+let put t ?headers ?body target = call t ?headers ?body ~meth:`PUT target
 
-let patch t ?headers target = call t ~meth:(`Other "PATCH") ?headers target
+let patch t ?headers ?body target =
+  call t ?headers ?body ~meth:(`Other "PATCH") target
 
-let delete t ?headers target = call t ~meth:`DELETE ?headers target
+let delete t ?headers ?body target = call t ?headers ?body ~meth:`DELETE target
 
 module Oneshot = struct
-  let call ?(config = Config.default) ~meth ?(headers = []) ?body uri =
+  let call
+      ?(config = Config.default) ?(headers = []) ?(body = Body.empty) ~meth uri
+    =
     let open Lwt_result.Syntax in
     let* t = create ~config uri in
     let target = Uri.path_and_query t.uri in
     let request_info = make_request_info t ~meth ~headers target in
     t.persistent <- Request.persistent_connection request_info.request;
-    send_request_and_handle_response t ?body request_info
+    send_request_and_handle_response t ~body request_info
 
-  let request ?config ?headers ~meth uri = call ?config ~meth ?headers uri
+  let request ?config ?headers ?body ~meth uri =
+    call ?config ?headers ?body ~meth uri
 
   let head ?config ?headers uri = call ?config ~meth:`HEAD ?headers uri
 
   let get ?config ?headers uri = call ?config ~meth:`GET ?headers uri
 
-  let post ?config ?headers uri = call ?config ~meth:`POST ?headers uri
+  let post ?config ?headers ?body uri =
+    call ?config ?headers ?body ~meth:`POST uri
 
-  let put ?config ?headers uri = call ?config ~meth:`PUT ?headers uri
+  let put ?config ?headers ?body uri =
+    call ?config ?headers ?body ~meth:`PUT uri
 
-  let patch ?config ?headers uri =
-    call ?config ~meth:(`Other "PATCH") ?headers uri
+  let patch ?config ?headers ?body uri =
+    call ?config ?headers ?body ~meth:(`Other "PATCH") uri
 
-  let delete ?config ?headers uri = call ?config ~meth:`DELETE ?headers uri
+  let delete ?config ?headers ?body uri =
+    call ?config ?headers ?body ~meth:`DELETE uri
 end

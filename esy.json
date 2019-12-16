@@ -26,12 +26,12 @@
     "@opam/ocamlformat": "*"
   },
   "resolutions": {
-    "@opam/httpaf": "anmonteiro/httpaf:httpaf.opam#b30d005",
-    "@opam/httpaf-lwt": "anmonteiro/httpaf:httpaf-lwt.opam#b30d005",
-    "@opam/httpaf-lwt-unix": "anmonteiro/httpaf:httpaf-lwt-unix.opam#b30d005",
-    "@opam/h2": "anmonteiro/ocaml-h2:h2.opam#2cd6666",
-    "@opam/h2-lwt": "anmonteiro/ocaml-h2:h2-lwt.opam#2cd6666",
-    "@opam/h2-lwt-unix": "anmonteiro/ocaml-h2:h2-lwt-unix.opam#2cd6666",
+    "@opam/httpaf": "anmonteiro/httpaf:httpaf.opam#90e7c87",
+    "@opam/httpaf-lwt": "anmonteiro/httpaf:httpaf-lwt.opam#90e7c87",
+    "@opam/httpaf-lwt-unix": "anmonteiro/httpaf:httpaf-lwt-unix.opam#90e7c87",
+    "@opam/h2": "anmonteiro/ocaml-h2:h2.opam#2408119",
+    "@opam/h2-lwt": "anmonteiro/ocaml-h2:h2-lwt.opam#2408119",
+    "@opam/h2-lwt-unix": "anmonteiro/ocaml-h2:h2-lwt-unix.opam#2408119",
     "@opam/conf-libssl": "esy-packages/esy-openssl#860ad7f",
     "@opam/ssl": "savonet/ocaml-ssl:ssl.opam#fbffa9b"
   },

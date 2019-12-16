@@ -39,6 +39,7 @@ type cli =
   ; meth : Method.t
   ; log_level : Logs.level
   ; urls : string list
+  ; data : string option
   ; default_proto : string
   ; head : bool
   ; headers : (string * string) list
@@ -100,9 +101,12 @@ let build_headers ~cli:{ headers; user_agent; referer; _ } =
 let request ~cli ~config uri =
   let module Client = Client.Oneshot in
   let open Lwt.Syntax in
-  let { head; meth; _ } = cli in
+  let { head; meth; data; _ } = cli in
   let headers = build_headers ~cli in
-  let* res = Client.request ~config ~meth ~headers uri in
+  let body =
+    match data with Some s -> Some (Body.of_string s) | None -> None
+  in
+  let* res = Client.request ~config ~meth ~headers ?body uri in
   match res with
   | Ok (response, response_body) ->
     let+ () =
@@ -145,30 +149,44 @@ let piaf_config_of_cli
     ; min_tls_version
     ; max_tls_version
     ; connect_timeout
+    ; data
+    ; head
     ; _
     }
   =
-  { Config.follow_redirects
-  ; max_redirects
-  ; max_http_version
-  ; h2c_upgrade
-  ; http2_prior_knowledge
-  ; tcp_nodelay
-  ; cacert
-  ; capath
-  ; allow_insecure = insecure
-  ; min_tls_version
-  ; max_tls_version
-  ; connect_timeout
-  }
+  match data, head with
+  | Some _, true ->
+    let msg =
+      "You can only select one HTTP request method! You asked for both POST \
+       (-d / --data) and HEAD (-I / --head)"
+    in
+    Logs.warn (fun m -> m "%s" msg);
+    Error msg
+  | _, _ ->
+    Ok
+      { Config.follow_redirects
+      ; max_redirects
+      ; max_http_version
+      ; h2c_upgrade
+      ; http2_prior_knowledge
+      ; tcp_nodelay
+      ; cacert
+      ; capath
+      ; allow_insecure = insecure
+      ; min_tls_version
+      ; max_tls_version
+      ; connect_timeout
+      }
 
 let main ({ log_level; urls; _ } as cli) =
   setup_log (Some log_level);
-  let config = piaf_config_of_cli cli in
-  Lwt_main.run (request_many ~cli ~config urls)
+  match piaf_config_of_cli cli with
+  | Error msg ->
+    `Error (false, msg)
+  | Ok config ->
+    Lwt_main.run (request_many ~cli ~config urls)
 
-(* -d / --data
- * --compressed
+(* --compressed
  * -o, --output <file> Write to file instead of stdout
  * -T, --upload-file <file> Transfer local FILE to destination
  * --resolve <host:port:address[,address]...> Resolve the host+port to this address
@@ -207,6 +225,11 @@ module CLI = struct
     let doc = "Maximum time allowed for connection" in
     let docv = "seconds" in
     Arg.(value & opt float 30. & info [ "connect-timeout" ] ~doc ~docv)
+
+  let data =
+    let doc = "HTTP POST data" in
+    let docv = "data" in
+    Arg.(value & opt (some string) None & info [ "d"; "data" ] ~doc ~docv)
 
   let insecure =
     let doc = "Allow insecure server connections when using SSL" in
@@ -339,6 +362,7 @@ module CLI = struct
       cacert
       capath
       connect_timeout
+      data
       default_proto
       head
       headers
@@ -365,14 +389,16 @@ module CLI = struct
     =
     { follow_redirects
     ; max_redirects
+    ; data
     ; meth =
-        (match request with
-        | None when head ->
+        (match head, request, data with
+        | true, None, None ->
           `HEAD
-        | None ->
-          (* TODO: default to `POST` when we implement --data *)
+        | _, None, Some _ ->
+          `POST
+        | _, None, None ->
           `GET
-        | Some meth ->
+        | _, Some meth, _ ->
           meth)
     ; log_level = log_level_of_list verbose
     ; urls
@@ -425,6 +451,7 @@ module CLI = struct
       $ cacert
       $ capath
       $ connect_timeout
+      $ data
       $ default_proto
       $ head
       $ headers

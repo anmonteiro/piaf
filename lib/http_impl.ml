@@ -30,13 +30,13 @@ let create_response_body
       -> Body.t
   =
  fun (module Http_body) ~body_length body ->
-  let module Http_body = Http_body.Read in
+  let module Bodyr = Http_body.Read in
   let read_fn () =
     let r, notify = Lwt.wait () in
-    Http_body.schedule_read
+    Bodyr.schedule_read
       body
       ~on_eof:(fun () ->
-        Http_body.close_reader body;
+        Bodyr.close_reader body;
         Lwt.wakeup_later notify None)
       ~on_read:(fun fragment ~off ~len ->
         (* Note: we always need to make a copy here for now. See the following
@@ -48,19 +48,20 @@ let create_response_body
         Lwt.wakeup_later notify (Some iovec));
     r
   in
-  Body.create ~body_length (Lwt_stream.from read_fn)
+  Body.of_stream ~length:body_length (Lwt_stream.from read_fn)
 
 let send_request
     : type a.
       (module S.HTTPCommon with type Client.t = a)
       -> a
-      -> ?body:string
+      -> body:Body.t
       -> Request.t
       -> (Response.t * Body.t, 'err) Lwt_result.t
   =
- fun (module Http) conn ?body request ->
+ fun (module Http) conn ~body request ->
   let open Lwt_result.Syntax in
-  let open Http in
+  let module Client = Http.Client in
+  let module Bodyw = Http.Body.Write in
   let response_received, notify_response_received = Lwt.wait () in
   let response_handler response response_body =
     Lwt.wakeup_later notify_response_received (Ok (response, response_body))
@@ -71,18 +72,29 @@ let send_request
   let request_body =
     Http.Client.request conn request ~error_handler ~response_handler
   in
-  (* TODO: Async write Body *)
-  (match body with
-  | Some body ->
-    Body.Write.write_string request_body body
-  | None ->
-    ());
-  Body.Write.flush request_body (fun () -> Body.Write.close_writer request_body);
+  Lwt.async (fun () ->
+      match body.body with
+      | `Empty ->
+        Bodyw.flush request_body (fun () -> Bodyw.close_writer request_body);
+        Lwt.return_unit
+      | `String s ->
+        Bodyw.write_string request_body s;
+        Bodyw.flush request_body (fun () -> Bodyw.close_writer request_body);
+        Lwt.return_unit
+      | `Stream stream ->
+        Lwt.async (fun () ->
+            let open Lwt.Syntax in
+            let+ () = Lwt_stream.closed stream in
+            Bodyw.flush request_body (fun () -> Bodyw.close_writer request_body));
+        Lwt_stream.iter
+          (fun { IOVec.buffer; off; len } ->
+            Bodyw.schedule_bigstring request_body ~off ~len buffer)
+          stream);
   let+ response, response_body = response_received in
   Log.info (fun m -> m "Received response: %a" Response.pp_hum response);
   let body =
     create_response_body
-      (module Body)
+      (module Http.Body)
       ~body_length:response.body_length
       response_body
   in
