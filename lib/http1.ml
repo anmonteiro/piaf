@@ -53,7 +53,8 @@ module MakeHTTP1 (Httpaf_client : Httpaf_lwt.Client) :
           | (`Exn _ | `Malformed_response _) as other ->
             other
         in
-        error_handler error
+        (* All HTTP/1.1 errors cause the connection to close. *)
+        error_handler (`Connection, error)
       in
       request t (Request.to_http1 req) ~error_handler ~response_handler
   end

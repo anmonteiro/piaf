@@ -1,0 +1,119 @@
+open Monads
+open Util
+module Version = Httpaf.Version
+
+let resolve_host ~port hostname =
+  let open Lwt.Syntax in
+  let+ addresses =
+    Lwt_unix.getaddrinfo
+      hostname
+      (string_of_int port)
+      (* https://www.iana.org/assignments/protocol-numbers/protocol-numbers.xhtml *)
+      Unix.[ AI_CANONNAME; AI_PROTOCOL 6; AI_FAMILY PF_INET ]
+  in
+  match addresses with
+  | [] ->
+    let msg = Format.asprintf "Can't resolve hostname: %s" hostname in
+    Error msg
+  | xs ->
+    (* TODO: add resolved canonical hostname *)
+    Ok (List.map (fun { Unix.ai_addr; _ } -> ai_addr) xs)
+
+module Connection_info = struct
+  (* This represents information that changes from connection to connection,
+   * i.e.  if one of these parameters changes between redirects we need to
+   * establish a new connection. *)
+  type t =
+    { port : int
+    ; scheme : Scheme.t
+    ; addresses : Unix.sockaddr list
+    ; uri : Uri.t
+          (** Current URI the connection is connected to. A redirect could've
+              made the remote endpoint change.
+
+              Guaranteed to have a host part. *)
+    ; host : string  (** `Uri.host t.uri` but makes our life easier. *)
+    }
+
+  (* Only need the address and port to know whether the endpoint is the same or
+   * not. *)
+  let equal c1 c2 =
+    c1.port = c2.port
+    && (* At least one can match *)
+    List.exists
+      (fun a1 ->
+        List.exists
+          (fun a2 ->
+            (* Note: this is slightly wrong if we allow both UNIX and Internet
+             * domain sockets but for now we filter by TCP sockets that we can
+             * connect to. *)
+            match a1, a2 with
+            | Unix.ADDR_INET (addr1, _), Unix.ADDR_INET (addr2, _) ->
+              String.equal
+                (Unix.string_of_inet_addr addr1)
+                (Unix.string_of_inet_addr addr2)
+            | ADDR_UNIX addr1, ADDR_UNIX addr2 ->
+              String.equal addr1 addr2
+            | _ ->
+              false)
+          c2.addresses)
+      c1.addresses
+
+  (* Use this shortcut to avoid resolving the new address. Not 100% correct
+   * because different hosts may point to the same address. *)
+  let equal_without_resolving c1 c2 =
+    c1.port = c2.port
+    && c1.scheme = c2.scheme
+    && Uri.host_exn c1.uri = Uri.host_exn c2.uri
+
+  let infer_port ~scheme uri =
+    match Uri.port uri, scheme with
+    (* if a port is given, use it. *)
+    | Some port, _ ->
+      port
+    (* Otherwise, infer from the scheme. *)
+    | None, Scheme.HTTPS ->
+      443
+    | None, HTTP ->
+      80
+
+  let of_uri uri =
+    let open Lwt_result.Syntax in
+    let uri = Uri.canonicalize uri in
+    match Uri.host uri with
+    | Some host ->
+      let* scheme = Lwt.return (Scheme.of_uri uri) in
+      let port = infer_port ~scheme uri in
+      let+ addresses = resolve_host ~port host in
+      { scheme; uri; host; port; addresses }
+    | None ->
+      Lwt_result.fail
+        (Format.asprintf "Missing host part for: %a" Uri.pp_hum uri)
+
+  let pp_address fmt = function
+    | Unix.ADDR_INET (addr, port) ->
+      Format.fprintf fmt "%s:%d" (Unix.string_of_inet_addr addr) port
+    | ADDR_UNIX addr ->
+      Format.fprintf fmt "%s" addr
+
+  let pp_hum fmt { addresses; host; _ } =
+    let address = List.hd addresses in
+    Format.fprintf fmt "%s (%a)" host pp_address address
+end
+
+type t =
+  | Conn :
+      { impl :
+          (module Http_intf.HTTPCommon
+             with type Client.t = 'a
+              and type Body.Read.t = 'b)
+      ; handle : 'a
+      ; connection_error_received : ('b ok_ret, string) result Lwt.t
+      ; fd : Lwt_unix.file_descr
+      ; version : Version.t  (** HTTP version that this connection speaks *)
+      }
+      -> t
+
+and 'body ok_ret =
+  | C of t
+  | R of (Response.t * 'body)

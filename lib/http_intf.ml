@@ -1,3 +1,8 @@
+type error_type =
+  [ `Connection
+  | `Stream
+  ]
+
 type error =
   [ `Exn of exn
   | `Invalid_response_body_length of Response.t
@@ -5,7 +10,7 @@ type error =
   | `Protocol_error of H2.Error_code.t * string
   ]
 
-type error_handler = error -> unit
+type error_handler = error_type * error -> unit
 
 module type Body = sig
   module Read : sig
@@ -99,7 +104,8 @@ module type HTTP2 = sig
     val create_h2c_connection
       :  ?config:Config.t
       -> ?push_handler:(Request.t -> (response_handler, unit) result)
-      -> http_request:Httpaf.Request.t (* -> error_handler:error_handler *)
+      -> http_request:Httpaf.Request.t
+      -> error_handler:error_handler
       -> response_handler * error_handler
       -> socket
       -> (t, string) result Lwt.t

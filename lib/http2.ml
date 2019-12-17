@@ -1,3 +1,13 @@
+let make_error_handler real_handler type_ error =
+  let error : Http_intf.error =
+    match error with
+    | `Invalid_response_body_length response ->
+      `Invalid_response_body_length (Response.of_h2 response)
+    | (`Exn _ | `Malformed_response _ | `Protocol_error _) as other ->
+      other
+  in
+  real_handler (type_, error)
+
 module MakeHTTP2 (H2_client : H2_lwt.Client) :
   Http_intf.HTTPCommon
     with type Client.t = H2_client.t
@@ -26,18 +36,10 @@ module MakeHTTP2 (H2_client : H2_lwt.Client) :
   module Client = struct
     include H2_client
 
-    let make_error_handler real_handler error =
-      let error : Http_intf.error =
-        match error with
-        | `Invalid_response_body_length response ->
-          `Invalid_response_body_length (Response.of_h2 response)
-        | (`Exn _ | `Malformed_response _ | `Protocol_error _) as other ->
-          other
-      in
-      real_handler error
-
     let create_connection ?config:_ ~error_handler fd =
-      create_connection ~error_handler:(make_error_handler error_handler) fd
+      create_connection
+        ~error_handler:(make_error_handler error_handler `Connection)
+        fd
 
     type response_handler = Response.t -> Body.Read.t -> unit
 
@@ -48,7 +50,7 @@ module MakeHTTP2 (H2_client : H2_lwt.Client) :
       request
         t
         (Request.to_h2 req)
-        ~error_handler:(make_error_handler error_handler)
+        ~error_handler:(make_error_handler error_handler `Stream)
         ~response_handler
   end
 end
@@ -71,23 +73,12 @@ module HTTP : Http_intf.HTTP2 = struct
         ?config:_
         ?push_handler:_
         ~http_request
-        (* ~error_handler:_ *)
-          (response_handler, response_error_handler)
+        ~error_handler
+        (response_handler, response_error_handler)
         fd
       =
-      let response_handler : H2.Client_connection.response_handler =
-       fun response body -> response_handler (Response.of_h2 response) body
-      in
-      let error_handler = function
-        | `Exn exn ->
-          Format.eprintf "ugh : %S@." (Printexc.to_string exn);
-          assert false
-        | `Protocol_error (code, msg) ->
-          Format.eprintf "proto : %ld %s@." (H2__.Error_code.serialize code) msg;
-          ()
-        | _ ->
-          Format.eprintf "other err @.";
-          ()
+      let response_handler response body =
+        response_handler (Response.of_h2 response) body
       in
       let response_error_handler error =
         let error : Http_intf.error =
@@ -97,11 +88,11 @@ module HTTP : Http_intf.HTTP2 = struct
           | (`Exn _ | `Malformed_response _ | `Protocol_error _) as other ->
             other
         in
-        response_error_handler error
+        response_error_handler (`Stream, error)
       in
       H2_lwt_unix.Client.create_h2c_connection
         ~http_request
-        ~error_handler:(Obj.magic error_handler)
+        ~error_handler:(make_error_handler error_handler `Connection)
         (response_handler, response_error_handler)
         fd
   end
