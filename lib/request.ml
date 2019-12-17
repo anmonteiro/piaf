@@ -23,17 +23,19 @@ let to_h2 { meth; target; headers; _ } =
 let persistent_connection { version; headers; _ } =
   Message.persistent_connection version headers
 
-let pp_hum fmt { meth; target; version; headers; scheme } =
+let pp_hum formatter { meth; target; version; headers; _ } =
+  let format_header formatter (name, value) =
+    Format.fprintf formatter "%s: %s" name value
+  in
   Format.fprintf
-    fmt
-    "((method \"%a\") (target %S) (version \"%a\") (scheme \"%a\") (headers \
-     %a))"
+    formatter
+    "@[%a %s %a@]@\n@[%a@]"
     H2.Method.pp_hum
     meth
     target
-    Httpaf.Version.pp_hum
+    Versions.HTTP.pp_hum
     version
-    Scheme.pp_hum
-    scheme
-    H2.Headers.pp_hum
-    headers
+    (Format.pp_print_list
+       ~pp_sep:(fun f () -> Format.fprintf f "@\n")
+       format_header)
+    (Headers.to_list headers)

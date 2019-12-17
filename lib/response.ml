@@ -32,19 +32,18 @@ let of_h2 response =
 let persistent_connection { version; headers; _ } =
   Message.persistent_connection version headers
 
-let pp_hum fmt { status; headers; version; _ } =
-  let status =
-    match (status : [< Httpaf.Status.t | H2.Status.t ]) with
-    | #Httpaf.Status.t as status ->
-      Format.asprintf "%a" Httpaf.Status.pp_hum status
-    | #H2.Status.t as status ->
-      Format.asprintf "%a" H2.Status.pp_hum status
+let pp_hum formatter { headers; status; version; _ } =
+  let format_header formatter (name, value) =
+    Format.fprintf formatter "%s: %s" name value
   in
   Format.fprintf
-    fmt
-    "((version \"%a\") (status %s) (headers %a))"
-    Httpaf.Version.pp_hum
+    formatter
+    "@[%a %a@]@\n@[%a@]"
+    Versions.HTTP.pp_hum
     version
+    Status.pp_hum
     status
-    H2.Headers.pp_hum
-    headers
+    (Format.pp_print_list
+       ~pp_sep:(fun f () -> Format.fprintf f "@\n")
+       format_header)
+    (Headers.to_list headers)

@@ -93,6 +93,39 @@ let flush_and_close
       Log.info (fun m ->
           m "Request body has been completely and successfully uploaded"))
 
+let handle_response
+    : type a.
+      (module Http_intf.Body with type Read.t = a)
+      -> (a Connection.ok_ret, string) result Lwt.t
+      -> (a Connection.ok_ret, string) result Lwt.t
+      -> (a Connection.ok_ret, string) result Lwt.t
+      -> (Response.t * Body.t, string) result Lwt.t
+  =
+ fun (module Http_body) response_p response_error_p connection_error_p ->
+  let open Lwt.Syntax in
+  let+ result =
+    Lwt.choose [ response_p; response_error_p; connection_error_p ]
+  in
+  match result with
+  | Ok (Connection.C _) ->
+    assert false
+  | Ok (R (response, response_body)) ->
+    Log.info (fun m ->
+        m
+          "@[<v 0>Received response:@]@]@;<0 2>@[<v 0>%a@]@."
+          Response.pp_hum
+          response);
+    let body =
+      create_response_body
+        (module Http_body)
+        ~body_length:response.body_length
+        response_body
+    in
+    Ok (response, body)
+  | Error _ as error ->
+    (* TODO: Close the connection if we receive a connection error *)
+    error
+
 let send_request
     :  Connection.t -> body:Body.t -> Request.t
     -> (Response.t * Body.t, 'err) Lwt_result.t
@@ -112,7 +145,8 @@ let send_request
   in
   let error_received, notify_error_received = Lwt.wait () in
   let error_handler = make_error_handler notify_error_received in
-  Log.info (fun m -> m "Sending request: %a" Request.pp_hum request);
+  Log.info (fun m ->
+      m "@[<v 0>Sending request:@]@]@;<0 2>@[<v 0>%a@]@." Request.pp_hum request);
   let request_body =
     Http.Client.request handle request ~error_handler ~response_handler
   in
@@ -136,23 +170,11 @@ let send_request
   (* Use `Lwt.choose` specifically so that we don't cancel the error_received
    * promise. We want it to stick around for subsequent requests on the
    * connection. *)
-  let+ result =
-    Lwt.choose [ response_received; error_received; connection_error_received ]
-  in
-  match result with
-  | Ok (C _) ->
-    assert false
-  | Ok (R (response, response_body)) ->
-    Log.info (fun m -> m "Received response: %a" Response.pp_hum response);
-    let body =
-      create_response_body
-        (module Http.Body)
-        ~body_length:response.body_length
-        response_body
-    in
-    Ok (response, body)
-  | Error _ as err ->
-    err
+  handle_response
+    (module Http.Body)
+    response_received
+    error_received
+    connection_error_received
 
 let create_h2c_connection (module Http2 : Http_intf.HTTP2) ~http_request fd =
   let open Lwt_result.Syntax in
@@ -180,20 +202,14 @@ let create_h2c_connection (module Http2 : Http_intf.HTTP2) ~http_request fd =
    * that was sent as part of the upgrade. *)
   let open Lwt.Syntax in
   let+ result =
-    Lwt.choose
-      [ response_received; response_error_received; connection_error_received ]
+    handle_response
+      (module Http2.Body)
+      response_received
+      response_error_received
+      connection_error_received
   in
   match result with
-  | Ok (C _) ->
-    assert false
-  | Ok (R (response, response_body)) ->
-    Log.info (fun m -> m "Received response: %a" Response.pp_hum response);
-    let body =
-      create_response_body
-        (module Http2.Body)
-        ~body_length:response.body_length
-        response_body
-    in
+  | Ok (response, body) ->
     let conn =
       Connection.Conn
         { impl = (module Http2)
@@ -204,8 +220,8 @@ let create_h2c_connection (module Http2 : Http_intf.HTTP2) ~http_request fd =
         }
     in
     Ok (conn, response, body)
-  | Error _ as err ->
-    err
+  | Error _ as error ->
+    error
 
 let shutdown
     : type a. (module Http_intf.HTTPCommon with type Client.t = a) -> a -> unit
