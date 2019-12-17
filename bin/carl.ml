@@ -147,7 +147,7 @@ let request ~cli ~config uri =
         Lwt.return_unit)
       else
         Lwt_stream.iter
-          (fun body_fragment -> Logs.app (fun m -> m "%s" body_fragment))
+          (fun body_fragment -> Printf.printf "%s" body_fragment)
           (Body.to_string_stream response_body)
     in
     `Ok ()
