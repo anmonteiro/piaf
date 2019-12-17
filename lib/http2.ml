@@ -95,7 +95,7 @@ module HTTP : Http_intf.HTTP2 = struct
        and type Body.Write.t = [ `write ] H2.Body.t =
     MakeHTTP2 (H2_lwt_unix.Client)
 
-  include HTTP_X
+  include (HTTP_X : module type of HTTP_X with module Client := HTTP_X.Client)
 
   module Client = struct
     include HTTP_X.Client

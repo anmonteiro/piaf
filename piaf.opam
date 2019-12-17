@@ -10,8 +10,9 @@ build: [
   ["dune" "build" "-p" name "-j" jobs]
 ]
 depends: [
-  "ocaml" {>= "4.08"}
-  "dune" {>= "1.1"}
+  "ocaml" {>= "4.06"}
+  "dune" {>= "1.8"}
+  "ocaml-syntax-shims"
   "bigstringaf" {>= "0.5.0"}
   "httpaf"
   "httpaf-lwt-unix"
@@ -31,6 +32,7 @@ pin-depends: [
   [ "h2.dev" "git+https://github.com/anmonteiro/ocaml-h2.git" ]
   [ "h2-lwt.dev" "git+https://github.com/anmonteiro/ocaml-h2.git" ]
   [ "h2-lwt-unix.dev" "git+https://github.com/anmonteiro/ocaml-h2.git" ]
+  [ "ssl.dev" "git+https://github.com/savonet/ocaml-ssl.git" ]
 ]
 synopsis:
   "A client library for the HTTP/1.X and HTTP/2 protocols written entirely in OCaml"

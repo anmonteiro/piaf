@@ -219,7 +219,9 @@ let drain_response_body_and_shutdown
 
 (* returns true if it succeeding in reusing the connection, false otherwise. *)
 let reuse_or_set_up_new_connection
-    ({ conn = Conn { impl = (module HTTPImpl); _ }; conn_info; _ } as t) new_uri
+    ({ conn = Connection.Conn { impl = (module HTTPImpl); _ }; conn_info; _ } as
+    t)
+    new_uri
   =
   let open Lwt_result.Syntax in
   let* new_scheme = Lwt.return (Scheme.of_uri new_uri) in
@@ -276,7 +278,7 @@ type request_info =
   }
 
 let rec return_response
-    ({ conn = Conn ({ impl = (module Http); fd; _ } as conn_state)
+    ({ conn = Connection.Conn ({ impl = (module Http); fd; _ } as conn_state)
      ; conn_info
      ; config
      ; _
@@ -333,7 +335,7 @@ let is_h2c_upgrade ~config ~version =
     false
 
 let make_request_info
-    { conn = Conn { version; _ }; conn_info; config; _ }
+    { conn = Connection.Conn { version; _ }; conn_info; config; _ }
     ?(remaining_redirects = config.max_redirects)
     ~meth
     ~headers
@@ -415,7 +417,7 @@ let create ?(config = Config.default) uri =
   let+ conn = open_connection ~config conn_info in
   { conn; conn_info; persistent = true; uri; config }
 
-let shutdown { conn = Conn { impl; handle; _ }; _ } =
+let shutdown { conn = Connection.Conn { impl; handle; _ }; _ } =
   Http_impl.shutdown (module (val impl)) handle
 
 let call t ~meth ?(headers = []) ?(body = Body.empty) target =

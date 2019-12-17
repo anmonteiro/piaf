@@ -163,7 +163,9 @@ let send_request
   =
  fun conn ~body request ->
   let open Lwt.Syntax in
-  let (Conn { impl = (module Http); handle; connection_error_received; _ }) =
+  let (Connection.Conn
+        { impl = (module Http); handle; connection_error_received; _ })
+    =
     conn
   in
   let module Client = Http.Client in

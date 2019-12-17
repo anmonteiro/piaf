@@ -60,8 +60,6 @@ module HTTP = struct
 end
 
 module TLS = struct
-  include Httpaf.Version
-
   type t =
     | Any
     | SSLv3
@@ -77,7 +75,7 @@ module TLS = struct
     | Any, _ | _, Any ->
       0
     | _ ->
-      Int.compare (index_of ordered v1 0) (index_of ordered v2 0)
+      compare (index_of ordered v1 0) (index_of ordered v2 0)
 
   let to_max_version = function
     | Any ->

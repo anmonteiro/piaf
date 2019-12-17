@@ -195,6 +195,15 @@ let ssl_error_to_string = function
   | Error_want_accept ->
     "Error_want_accept"
 
+let fail_with_too_old_ssl max_tls_version =
+  let reason =
+    Format.asprintf
+      "OpenSSL wasn't compiled with %a support"
+      Versions.TLS.pp_hum
+      max_tls_version
+  in
+  Lwt_result.fail reason
+
 (* Assumes Lwt_unix.connect has already been called. *)
 (* TODO: hostname validation as per
  * https://github.com/savonet/ocaml-ssl/pull/49 *)
@@ -229,14 +238,10 @@ let connect ~hostname ~config ~alpn_protocols fd =
           (Versions.TLS.to_max_version max_tls_version)
           Client_context)
     with
-    | (exception Ssl.Method_error) | (exception Invalid_argument _) ->
-      let reason =
-        Format.asprintf
-          "OpenSSL wasn't compiled with %a support"
-          Versions.TLS.pp_hum
-          max_tls_version
-      in
-      Lwt_result.fail reason
+    | exception Ssl.Method_error ->
+      fail_with_too_old_ssl max_tls_version
+    | exception Invalid_argument _ ->
+      fail_with_too_old_ssl max_tls_version
     | ctx ->
       let disabled_protocols =
         List.map

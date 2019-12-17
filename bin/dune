@@ -1,3 +1,4 @@
 (executable
  (public_name carl)
+ (preprocess future_syntax)
  (libraries piaf cmdliner logs fmt logs.fmt fmt.tty))
