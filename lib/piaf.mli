@@ -29,6 +29,29 @@
  * POSSIBILITY OF SUCH DAMAGE.
  *---------------------------------------------------------------------------*)
 
+module Method : module type of Method
+
+module Headers : module type of struct
+  (* `H2.Status.t` is a strict superset of `Httpaf.Status.t` *)
+  include H2.Headers
+end
+
+module Scheme : sig
+  type t =
+    | HTTP
+    | HTTPS
+
+  val of_uri : Uri.t -> (t, string) result
+
+  val to_string : t -> string
+
+  val pp_hum : Format.formatter -> t -> unit [@@ocaml.toplevel_printer]
+end
+
+module Status : module type of struct
+  include H2.Status
+end
+
 module Versions : sig
   module HTTP : sig
     include module type of struct
@@ -135,9 +158,8 @@ end
 
 module Response : sig
   type t = private
-    { (* `H2.Status.t` is a strict superset of `Httpaf.Status.t` *)
-      status : H2.Status.t
-    ; headers : H2.Headers.t
+    { status : Status.t
+    ; headers : Headers.t
     ; version : Versions.HTTP.t
     ; body_length : Body.length
     }
@@ -268,26 +290,4 @@ module Client : sig
   end
 
   (* (Httpaf.Response.t * (string, 'a) result) Lwt.t *)
-end
-
-module Method : module type of Method
-
-module Headers : module type of struct
-  include H2.Headers
-end
-
-module Scheme : sig
-  type t =
-    | HTTP
-    | HTTPS
-
-  val of_uri : Uri.t -> (t, string) result
-
-  val to_string : t -> string
-
-  val pp_hum : Format.formatter -> t -> unit [@@ocaml.toplevel_printer]
-end
-
-module Status : module type of struct
-  include H2.Status
 end
