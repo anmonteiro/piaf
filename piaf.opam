@@ -1,0 +1,36 @@
+opam-version: "2.0"
+maintainer: "Antonio Monteiro <anmonteiro@gmail.com>"
+authors: [ "Antonio Monteiro <anmonteiro@gmail.com>" ]
+license: "BSD-3-clause"
+homepage: "https://github.com/anmonteiro/piaf"
+bug-reports: "https://github.com/anmonteiro/piaf/issues"
+dev-repo: "git+https://github.com/anmonteiro/piaf.git"
+doc: "https://anmonteiro.github.io/piaf/"
+build: [
+  ["dune" "build" "-p" name "-j" jobs]
+]
+depends: [
+  "ocaml" {>= "4.08"}
+  "dune" {>= "1.1"}
+  "bigstringaf" {>= "0.5.0"}
+  "httpaf"
+  "httpaf-lwt-unix"
+  "h2"
+  "h2-lwt-unix"
+  "logs"
+  "lwt"
+  "conf-libssl"
+  "ssl"
+  "lwt_ssl"
+  "uri"
+]
+pin-depends: [
+  [ "httpaf.dev" "git+https://github.com/anmonteiro/httpaf.git#fork" ]
+  [ "httpaf-lwt.dev" "git+https://github.com/anmonteiro/httpaf.git#fork" ]
+  [ "httpaf-lwt-unix.dev" "git+https://github.com/anmonteiro/httpaf.git#fork" ]
+  [ "h2.dev" "git+https://github.com/anmonteiro/ocaml-h2.git" ]
+  [ "h2-lwt.dev" "git+https://github.com/anmonteiro/ocaml-h2.git" ]
+  [ "h2-lwt-unix.dev" "git+https://github.com/anmonteiro/ocaml-h2.git" ]
+]
+synopsis:
+  "A client library for the HTTP/1.X and HTTP/2 protocols written entirely in OCaml"
