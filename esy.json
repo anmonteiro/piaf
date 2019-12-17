@@ -37,7 +37,7 @@
   },
   "esy": {
     "build": [
-      "dune build --root . --only-packages #{self.name}"
+      "dune build --only-packages #{self.name}"
     ]
   }
 }
