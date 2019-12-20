@@ -19,7 +19,8 @@
     "@opam/conf-openssl": "*",
     "@opam/uri": "*",
     "@opam/cmdliner": "*",
-    "@opam/fmt": "*"
+    "@opam/fmt": "*",
+    "@opam/conf-libev": "*"
   },
   "devDependencies": {
     "@opam/merlin": "*",
@@ -29,11 +30,12 @@
     "@opam/httpaf": "anmonteiro/httpaf:httpaf.opam#90e7c87",
     "@opam/httpaf-lwt": "anmonteiro/httpaf:httpaf-lwt.opam#90e7c87",
     "@opam/httpaf-lwt-unix": "anmonteiro/httpaf:httpaf-lwt-unix.opam#90e7c87",
-    "@opam/h2": "anmonteiro/ocaml-h2:h2.opam#bf0e0e0",
-    "@opam/h2-lwt": "anmonteiro/ocaml-h2:h2-lwt.opam#bf0e0e0",
-    "@opam/h2-lwt-unix": "anmonteiro/ocaml-h2:h2-lwt-unix.opam#bf0e0e0",
+    "@opam/h2": "anmonteiro/ocaml-h2:h2.opam#82be9d1",
+    "@opam/h2-lwt": "anmonteiro/ocaml-h2:h2-lwt.opam#82be9d1",
+    "@opam/h2-lwt-unix": "anmonteiro/ocaml-h2:h2-lwt-unix.opam#82be9d1",
     "@opam/conf-libssl": "esy-packages/esy-openssl#860ad7f",
-    "@opam/ssl": "savonet/ocaml-ssl:ssl.opam#fbffa9b"
+    "@opam/ssl": "savonet/ocaml-ssl:ssl.opam#fbffa9b",
+    "@opam/conf-libev": "esy-packages/libev:package.json#0b5eb66"
   },
   "esy": {
     "build": [
