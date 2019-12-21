@@ -86,6 +86,7 @@ type cli =
   ; user_agent : string
   ; connect_timeout : float
   ; referer : string option
+  ; compressed : bool
   }
 
 let format_header formatter (name, value) =
@@ -119,20 +120,84 @@ let rec uri_of_string ~scheme s =
   | Some _, Some _ ->
     maybe_uri
 
-let build_headers ~cli:{ headers; user_agent; referer; _ } =
+let inflate_chunk zstream result_buffer chunk =
+  let buf_size = 1024 in
+  let buf = Bytes.create buf_size in
+  let rec inner ~off ~len =
+    let is_end, used_in, used_out =
+      Zlib.inflate_string zstream chunk off len buf 0 buf_size Zlib.Z_SYNC_FLUSH
+    in
+    Buffer.add_subbytes result_buffer buf 0 used_out;
+    match is_end, used_in < len with
+    | true, _ ->
+      assert (used_in <= len);
+      Zlib.inflate_end zstream
+    | false, true ->
+      inner ~off:(off + used_in) ~len:(len - used_in)
+    | false, false ->
+      ()
+  in
+  inner ~off:0 ~len:(String.length chunk)
+
+(* TODO: try / catch *)
+let inflate_and_print stream =
+  let open Lwt.Syntax in
+  let zstream = Zlib.inflate_init false in
+  let result_buf = Buffer.create 1024 in
+  let+ () =
+    Lwt_stream.iter (fun chunk -> inflate_chunk zstream result_buf chunk) stream
+  in
+  Printf.printf "%s" (Buffer.contents result_buf)
+
+let handle_response ~cli response response_body =
+  let open Lwt.Syntax in
+  let { head; compressed; _ } = cli in
+  let+ () =
+    if head then (
+      Logs.app (fun m -> m "%a" pp_response_headers response);
+      Lwt.async (fun () -> Body.drain response_body);
+      Lwt.return_unit)
+    else
+      match compressed, Headers.get response.headers "content-encoding" with
+      | true, Some encoding when String.lowercase_ascii encoding = "gzip" ->
+        (* We requested a compressed response, and we got a compressed response
+         * back. *)
+        let* response_body_str = Body.to_string response_body in
+        (match Ezgzip.decompress response_body_str with
+        | Ok body_str ->
+          Lwt_io.printf "%s" body_str
+        | Error _ ->
+          assert false)
+      | true, Some encoding when String.lowercase_ascii encoding = "deflate" ->
+        (* We requested a compressed response, and we got a compressed response
+         * back. *)
+        let response_body_stream = Body.to_string_stream response_body in
+        inflate_and_print response_body_stream
+      | _ ->
+        Lwt_stream.iter
+          (fun body_fragment -> Printf.printf "%s" body_fragment)
+          (Body.to_string_stream response_body)
+  in
+  `Ok ()
+
+let build_headers ~cli:{ headers; user_agent; referer; compressed; _ } =
+  let headers = ("User-Agent", user_agent) :: headers in
   let headers =
     match referer with
     | None ->
       headers
     | Some referer ->
-      ("referer", referer) :: headers
+      ("Referer", referer) :: headers
   in
-  ("user-agent", user_agent) :: headers
+  if compressed then
+    ("Accept-Encoding", "deflate, gzip") :: headers
+  else
+    headers
 
 let request ~cli ~config uri =
   let module Client = Client.Oneshot in
   let open Lwt.Syntax in
-  let { head; meth; data; _ } = cli in
+  let { meth; data; _ } = cli in
   let headers = build_headers ~cli in
   let body =
     match data with Some s -> Some (Body.of_string s) | None -> None
@@ -140,17 +205,7 @@ let request ~cli ~config uri =
   let* res = Client.request ~config ~meth ~headers ?body uri in
   match res with
   | Ok (response, response_body) ->
-    let+ () =
-      if head then (
-        Logs.app (fun m -> m "%a" pp_response_headers response);
-        Lwt.async (fun () -> Body.drain response_body);
-        Lwt.return_unit)
-      else
-        Lwt_stream.iter
-          (fun body_fragment -> Printf.printf "%s" body_fragment)
-          (Body.to_string_stream response_body)
-    in
-    `Ok ()
+    handle_response ~cli response response_body
   | Error e ->
     Lwt.return (`Error (false, e))
 
@@ -217,8 +272,7 @@ let main ({ log_level; urls; _ } as cli) =
   | Ok config ->
     Lwt_main.run (request_many ~cli ~config urls)
 
-(* --compressed
- * -o, --output <file> Write to file instead of stdout
+(* -o, --output <file> Write to file instead of stdout
  * -T, --upload-file <file> Transfer local FILE to destination
  * --resolve <host:port:address[,address]...> Resolve the host+port to this address
  * --retry <num>   Retry request if transient problems occur
@@ -251,6 +305,10 @@ module CLI = struct
     let doc = "CA directory to verify peer against" in
     let docv = "dir" in
     Arg.(value & opt (some string) None & info [ "capath" ] ~doc ~docv)
+
+  let compressed =
+    let doc = "Request compressed response" in
+    Arg.(value & flag & info [ "compressed" ] ~doc)
 
   let connect_timeout =
     let doc = "Maximum time allowed for connection" in
@@ -392,6 +450,7 @@ module CLI = struct
   let parse
       cacert
       capath
+      compressed
       connect_timeout
       data
       default_proto
@@ -472,6 +531,7 @@ module CLI = struct
     ; insecure
     ; tcp_nodelay
     ; user_agent
+    ; compressed
     ; connect_timeout
     ; referer
     }
@@ -481,6 +541,7 @@ module CLI = struct
       const parse
       $ cacert
       $ capath
+      $ compressed
       $ connect_timeout
       $ data
       $ default_proto

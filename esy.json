@@ -20,7 +20,9 @@
     "@opam/uri": "*",
     "@opam/cmdliner": "*",
     "@opam/fmt": "*",
-    "@opam/conf-libev": "*"
+    "@opam/conf-libev": "*",
+    "@opam/ezgzip": "*",
+    "@opam/camlzip": "*"
   },
   "devDependencies": {
     "@opam/merlin": "*",
@@ -33,7 +35,7 @@
     "@opam/h2": "anmonteiro/ocaml-h2:h2.opam#82be9d1",
     "@opam/h2-lwt": "anmonteiro/ocaml-h2:h2-lwt.opam#82be9d1",
     "@opam/h2-lwt-unix": "anmonteiro/ocaml-h2:h2-lwt-unix.opam#82be9d1",
-    "@opam/conf-libssl": "esy-packages/esy-openssl#860ad7f",
+    "@opam/conf-libssl": "esy-packages/esy-openssl#648930f",
     "@opam/ssl": "savonet/ocaml-ssl:ssl.opam#fbffa9b",
     "@opam/conf-libev": "esy-packages/libev:package.json#0b5eb66"
   },
