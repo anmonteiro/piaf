@@ -192,6 +192,10 @@ let send_request
         Bodyw.write_string request_body s;
         flush_and_close (module Http.Body) request_body;
         Lwt.return_unit
+      | `Bigstring { IOVec.buffer; off; len } ->
+        Bodyw.schedule_bigstring request_body ~off ~len buffer;
+        flush_and_close (module Http.Body) request_body;
+        Lwt.return_unit
       | `Stream stream ->
         Lwt.async (fun () ->
             let+ () = Lwt_stream.closed stream in

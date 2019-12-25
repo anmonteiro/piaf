@@ -147,6 +147,8 @@ module Body : sig
 
   val of_string : string -> t
 
+  val of_bigstring : ?off:int -> ?len:int -> Bigstringaf.t -> t
+
   val to_stream : t -> Bigstringaf.t Lwt_stream.t
 
   val to_string_stream : t -> string Lwt_stream.t

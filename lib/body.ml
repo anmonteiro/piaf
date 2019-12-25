@@ -43,6 +43,7 @@ type length =
 type stream =
   [ `Empty
   | `String of string
+  | `Bigstring of Bigstringaf.t IOVec.t
   | `Stream of Bigstringaf.t IOVec.t Lwt_stream.t
   ]
 
@@ -72,14 +73,25 @@ let of_string s =
   let body_length = `Fixed (Int64.of_int (String.length s)) in
   create ~body_length (`String s)
 
+let of_bigstring ?(off = 0) ?len bstr =
+  let len =
+    match len with Some len -> len | None -> Bigstringaf.length bstr
+  in
+  let body_length = `Fixed (Int64.of_int len) in
+  create ~body_length (`Bigstring { IOVec.buffer = bstr; off; len })
+
 let to_stream { body; _ } =
   match body with
   | `Empty ->
     Lwt_stream.of_list []
   | `String s ->
     Lwt_stream.of_list [ Bigstringaf.of_string ~off:0 ~len:(String.length s) s ]
+  | `Bigstring { IOVec.buffer; off; len } ->
+    Lwt_stream.of_list [ Bigstringaf.sub ~off ~len buffer ]
   | `Stream stream ->
-    Lwt_stream.map (fun { IOVec.buffer; _ } -> buffer) stream
+    Lwt_stream.map
+      (fun { IOVec.buffer; off; len } -> Bigstringaf.sub ~off ~len buffer)
+      stream
 
 let to_string { body; length } =
   match body with
@@ -87,6 +99,8 @@ let to_string { body; length } =
     Lwt.return ""
   | `String s ->
     Lwt.return s
+  | `Bigstring { IOVec.buffer; off; len } ->
+    Lwt.return (Bigstringaf.substring ~off ~len buffer)
   | `Stream stream ->
     let open Lwt.Syntax in
     let len =
@@ -114,6 +128,8 @@ let to_string_stream { body; _ } =
     Lwt_stream.of_list []
   | `String s ->
     Lwt_stream.of_list [ s ]
+  | `Bigstring { IOVec.buffer; off; len } ->
+    Lwt_stream.of_list [ Bigstringaf.substring ~off ~len buffer ]
   | `Stream stream ->
     Lwt_stream.map
       (fun { IOVec.buffer; off; len } -> Bigstringaf.substring buffer ~off ~len)
@@ -121,14 +137,14 @@ let to_string_stream { body; _ } =
 
 let drain { body; _ } =
   match body with
-  | `Empty | `String _ ->
+  | `Empty | `String _ | `Bigstring _ ->
     Lwt.return_unit
   | `Stream stream ->
     Lwt_stream.junk_while (fun _ -> true) stream
 
 let drain_available { body; _ } =
   match body with
-  | `Empty | `String _ ->
+  | `Empty | `String _ | `Bigstring _ ->
     Lwt.return_unit
   | `Stream stream ->
     Lwt_stream.junk_old stream
