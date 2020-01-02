@@ -23,13 +23,10 @@ in
         static = true;
         shared = false;
         splitStaticOutput = false;
-
-        # Don’t use new stdenv zlib because
-        # it doesn’t like the --disable-shared flag
-        # stdenv = super.stdenv;
       };
       in
       pkgs.callPackage ./generic.nix {
+        static = true;
         ocamlPackages = pkgs.ocaml-ng.ocamlPackages_4_09.overrideScope' (oself: osuper: {
           camlzip = osuper.camlzip.override { inherit zlib; };
         });

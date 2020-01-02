@@ -1,4 +1,4 @@
-{ pkgs, stdenv, ocamlPackages }:
+{ pkgs, stdenv, ocamlPackages, static ? false }:
 
 rec {
   piaf = ocamlPackages.buildDune2Package {
@@ -37,9 +37,7 @@ rec {
     nativeBuildInputs = with ocamlPackages; [dune ocaml findlib];
 
     buildPhase = ''
-      echo TOINE
-      dune clean
-      dune build bin/carl.exe --profile=static --display=short
+      dune build bin/carl.exe --display=short --profile=${if static then "static" else "release"}
     '';
     installPhase = ''
       mkdir -p $out/bin
