@@ -278,7 +278,7 @@ type request_info =
   }
 
 let rec return_response
-    { conn = Connection.Conn ({ impl = (module Http); fd; _ }
+    ({ conn = Connection.Conn ({ impl = (module Http); fd; _ })
      ; conn_info
      ; config
      ; _
