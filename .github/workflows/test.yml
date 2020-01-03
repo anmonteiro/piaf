@@ -12,6 +12,5 @@ jobs:
       with:
         name: anmonteiro
         file: nix/default.nix
-        # TODO: cross-compile too
-        attributes: native
+        attributes: native musl64
         signingKey: '${{ secrets.CACHIX_SIGNING_KEY }}'
