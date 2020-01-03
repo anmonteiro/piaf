@@ -2,12 +2,10 @@
 
 let
   pkgs = import pkgsPath {};
-  inherit (pkgs) lib;
   overlays = builtins.fetchTarball https://github.com/anmonteiro/nix-overlays/archive/master.tar.gz;
 
   ocamlPackages = pkgs.ocaml-ng.ocamlPackages_4_09.overrideScope'
     (pkgs.callPackage "${overlays}/ocaml" { });
-
 in
   {
     native = pkgs.callPackage ./generic.nix {
