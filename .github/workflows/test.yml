@@ -12,5 +12,5 @@ jobs:
       with:
         name: anmonteiro
         file: nix/default.nix
-        attributes: native musl64
+        attributes: musl64.carl
         signingKey: '${{ secrets.CACHIX_SIGNING_KEY }}'
