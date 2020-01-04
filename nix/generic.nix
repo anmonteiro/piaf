@@ -37,6 +37,7 @@ rec {
     nativeBuildInputs = with ocamlPackages; [dune ocaml findlib];
 
     buildPhase = ''
+      echo "running ${if static then "static" else "release"} build"
       dune build bin/carl.exe --display=short --profile=${if static then "static" else "release"}
     '';
     installPhase = ''
