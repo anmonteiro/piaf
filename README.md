@@ -9,16 +9,14 @@ Piaf is currently unreleased.
 
 You can depend on it via [esy](esy) resolutions or `opam pin`
 
-_Note_: make sure to mirror Piaf's own resolutions located in
-[esy.json](./esy.json).
+_Note_: make sure to mirror Piaf's own resolutions located in the [opam
+file](./piaf.opam).
 
 [esy]: https://esy.sh
-
 
 # Usage & Examples
 
 TODO, read the [mli](./lib/piaf.mli) file for now.
-
 
 ### Examples
 
