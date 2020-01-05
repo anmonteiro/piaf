@@ -2,10 +2,13 @@
 
 let
   pkgs = import pkgsPath {};
-  overlays = builtins.fetchTarball https://github.com/anmonteiro/nix-overlays/archive/master.tar.gz;
+  overlays = builtins.fetchTarball {
+    url = https://github.com/anmonteiro/nix-overlays/archive/d2d883d84.tar.gz;
+    sha256 = "1raq4wnv8h0v23kar79hra6xffkfl281zw4vzvyfr1fwgwwk7bx3";
+  };
 
   ocamlPackages = pkgs.ocaml-ng.ocamlPackages_4_09.overrideScope'
-    (pkgs.callPackage "${overlays}/ocaml" { });
+    (pkgs.callPackage "${overlays}/ocaml" {});
 in
   {
     native = pkgs.callPackage ./generic.nix {
