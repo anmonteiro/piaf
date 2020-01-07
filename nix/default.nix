@@ -12,8 +12,8 @@ let
   inherit (import gitignoreSrc { inherit (pkgs) lib; }) gitignoreSource;
 
   overlays = builtins.fetchTarball {
-    url = https://github.com/anmonteiro/nix-overlays/archive/d2d883d84.tar.gz;
-    sha256 = "1raq4wnv8h0v23kar79hra6xffkfl281zw4vzvyfr1fwgwwk7bx3";
+    url = https://github.com/anmonteiro/nix-overlays/archive/1efa665.tar.gz;
+    sha256 = "09npxhxb4hix3kd7l567h5p003m7zlf6vpm958vi4yahccy3qd9q";
   };
 
   ocamlPackages = pkgs.ocaml-ng.ocamlPackages_4_09.overrideScope'
