@@ -34,7 +34,7 @@ rec {
 
     src = gitignoreSource ./..;
 
-    nativeBuildInputs = with ocamlPackages; [dune ocaml findlib];
+    nativeBuildInputs = with ocamlPackages; [dune_2 ocaml findlib];
 
     buildPhase = ''
       echo "running ${if static then "static" else "release"} build"
