@@ -14,15 +14,16 @@ let
     sha256 = "1zd1ylgkndbb5szji32ivfhwh04mr1sbgrnvbrqpmfb67g2g3r9i";
   };
   inherit (import gitignoreSrc { inherit (pkgs) lib; }) gitignoreSource;
-
+  pkgsCross = pkgs.pkgsCross.musl64.pkgsStatic;
 in
   {
     native = pkgs.callPackage ./generic.nix {
       inherit gitignoreSource;
     };
 
-    musl64 = pkgs.pkgsCross.musl64.pkgsStatic.callPackage ./generic.nix {
+    musl64 = pkgsCross.callPackage ./generic.nix {
       static = true;
       inherit gitignoreSource;
+      ocamlPackages = pkgsCross.ocaml-ng.ocamlPackages_4_09;
     };
   }
