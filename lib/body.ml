@@ -40,7 +40,7 @@ type length =
   | `Close_delimited
   ]
 
-type stream =
+type contents =
   [ `Empty
   | `String of string
   | `Bigstring of Bigstringaf.t IOVec.t
@@ -49,15 +49,18 @@ type stream =
 
 type t =
   { length : length
-  ; body : stream
+  ; contents : contents
   }
 
-let create ~body_length body = { length = body_length; body }
+let create ~length contents = { length; contents }
 
-let empty = create ~body_length:(`Fixed 0L) `Empty
+let length { length; _ } = length
 
-let of_stream ?(length = `Unknown) stream =
-  create ~body_length:length (`Stream stream)
+let contents { contents; _ } = contents
+
+let empty = create ~length:(`Fixed 0L) `Empty
+
+let of_stream ?(length = `Unknown) stream = create ~length (`Stream stream)
 
 let of_string_stream ?(length = `Unknown) stream =
   let stream =
@@ -67,21 +70,21 @@ let of_string_stream ?(length = `Unknown) stream =
         { IOVec.buffer = Bigstringaf.of_string ~off:0 ~len s; off = 0; len })
       stream
   in
-  create ~body_length:length (`Stream stream)
+  create ~length (`Stream stream)
 
 let of_string s =
-  let body_length = `Fixed (Int64.of_int (String.length s)) in
-  create ~body_length (`String s)
+  let length = `Fixed (Int64.of_int (String.length s)) in
+  create ~length (`String s)
 
 let of_bigstring ?(off = 0) ?len bstr =
   let len =
     match len with Some len -> len | None -> Bigstringaf.length bstr
   in
-  let body_length = `Fixed (Int64.of_int len) in
-  create ~body_length (`Bigstring { IOVec.buffer = bstr; off; len })
+  let length = `Fixed (Int64.of_int len) in
+  create ~length (`Bigstring { IOVec.buffer = bstr; off; len })
 
-let to_stream { body; _ } =
-  match body with
+let to_stream { contents; _ } =
+  match contents with
   | `Empty ->
     Lwt_stream.of_list []
   | `String s ->
@@ -93,8 +96,8 @@ let to_stream { body; _ } =
       (fun { IOVec.buffer; off; len } -> Bigstringaf.sub ~off ~len buffer)
       stream
 
-let to_string { body; length } =
-  match body with
+let to_string { contents; length } =
+  match contents with
   | `Empty ->
     Lwt.return ""
   | `String s ->
@@ -122,8 +125,8 @@ let to_string { body; length } =
     in
     Buffer.contents result_buffer
 
-let to_string_stream { body; _ } =
-  match body with
+let to_string_stream { contents; _ } =
+  match contents with
   | `Empty ->
     Lwt_stream.of_list []
   | `String s ->
@@ -135,15 +138,15 @@ let to_string_stream { body; _ } =
       (fun { IOVec.buffer; off; len } -> Bigstringaf.substring buffer ~off ~len)
       stream
 
-let drain { body; _ } =
-  match body with
+let drain { contents; _ } =
+  match contents with
   | `Empty | `String _ | `Bigstring _ ->
     Lwt.return_unit
   | `Stream stream ->
     Lwt_stream.junk_while (fun _ -> true) stream
 
-let drain_available { body; _ } =
-  match body with
+let drain_available { contents; _ } =
+  match contents with
   | `Empty | `String _ | `Bigstring _ ->
     Lwt.return_unit
   | `Stream stream ->
