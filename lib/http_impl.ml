@@ -184,7 +184,7 @@ let send_request
     Http.Client.request handle request ~error_handler ~response_handler
   in
   Lwt.async (fun () ->
-      match body.body with
+      match body.contents with
       | `Empty ->
         Bodyw.close_writer request_body;
         Lwt.return_unit

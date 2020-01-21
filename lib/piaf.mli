@@ -139,6 +139,18 @@ module Body : sig
     | `Close_delimited
     ]
 
+  type contents =
+    private
+    [ `Empty
+    | `String of string
+    | `Bigstring of Bigstringaf.t H2.IOVec.t
+    | `Stream of Bigstringaf.t H2.IOVec.t Lwt_stream.t
+    ]
+
+  val length : t -> length
+
+  val contents : t -> contents
+
   val empty : t
 
   val of_stream : ?length:length -> Bigstringaf.t H2.IOVec.t Lwt_stream.t -> t
