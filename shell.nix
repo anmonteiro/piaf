@@ -1,6 +1,5 @@
 let
-  sources = import ./nix/sources.nix {};
-  inherit (sources) pkgs;
+  pkgs = import ./nix/sources.nix {};
 in
   with pkgs;
 

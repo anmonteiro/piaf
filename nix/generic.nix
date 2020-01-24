@@ -1,11 +1,11 @@
-{ pkgs, stdenv, ocamlPackages, gitignoreSource, static ? false }:
+{ pkgs, stdenv, lib, ocamlPackages, static ? false }:
 
 rec {
   piaf = ocamlPackages.buildDune2Package {
     pname = "piaf";
     version = "0.0.1-dev";
 
-    src = gitignoreSource ./..;
+    src = lib.gitignoreSource ./..;
     nativeBuildInputs = with ocamlPackages; [dune_2];
     propagatedBuildInputs = with ocamlPackages; [
       bigstringaf
@@ -32,7 +32,7 @@ rec {
     name = "carl";
     version = "0.0.1-dev";
 
-    src = gitignoreSource ./..;
+    src = lib.gitignoreSource ./..;
 
     nativeBuildInputs = with ocamlPackages; [dune_2 ocaml findlib];
 
