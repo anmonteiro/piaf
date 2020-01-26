@@ -1,5 +1,5 @@
 (*----------------------------------------------------------------------------
- * Copyright (c) 2019, António Nuno Monteiro
+ * Copyright (c) 2019-2020, António Nuno Monteiro
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -151,3 +151,62 @@ let drain_available { contents; _ } =
     Lwt.return_unit
   | `Stream stream ->
     Lwt_stream.junk_old stream
+
+(* "Primitive" body types for http/af / h2 compatibility *)
+module type BODY = sig
+  module Read : sig
+    type t
+
+    val close_reader : t -> unit
+
+    val schedule_read
+      :  t
+      -> on_eof:(unit -> unit)
+      -> on_read:(Bigstringaf.t -> off:int -> len:int -> unit)
+      -> unit
+
+    val is_closed : t -> bool
+  end
+
+  module Write : sig
+    type t
+
+    val write_char : t -> char -> unit
+
+    val write_string : t -> ?off:int -> ?len:int -> string -> unit
+
+    val write_bigstring : t -> ?off:int -> ?len:int -> Bigstringaf.t -> unit
+
+    val schedule_bigstring : t -> ?off:int -> ?len:int -> Bigstringaf.t -> unit
+
+    val flush : t -> (unit -> unit) -> unit
+
+    val close_writer : t -> unit
+
+    val is_closed : t -> bool
+  end
+end
+
+let of_prim_body
+    : type a. (module BODY with type Read.t = a) -> body_length:length -> a -> t
+  =
+ fun (module Http_body) ~body_length body ->
+  let module Body = Http_body.Read in
+  let read_fn () =
+    let r, notify = Lwt.wait () in
+    Body.schedule_read
+      body
+      ~on_eof:(fun () ->
+        Body.close_reader body;
+        Lwt.wakeup_later notify None)
+      ~on_read:(fun fragment ~off ~len ->
+        (* Note: we always need to make a copy here for now. See the following
+         * comment for an explanation why:
+         * https://github.com/inhabitedtype/httpaf/issues/140#issuecomment-517072327
+         *)
+        let fragment_copy = Bigstringaf.copy ~off ~len fragment in
+        let iovec = { IOVec.buffer = fragment_copy; off = 0; len } in
+        Lwt.wakeup_later notify (Some iovec));
+    r
+  in
+  of_stream ~length:body_length (Lwt_stream.from read_fn)

@@ -1,5 +1,5 @@
 (*----------------------------------------------------------------------------
- * Copyright (c) 2019, António Nuno Monteiro
+ * Copyright (c) 2019-2020, António Nuno Monteiro
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -39,6 +39,10 @@ let make_error_handler real_handler type_ error =
   in
   real_handler (type_, error)
 
+module Piaf_body = Body
+
+module type BODY = Body.BODY
+
 module MakeHTTP2 (H2_client : H2_lwt.Client) :
   Http_intf.HTTPCommon
     with type Client.t = H2_client.t
@@ -46,7 +50,7 @@ module MakeHTTP2 (H2_client : H2_lwt.Client) :
      and type Body.Read.t = [ `read ] H2.Body.t
      and type Body.Write.t = [ `write ] H2.Body.t = struct
   module Body :
-    Http_intf.Body
+    BODY
       with type Read.t = [ `read ] H2.Body.t
        and type Write.t = [ `write ] H2.Body.t = struct
     module Read = struct
@@ -72,11 +76,17 @@ module MakeHTTP2 (H2_client : H2_lwt.Client) :
         ~error_handler:(make_error_handler error_handler `Connection)
         fd
 
-    type response_handler = Response.t -> Body.Read.t -> unit
+    type response_handler = Response.t -> unit
 
     let request t req ~error_handler ~response_handler =
       let response_handler response body =
-        response_handler (Response.of_h2 response) body
+        let body =
+          Piaf_body.of_prim_body
+            (module Body : BODY with type Read.t = [ `read ] H2.Body.t)
+            ~body_length:(H2.Response.body_length response :> Piaf_body.length)
+            body
+        in
+        response_handler (Response.of_h2 ~body response)
       in
       request
         t
@@ -109,7 +119,13 @@ module HTTP : Http_intf.HTTP2 = struct
         fd
       =
       let response_handler response body =
-        response_handler (Response.of_h2 response) body
+        let body =
+          Piaf_body.of_prim_body
+            (module Body : BODY with type Read.t = [ `read ] H2.Body.t)
+            ~body_length:(H2.Response.body_length response :> Piaf_body.length)
+            body
+        in
+        response_handler (Response.of_h2 ~body response)
       in
       let response_error_handler error =
         let error : Http_intf.error =

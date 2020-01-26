@@ -1,5 +1,5 @@
 (*----------------------------------------------------------------------------
- * Copyright (c) 2019, António Nuno Monteiro
+ * Copyright (c) 2019-2020, António Nuno Monteiro
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -29,58 +29,73 @@
  * POSSIBILITY OF SUCH DAMAGE.
  *---------------------------------------------------------------------------*)
 
+module Piaf_body = Body
+
+module type BODY = Body.BODY
+
+module Body :
+  BODY
+    with type Read.t = [ `read ] Httpaf.Body.t
+     and type Write.t = [ `write ] Httpaf.Body.t = struct
+  module Read = struct
+    type t = [ `read ] Httpaf.Body.t
+
+    include (
+      Httpaf.Body :
+        module type of Httpaf.Body with type 'rw t := 'rw Httpaf.Body.t)
+  end
+
+  module Write = struct
+    type t = [ `write ] Httpaf.Body.t
+
+    include (
+      Httpaf.Body :
+        module type of Httpaf.Body with type 'rw t := 'rw Httpaf.Body.t)
+  end
+end
+
 module MakeHTTP1 (Httpaf_client : Httpaf_lwt.Client) :
   Http_intf.HTTPCommon
     with type Client.t = Httpaf_client.t
      and type Client.socket = Httpaf_client.socket
      and type Body.Read.t = [ `read ] Httpaf.Body.t
      and type Body.Write.t = [ `write ] Httpaf.Body.t = struct
-  module Body :
-    Http_intf.Body
-      with type Read.t = [ `read ] Httpaf.Body.t
-       and type Write.t = [ `write ] Httpaf.Body.t = struct
-    module Read = struct
-      type t = [ `read ] Httpaf.Body.t
-
-      include (
-        Httpaf.Body :
-          module type of Httpaf.Body with type 'rw t := 'rw Httpaf.Body.t)
-    end
-
-    module Write = struct
-      type t = [ `write ] Httpaf.Body.t
-
-      include (
-        Httpaf.Body :
-          module type of Httpaf.Body with type 'rw t := 'rw Httpaf.Body.t)
-    end
-  end
+  module Body = Body
 
   module Client = struct
     include Httpaf_client
 
-    type response_handler = Response.t -> Body.Read.t -> unit
+    type response_handler = Response.t -> unit
 
     (* Error handler for HTTP/1 connections isn't used *)
     let create_connection ?config:_ ~error_handler:_ fd = create_connection fd
 
-    let request t req ~error_handler ~response_handler =
-      let request_method =
-        match req.Request.meth with
-        | #Method.standard as meth ->
-          meth
-        | _ ->
-          assert false
-      in
+    let request
+        t ({ Request.message; _ } as req) ~error_handler ~response_handler
+      =
       let response_handler response body =
-        response_handler (Response.of_http1 ~request_method response) body
+        let request_method =
+          match message.meth with
+          | #Method.standard as meth ->
+            meth
+          | _ ->
+            assert false
+        in
+        let body =
+          Piaf_body.of_prim_body
+            (module Body : BODY with type Read.t = [ `read ] Httpaf.Body.t)
+            ~body_length:
+              (Httpaf.Response.body_length ~request_method response
+                :> Piaf_body.length)
+            body
+        in
+        response_handler (Response.of_http1 ~body response)
       in
       let error_handler error =
         let error =
           match error with
           | `Invalid_response_body_length response ->
-            `Invalid_response_body_length
-              (Response.of_http1 ~request_method response)
+            `Invalid_response_body_length (Response.of_http1 response)
           | (`Exn _ | `Malformed_response _) as other ->
             other
         in

@@ -9,7 +9,6 @@ rec {
     nativeBuildInputs = with ocamlPackages; [dune_2];
     propagatedBuildInputs = with ocamlPackages; [
       bigstringaf
-      findlib
       httpaf
       httpaf-lwt-unix
       h2
@@ -46,7 +45,6 @@ rec {
     '';
 
     buildInputs = with ocamlPackages; [
-      findlib
       piaf
       cmdliner
       fmt
