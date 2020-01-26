@@ -1,5 +1,5 @@
 (*----------------------------------------------------------------------------
- * Copyright (c) 2019, António Nuno Monteiro
+ * Copyright (c) 2019-2020, António Nuno Monteiro
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -278,14 +278,13 @@ type request_info =
   }
 
 let rec return_response
-    ({ conn = Connection.Conn ({ impl = (module Http); fd; _ })
+    ({ conn = Connection.Conn { impl = (module Http); fd; _ }
      ; conn_info
      ; config
      ; _
      } as t)
     ({ request; _ } as request_info)
-    ({ Response.status; headers; version; _ } as response)
-    response_body
+    ({ Response.message = { status; headers; version; _ }; body } as response)
   =
   let open Lwt.Syntax in
   let { Connection_info.scheme; _ } = conn_info in
@@ -308,17 +307,17 @@ let rec return_response
       (* TODO: this case needs to shutdown the HTTP/1.1 connection when it's
        * done using it. *)
       let (module Http2) = (module Http2.HTTP : Http_intf.HTTP2) in
-      let* () = Body.drain response_body in
+      let* () = Body.drain body in
       let open Lwt_result.Syntax in
-      let* h2_conn, response, response_body' =
+      let* h2_conn, response =
         Http_impl.create_h2c_connection (module Http2) ~http_request:request fd
       in
       t.conn <- h2_conn;
-      return_response t request_info response response_body'
+      return_response t request_info response
     | _ ->
-      Lwt_result.return (response, response_body))
+      Lwt_result.return response)
   | _ ->
-    Lwt_result.return (response, response_body)
+    Lwt_result.return response
 
 let is_h2c_upgrade ~config ~version =
   match
@@ -354,7 +353,7 @@ let make_request_info
       headers
   in
   let request =
-    Request.create meth ~version ~scheme ~headers:canonical_headers target
+    Request.create meth ~version ~scheme ~headers:canonical_headers ~body target
   in
   { remaining_redirects; headers; request; meth; target; is_h2c_upgrade }
 
@@ -364,16 +363,16 @@ let rec send_request_and_handle_response
     ({ remaining_redirects; request; headers; meth; _ } as request_info)
   =
   let open Lwt_result.Syntax in
-  let* response, response_body = Http_impl.send_request conn ~body request in
+  let* response = Http_impl.send_request conn ~body request in
   if t.persistent then
     t.persistent <- Response.persistent_connection response;
   (* TODO: 201 created can also return a Location header. Should we follow
    * those? *)
   match
-    ( H2.Status.is_redirection response.status
+    ( H2.Status.is_redirection response.message.status
     , config.follow_redirects
     , remaining_redirects
-    , Headers.get response.headers "location" )
+    , Headers.get response.message.headers "location" )
   with
   | true, true, 0, _ ->
     (* Response is a redirect, but we can't follow any more. *)
@@ -393,9 +392,9 @@ let rec send_request_and_handle_response
      * Otherwise, if we couldn't reuse the connection, drain the response body
      * and additionally shut down the old connection. *)
     if did_reuse then
-      Lwt.async (fun () -> Body.drain response_body)
+      Lwt.async (fun () -> Body.drain response.body)
     else
-      drain_response_body_and_shutdown conn ~conn_info response_body;
+      drain_response_body_and_shutdown conn ~conn_info response.body;
     let target = Uri.path_and_query new_uri in
     let request_info' =
       make_request_info
@@ -409,7 +408,7 @@ let rec send_request_and_handle_response
     send_request_and_handle_response t ~body request_info'
   (* Either not a redirect, or we shouldn't follow redirects. *)
   | false, _, _, _ | _, false, _, _ | true, true, _, None ->
-    return_response t request_info response response_body
+    return_response t request_info response
 
 let create ?(config = Config.default) uri =
   let open Lwt_result.Syntax in

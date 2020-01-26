@@ -1,5 +1,5 @@
 (*----------------------------------------------------------------------------
- * Copyright (c) 2019, António Nuno Monteiro
+ * Copyright (c) 2019-2020, António Nuno Monteiro
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -34,7 +34,9 @@ module Config = Config
 module Client = Client
 module Headers = Headers
 module Method = Method
+module Request = Request
 module Response = Response
 module Scheme = Scheme
 module Status = H2.Status
 module Versions = Versions
+module Server = Server

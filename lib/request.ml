@@ -1,5 +1,5 @@
 (*----------------------------------------------------------------------------
- * Copyright (c) 2019, António Nuno Monteiro
+ * Copyright (c) 2019-2020, António Nuno Monteiro
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -29,7 +29,7 @@
  * POSSIBILITY OF SUCH DAMAGE.
  *---------------------------------------------------------------------------*)
 
-type t =
+type message =
   { meth : Method.t
   ; target : string
   ; version : Versions.HTTP.t
@@ -37,24 +37,51 @@ type t =
   ; scheme : Scheme.t
   }
 
-let create ~scheme ~version ?(headers = H2.Headers.empty) meth target =
-  { meth; target; version; headers; scheme }
+type t =
+  { message : message
+  ; body : Body.t
+  }
 
-let to_http1 { meth; target; version; headers; _ } =
+let uri { message = { target; _ }; _ } =
+  (* TODO: add host too? *)
+  Uri.of_string target
+
+let meth { message = { meth; _ }; _ } = meth
+
+let headers { message = { headers; _ }; _ } = headers
+
+let body { body; _ } = body
+
+let create ~scheme ~version ?(headers = Headers.empty) meth target ~body =
+  { message = { meth; target; version; headers; scheme }; body }
+
+let of_http1 ?(body = Body.empty) request =
+  let { Httpaf.Request.meth; target; version; headers } = request in
+  { message =
+      { meth
+      ; target
+      ; version
+      ; headers = H2.Headers.of_rev_list (Httpaf.Headers.to_rev_list headers)
+      ; scheme = Scheme.HTTP
+      }
+  ; body
+  }
+
+let to_http1 { message = { meth; target; version; headers; _ }; _ } =
   let http1_headers =
     Httpaf.Headers.of_rev_list (H2.Headers.to_rev_list headers)
   in
   Httpaf.Request.create ~version ~headers:http1_headers meth target
 
-let to_h2 { meth; target; headers; _ } =
+let to_h2 { message = { meth; target; headers; _ }; _ } =
   (* We only support H2 over HTTPS.
    * TODO: this can be relaxed *)
   H2.Request.create ~scheme:"https" ~headers meth target
 
-let persistent_connection { version; headers; _ } =
+let persistent_connection { message = { version; headers; _ }; _ } =
   Message.persistent_connection version headers
 
-let pp_hum formatter { meth; target; version; headers; _ } =
+let pp_hum formatter { message = { meth; target; version; headers; _ }; _ } =
   let format_header formatter (name, value) =
     Format.fprintf formatter "%s: %s" name value
   in

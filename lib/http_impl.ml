@@ -1,5 +1,5 @@
 (*----------------------------------------------------------------------------
- * Copyright (c) 2019, António Nuno Monteiro
+ * Copyright (c) 2019-2020, António Nuno Monteiro
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -86,36 +86,8 @@ let create_connection
   | Error _ as err ->
     err
 
-let create_response_body
-    : type a.
-      (module Http_intf.Body with type Read.t = a)
-      -> body_length:Body.length
-      -> a
-      -> Body.t
-  =
- fun (module Http_body) ~body_length body ->
-  let module Bodyr = Http_body.Read in
-  let read_fn () =
-    let r, notify = Lwt.wait () in
-    Bodyr.schedule_read
-      body
-      ~on_eof:(fun () ->
-        Bodyr.close_reader body;
-        Lwt.wakeup_later notify None)
-      ~on_read:(fun fragment ~off ~len ->
-        (* Note: we always need to make a copy here for now. See the following
-         * comment for an explanation why:
-         * https://github.com/inhabitedtype/httpaf/issues/140#issuecomment-517072327
-         *)
-        let fragment_copy = Bigstringaf.copy ~off ~len fragment in
-        let iovec = { IOVec.buffer = fragment_copy; off = 0; len } in
-        Lwt.wakeup_later notify (Some iovec));
-    r
-  in
-  Body.of_stream ~length:body_length (Lwt_stream.from read_fn)
-
 let flush_and_close
-    : type a. (module Http_intf.Body with type Write.t = a) -> a -> unit
+    : type a. (module Body.BODY with type Write.t = a) -> a -> unit
   =
  fun (module Http_body) request_body ->
   let module Bodyw = Http_body.Write in
@@ -126,40 +98,37 @@ let flush_and_close
 
 let handle_response
     : type a.
-      (module Http_intf.Body with type Read.t = a)
-      -> (a Connection.ok_ret, string) result Lwt.t
-      -> (a Connection.ok_ret, string) result Lwt.t
-      -> (a Connection.ok_ret, string) result Lwt.t
-      -> (Response.t * Body.t, string) result Lwt.t
+      (module Body.BODY with type Read.t = a)
+      -> (Connection.ok_ret, string) result Lwt.t
+      -> (Connection.ok_ret, string) result Lwt.t
+      -> (Connection.ok_ret, string) result Lwt.t
+      -> (Response.t, string) result Lwt.t
   =
  fun (module Http_body) response_p response_error_p connection_error_p ->
   let open Lwt.Syntax in
+  (* Use `Lwt.choose` specifically so that we don't cancel the error_received
+   * promise. We want it to stick around for subsequent requests on the
+   * connection. *)
   let+ result =
     Lwt.choose [ response_p; response_error_p; connection_error_p ]
   in
   match result with
   | Ok (Connection.C _) ->
     assert false
-  | Ok (R (response, response_body)) ->
+  | Ok (R response) ->
     Log.info (fun m ->
         m
           "@[<v 0>Received response:@]@]@;<0 2>@[<v 0>%a@]@."
           Response.pp_hum
           response);
-    let body =
-      create_response_body
-        (module Http_body)
-        ~body_length:response.body_length
-        response_body
-    in
-    Ok (response, body)
+    Ok response
   | Error _ as error ->
     (* TODO: Close the connection if we receive a connection error *)
     error
 
 let send_request
     :  Connection.t -> body:Body.t -> Request.t
-    -> (Response.t * Body.t, 'err) Lwt_result.t
+    -> (Response.t, 'err) Lwt_result.t
   =
  fun conn ~body request ->
   let open Lwt.Syntax in
@@ -171,10 +140,8 @@ let send_request
   let module Client = Http.Client in
   let module Bodyw = Http.Body.Write in
   let response_received, notify_response_received = Lwt.wait () in
-  let response_handler response response_body =
-    Lwt.wakeup_later
-      notify_response_received
-      (Ok (Connection.R (response, response_body)))
+  let response_handler response =
+    Lwt.wakeup_later notify_response_received (Ok (Connection.R response))
   in
   let error_received, notify_error_received = Lwt.wait () in
   let error_handler = make_error_handler notify_error_received in
@@ -204,9 +171,6 @@ let send_request
           (fun { IOVec.buffer; off; len } ->
             Bodyw.schedule_bigstring request_body ~off ~len buffer)
           stream);
-  (* Use `Lwt.choose` specifically so that we don't cancel the error_received
-   * promise. We want it to stick around for subsequent requests on the
-   * connection. *)
   handle_response
     (module Http.Body)
     response_received
@@ -216,10 +180,8 @@ let send_request
 let create_h2c_connection (module Http2 : Http_intf.HTTP2) ~http_request fd =
   let open Lwt_result.Syntax in
   let response_received, notify_response_received = Lwt.wait () in
-  let response_handler response response_body =
-    Lwt.wakeup_later
-      notify_response_received
-      (Ok (Connection.R (response, response_body)))
+  let response_handler response =
+    Lwt.wakeup_later notify_response_received (Ok (Connection.R response))
   in
   let connection_error_received, notify_error_received = Lwt.wait () in
   let error_handler = make_error_handler notify_error_received in
@@ -246,7 +208,7 @@ let create_h2c_connection (module Http2 : Http_intf.HTTP2) ~http_request fd =
       connection_error_received
   in
   match result with
-  | Ok (response, body) ->
+  | Ok response ->
     let conn =
       Connection.Conn
         { impl = (module Http2)
@@ -256,7 +218,7 @@ let create_h2c_connection (module Http2 : Http_intf.HTTP2) ~http_request fd =
         ; version = Versions.HTTP.v2_0
         }
     in
-    Ok (conn, response, body)
+    Ok (conn, response)
   | Error _ as error ->
     error
 

@@ -1,5 +1,5 @@
 (*----------------------------------------------------------------------------
- * Copyright (c) 2019, António Nuno Monteiro
+ * Copyright (c) 2019-2020, António Nuno Monteiro
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -78,7 +78,7 @@ module Versions : sig
 
     val of_string : string -> (t, string) result
 
-    val pp_hum : Format.formatter -> t -> unit
+    val pp_hum : Format.formatter -> t -> unit [@@ocaml.toplevel_printer]
   end
 
   module ALPN : sig
@@ -170,13 +170,83 @@ module Body : sig
   val drain : t -> unit Lwt.t
 end
 
-module Response : sig
+module Request : sig
+  type message = private
+    { meth : Method.t
+    ; target : string
+    ; version : Versions.HTTP.t
+    ; headers : Headers.t
+    ; scheme : Scheme.t
+    }
+
   type t = private
+    { message : message
+    ; body : Body.t
+    }
+
+  val meth : t -> Method.t
+
+  val headers : t -> Headers.t
+
+  val body : t -> Body.t
+
+  val persistent_connection : t -> bool
+
+  val pp_hum : Format.formatter -> t -> unit [@@ocaml.toplevel_printer]
+end
+
+module Response : sig
+  type message = private
     { status : Status.t
     ; headers : Headers.t
     ; version : Versions.HTTP.t
-    ; body_length : Body.length
     }
+
+  type t = private
+    { message : message
+    ; body : Body.t
+    }
+
+  val create
+    :  ?version:Versions.HTTP.t
+    -> ?headers:Headers.t
+    -> ?body:Body.t
+    -> Status.t
+    -> t
+
+  val of_string
+    :  ?version:Versions.HTTP.t
+    -> ?headers:Headers.t
+    -> body:string
+    -> Status.t
+    -> t
+
+  val of_bigstring
+    :  ?version:Versions.HTTP.t
+    -> ?headers:Headers.t
+    -> body:Bigstringaf.t
+    -> Status.t
+    -> t
+
+  val of_string_stream
+    :  ?version:Versions.HTTP.t
+    -> ?headers:Headers.t
+    -> body:string Lwt_stream.t
+    -> Status.t
+    -> t
+
+  val of_stream
+    :  ?version:Versions.HTTP.t
+    -> ?headers:Headers.t
+    -> body:Bigstringaf.t H2.IOVec.t Lwt_stream.t
+    -> Status.t
+    -> t
+
+  val status : t -> Status.t
+
+  val headers : t -> Headers.t
+
+  val body : t -> Body.t
 
   val persistent_connection : t -> bool
 
@@ -204,41 +274,41 @@ module Client : sig
     :  t
     -> ?headers:(string * string) list
     -> string
-    -> (Response.t * Body.t, string) Lwt_result.t
+    -> (Response.t, string) Lwt_result.t
 
   val get
     :  t
     -> ?headers:(string * string) list
     -> string
-    -> (Response.t * Body.t, string) Lwt_result.t
+    -> (Response.t, string) Lwt_result.t
 
   val post
     :  t
     -> ?headers:(string * string) list
     -> ?body:Body.t
     -> string
-    -> (Response.t * Body.t, string) Lwt_result.t
+    -> (Response.t, string) Lwt_result.t
 
   val put
     :  t
     -> ?headers:(string * string) list
     -> ?body:Body.t
     -> string
-    -> (Response.t * Body.t, string) Lwt_result.t
+    -> (Response.t, string) Lwt_result.t
 
   val patch
     :  t
     -> ?headers:(string * string) list
     -> ?body:Body.t
     -> string
-    -> (Response.t * Body.t, string) Lwt_result.t
+    -> (Response.t, string) Lwt_result.t
 
   val delete
     :  t
     -> ?headers:(string * string) list
     -> ?body:Body.t
     -> string
-    -> (Response.t * Body.t, string) Lwt_result.t
+    -> (Response.t, string) Lwt_result.t
 
   val request
     :  t
@@ -246,7 +316,7 @@ module Client : sig
     -> ?body:Body.t
     -> meth:Method.t
     -> string
-    -> (Response.t * Body.t, string) Lwt_result.t
+    -> (Response.t, string) Lwt_result.t
 
   val shutdown : t -> unit
   (** [shutdown t] tears down the connection [t] and frees up all the resources
@@ -257,41 +327,41 @@ module Client : sig
       :  ?config:Config.t
       -> ?headers:(string * string) list
       -> Uri.t
-      -> (Response.t * Body.t, string) Lwt_result.t
+      -> (Response.t, string) Lwt_result.t
 
     val get
       :  ?config:Config.t
       -> ?headers:(string * string) list
       -> Uri.t
-      -> (Response.t * Body.t, string) Lwt_result.t
+      -> (Response.t, string) Lwt_result.t
 
     val post
       :  ?config:Config.t
       -> ?headers:(string * string) list
       -> ?body:Body.t
       -> Uri.t
-      -> (Response.t * Body.t, string) Lwt_result.t
+      -> (Response.t, string) Lwt_result.t
 
     val put
       :  ?config:Config.t
       -> ?headers:(string * string) list
       -> ?body:Body.t
       -> Uri.t
-      -> (Response.t * Body.t, string) Lwt_result.t
+      -> (Response.t, string) Lwt_result.t
 
     val patch
       :  ?config:Config.t
       -> ?headers:(string * string) list
       -> ?body:Body.t
       -> Uri.t
-      -> (Response.t * Body.t, string) Lwt_result.t
+      -> (Response.t, string) Lwt_result.t
 
     val delete
       :  ?config:Config.t
       -> ?headers:(string * string) list
       -> ?body:Body.t
       -> Uri.t
-      -> (Response.t * Body.t, string) Lwt_result.t
+      -> (Response.t, string) Lwt_result.t
 
     val request
       :  ?config:Config.t
@@ -299,9 +369,45 @@ module Client : sig
       -> ?body:Body.t
       -> meth:Method.t
       -> Uri.t
-      -> (Response.t * Body.t, string) Lwt_result.t
+      -> (Response.t, string) Lwt_result.t
     (** Use another request method. *)
   end
+end
 
-  (* (Httpaf.Response.t * (string, 'a) result) Lwt.t *)
+module Server : sig
+  module Service : sig
+    type ('req, 'resp) t = 'req -> 'resp Lwt.t
+  end
+
+  module Middleware : sig
+    type ('req, 'resp, 'req', 'resp') t =
+      ('req, 'resp) Service.t -> ('req', 'resp') Service.t
+
+    type ('req, 'resp) simple = ('req, 'resp, 'req, 'resp) t
+  end
+
+  module Handler : sig
+    type 'ctx ctx =
+      { ctx : 'ctx
+      ; request : Request.t
+      }
+
+    type 'ctx t = ('ctx ctx, Response.t) Service.t
+
+    val not_found : 'a -> Response.t Lwt.t
+  end
+
+  type 'ctx ctx = 'ctx Handler.ctx =
+    { ctx : 'ctx
+    ; request : Request.t
+    }
+
+  type 'ctx t = 'ctx Handler.t
+
+  val create
+    :  ?config:Httpaf.Config.t
+    -> Unix.sockaddr Handler.t
+    -> Unix.sockaddr
+    -> Httpaf_lwt_unix.Server.socket
+    -> unit Lwt.t
 end

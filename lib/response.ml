@@ -1,5 +1,5 @@
 (*----------------------------------------------------------------------------
- * Copyright (c) 2019, António Nuno Monteiro
+ * Copyright (c) 2019-2020, António Nuno Monteiro
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -31,39 +31,81 @@
 
 module Status = H2.Status
 
-type t =
+type message =
   { (* `H2.Status.t` is a strict superset of `Httpaf.Status.t` *)
     status : Status.t
   ; headers : Headers.t
   ; version : Versions.HTTP.t
-  ; body_length : Body.length
   }
 
-let of_http1 ~request_method response =
+type t =
+  { message : message
+  ; body : Body.t
+  }
+
+let create
+    ?(version = Versions.HTTP.v1_1)
+    ?(headers = Headers.empty)
+    ?(body = Body.empty)
+    status
+  =
+  { message = { status; headers; version }; body }
+
+let of_string ?version ?headers ~body status =
+  create ?version ?headers ~body:(Body.of_string body) status
+
+let of_bigstring ?version ?headers ~body status =
+  create ?version ?headers ~body:(Body.of_bigstring body) status
+
+let of_string_stream ?version ?headers ~body status =
+  create ?version ?headers ~body:(Body.of_string_stream body) status
+
+let of_stream ?version ?headers ~body status =
+  create ?version ?headers ~body:(Body.of_stream body) status
+
+let status { message = { status; _ }; _ } = status
+
+let headers { message = { headers; _ }; _ } = headers
+
+let body { body; _ } = body
+
+let of_message_and_body message body = { message; body }
+
+let of_http1 ?(body = Body.empty) response =
   let { Httpaf.Response.status; version; headers; _ } = response in
-  { status = (status :> Status.t)
-  ; headers = H2.Headers.of_rev_list (Httpaf.Headers.to_rev_list headers)
-  ; version
-  ; body_length =
-      (Httpaf.Response.body_length ~request_method response :> Body.length)
+  { message =
+      { status = (status :> Status.t)
+      ; headers = H2.Headers.of_rev_list (Httpaf.Headers.to_rev_list headers)
+      ; version
+      }
+  ; body
   }
 
-let of_h2 response =
+let to_http1 { message = { status; headers; version }; _ } =
+  let http1_headers =
+    Httpaf.Headers.of_rev_list (H2.Headers.to_rev_list headers)
+  in
+  let status =
+    match status with
+    | #Httpaf.Status.t as http1_status ->
+      http1_status
+    | `Misdirected_request ->
+      `Code (H2.Status.to_code status)
+  in
+  Httpaf.Response.create ~version ~headers:http1_headers status
+
+let of_h2 ?(body = Body.empty) response =
   let { H2.Response.status; headers } = response in
   (* Remove this header to make the output compatible with HTTP/1. This is the
    * only pseudo-header that can appear in HTTP/2.0 responses, and H2 checks
    * that there aren't others. *)
   let headers = H2.Headers.remove headers ":status" in
-  { status
-  ; headers
-  ; version = { major = 2; minor = 0 }
-  ; body_length = (H2.Response.body_length response :> Body.length)
-  }
+  { message = { status; headers; version = { major = 2; minor = 0 } }; body }
 
-let persistent_connection { version; headers; _ } =
+let persistent_connection { message = { version; headers; _ }; _ } =
   Message.persistent_connection version headers
 
-let pp_hum formatter { headers; status; version; _ } =
+let pp_hum formatter { message = { headers; status; version; _ }; _ } =
   let format_header formatter (name, value) =
     Format.fprintf formatter "%s: %s" name value
   in

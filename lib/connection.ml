@@ -1,5 +1,5 @@
 (*----------------------------------------------------------------------------
- * Copyright (c) 2019, António Nuno Monteiro
+ * Copyright (c) 2019-2020, António Nuno Monteiro
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -139,12 +139,12 @@ type t =
              with type Client.t = 'a
               and type Body.Read.t = 'b)
       ; handle : 'a
-      ; connection_error_received : ('b ok_ret, string) result Lwt.t
+      ; connection_error_received : (ok_ret, string) result Lwt.t
       ; fd : Lwt_unix.file_descr
       ; version : Version.t  (** HTTP version that this connection speaks *)
       }
       -> t
 
-and 'body ok_ret =
+and ok_ret =
   | C of t
-  | R of (Response.t * 'body)
+  | R of Response.t

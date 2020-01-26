@@ -1,5 +1,5 @@
 (*----------------------------------------------------------------------------
- * Copyright (c) 2019, António Nuno Monteiro
+ * Copyright (c) 2019-2020, António Nuno Monteiro
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -149,20 +149,20 @@ let inflate_and_print stream =
   in
   Printf.printf "%s" (Buffer.contents result_buf)
 
-let handle_response ~cli response response_body =
+let handle_response ~cli { Response.message; body } =
   let open Lwt.Syntax in
   let { head; compressed; _ } = cli in
   let+ () =
     if head then (
-      Logs.app (fun m -> m "%a" pp_response_headers response);
-      Lwt.async (fun () -> Body.drain response_body);
+      Logs.app (fun m -> m "%a" pp_response_headers message);
+      Lwt.async (fun () -> Body.drain body);
       Lwt.return_unit)
     else
-      match compressed, Headers.get response.headers "content-encoding" with
+      match compressed, Headers.get message.headers "content-encoding" with
       | true, Some encoding when String.lowercase_ascii encoding = "gzip" ->
         (* We requested a compressed response, and we got a compressed response
          * back. *)
-        let* response_body_str = Body.to_string response_body in
+        let* response_body_str = Body.to_string body in
         (match Ezgzip.decompress response_body_str with
         | Ok body_str ->
           Lwt_io.printf "%s" body_str
@@ -171,12 +171,12 @@ let handle_response ~cli response response_body =
       | true, Some encoding when String.lowercase_ascii encoding = "deflate" ->
         (* We requested a compressed response, and we got a compressed response
          * back. *)
-        let response_body_stream = Body.to_string_stream response_body in
+        let response_body_stream = Body.to_string_stream body in
         inflate_and_print response_body_stream
       | _ ->
         Lwt_stream.iter
           (fun body_fragment -> Printf.printf "%s" body_fragment)
-          (Body.to_string_stream response_body)
+          (Body.to_string_stream body)
   in
   `Ok ()
 
@@ -204,8 +204,8 @@ let request ~cli ~config uri =
   in
   let* res = Client.request ~config ~meth ~headers ?body uri in
   match res with
-  | Ok (response, response_body) ->
-    handle_response ~cli response response_body
+  | Ok response ->
+    handle_response ~cli response
   | Error e ->
     Lwt.return (`Error (false, e))
 
