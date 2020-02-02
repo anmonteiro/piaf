@@ -184,6 +184,8 @@ module Request : sig
     ; body : Body.t
     }
 
+  val uri : t -> Uri.t
+
   val meth : t -> Method.t
 
   val headers : t -> Headers.t
