@@ -13,6 +13,6 @@ jobs:
     - uses: cachix/cachix-action@v3
       with:
         name: anmonteiro
-        file: nix/default.nix
+        file: nix/ci/test.nix
         attributes: native musl64
         signingKey: '${{ secrets.CACHIX_SIGNING_KEY }}'

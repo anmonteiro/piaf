@@ -44,7 +44,7 @@ type t =
 
 let uri { message = { target; _ }; _ } =
   (* TODO: add host too? *)
-  Uri.of_string target
+  Uri.(canonicalize (of_string target))
 
 let meth { message = { meth; _ }; _ } = meth
 
@@ -52,7 +52,7 @@ let headers { message = { headers; _ }; _ } = headers
 
 let body { body; _ } = body
 
-let create ~scheme ~version ?(headers = Headers.empty) meth target ~body =
+let create ~scheme ~version ?(headers = Headers.empty) ~meth ~body target =
   { message = { meth; target; version; headers; scheme }; body }
 
 let of_http1 ?(body = Body.empty) request =

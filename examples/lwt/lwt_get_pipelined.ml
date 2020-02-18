@@ -28,22 +28,23 @@ let request host =
   let* client =
     Client.create
       ~config:
-        { Config.default_config with
-          follow_redirects = true
-        ; allow_insecure = true
-        }
+        { Config.default with follow_redirects = true; allow_insecure = true }
       (Uri.of_string host)
   in
-  let* _response, response_body = Client.get client "/" in
+  let* response = Client.get client "/" in
   let open Lwt_syntax.Async in
   let* () =
-    Lwt_stream.iter_s (fun chunk -> Lwt_io.printf "%s" chunk) response_body
+    Lwt_stream.iter_s
+      (fun chunk -> Lwt_io.printf "%s" chunk)
+      (Response.body response |> Body.to_string_stream)
   in
   let open Lwt_syntax.Result in
-  let* _response, response_body = Client.get client "/blog" in
+  let* response = Client.get client "/blog" in
   let open Lwt_syntax.Async in
   let+ () =
-    Lwt_stream.iter_s (fun chunk -> Lwt_io.printf "%s" chunk) response_body
+    Lwt_stream.iter_s
+      (fun chunk -> Lwt_io.printf "%s" chunk)
+      (Response.body response |> Body.to_string_stream)
   in
   Ok ()
 

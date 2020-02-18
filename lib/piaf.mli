@@ -184,6 +184,15 @@ module Request : sig
     ; body : Body.t
     }
 
+  val create
+    :  scheme:Scheme.t
+    -> version:Versions.HTTP.t
+    -> ?headers:Headers.t
+    -> meth:Method.t
+    -> body:Body.t
+    -> string
+    -> t
+
   val uri : t -> Uri.t
 
   val meth : t -> Method.t
@@ -243,6 +252,8 @@ module Response : sig
     -> body:Bigstringaf.t H2.IOVec.t Lwt_stream.t
     -> Status.t
     -> t
+
+  val of_file : ?version:Versions.HTTP.t -> ?headers:Headers.t -> string -> t
 
   val status : t -> Status.t
 
@@ -412,4 +423,59 @@ module Server : sig
     -> Unix.sockaddr
     -> Httpaf_lwt_unix.Server.socket
     -> unit Lwt.t
+end
+
+module Cookies : sig
+  type expiration =
+    [ `Session
+    | `Max_age of int64
+    ]
+
+  type same_site =
+    [ `None
+    | `Lax
+    | `Strict
+    ]
+
+  type cookie = string * string
+
+  module Set_cookie : sig
+    type t
+
+    val make
+      :  ?expiration:expiration
+      -> ?path:string
+      -> ?domain:string
+      -> ?secure:bool
+      -> ?http_only:bool
+      -> ?same_site:same_site
+      -> cookie
+      -> t
+
+    val with_expiration : t -> expiration -> t
+
+    val with_path : t -> string -> t
+
+    val with_domain : t -> string -> t
+
+    val with_secure : t -> bool -> t
+
+    val with_http_only : t -> bool -> t
+
+    val with_same_site : t -> same_site -> t
+
+    val serialize : t -> cookie
+
+    val parse : Headers.t -> (string * t) list
+
+    val key : t -> string
+
+    val value : t -> string
+  end
+
+  module Cookie : sig
+    val parse : Headers.t -> (string * string) list
+
+    val serialize : (string * string) list -> cookie
+  end
 end
