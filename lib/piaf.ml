@@ -40,3 +40,4 @@ module Scheme = Scheme
 module Status = H2.Status
 module Versions = Versions
 module Server = Server
+module Cookies = Cookies

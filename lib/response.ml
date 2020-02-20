@@ -29,6 +29,7 @@
  * POSSIBILITY OF SUCH DAMAGE.
  *---------------------------------------------------------------------------*)
 
+open Monads
 module Status = H2.Status
 
 type message =
@@ -43,6 +44,7 @@ type t =
   ; body : Body.t
   }
 
+(* TODO: Add content-length... *)
 let create
     ?(version = Versions.HTTP.v1_1)
     ?(headers = Headers.empty)
@@ -62,6 +64,25 @@ let of_string_stream ?version ?headers ~body status =
 
 let of_stream ?version ?headers ~body status =
   create ?version ?headers ~body:(Body.of_stream body) status
+
+let of_file ?version ?(headers = Headers.empty) path =
+  let mime = Magic_mime.lookup path in
+  let headers =
+    Headers.(
+      add_unless_exists
+        (add_unless_exists headers "content-type" mime)
+        "transfer-encoding"
+        "chunked")
+  in
+  let stream, push = Lwt_stream.create () in
+  Lwt.async (fun () ->
+      Lwt_io.with_file ~flags:[ O_RDONLY ] ~mode:Lwt_io.input path (fun ic ->
+          let open Lwt.Syntax in
+          (* TODO: Read chunks *)
+          let+ contents = Lwt_io.read ic in
+          push (Some contents);
+          push None));
+  create ?version ~headers ~body:(Body.of_string_stream stream) `OK
 
 let status { message = { status; _ }; _ } = status
 

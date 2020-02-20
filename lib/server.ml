@@ -30,6 +30,11 @@
  *---------------------------------------------------------------------------*)
 
 open Monads
+
+let src = Logs.Src.create "piaf.server" ~doc:"Piaf Server module"
+
+module Log = (val Logs.src_log src : Logs.LOG)
+
 module IOVec = H2.IOVec
 module Reqd = Httpaf.Reqd
 
@@ -104,35 +109,50 @@ let create ?config handler =
     let request = Request.of_http1 ~body:request_body request in
     Lwt.async (fun () ->
         let open Lwt.Syntax in
-        let+ ({ Response.body; _ } as response) =
-          handler { ctx = client_addr; request }
-        in
-        let response = add_length_related_headers response in
-        match Body.contents body with
-        | `Empty ->
-          Reqd.respond_with_bigstring
-            reqd
-            (Response.to_http1 response)
-            Bigstringaf.empty
-        | `String s ->
-          Reqd.respond_with_string reqd (Response.to_http1 response) s
-        | `Bigstring { IOVec.buffer; off; len } ->
-          let bstr = Bigstringaf.sub ~off ~len buffer in
-          Reqd.respond_with_bigstring reqd (Response.to_http1 response) bstr
-        | `Stream stream ->
-          let response_body =
-            Reqd.respond_with_streaming reqd (Response.to_http1 response)
-          in
-          Lwt.async (fun () ->
-              (* TODO: should we use `Lwt.on_success` and close the stream once
-               * uploaded? Might be better for preventing leaks. *)
-              let+ () = Lwt_stream.closed stream in
-              flush_and_close response_body);
-          Lwt.ignore_result
-            (Lwt_stream.iter
-               (fun { IOVec.buffer; off; len } ->
-                 Httpaf.Body.schedule_bigstring response_body ~off ~len buffer)
-               stream))
+        Lwt.catch
+          (fun () ->
+            let+ ({ Response.body; _ } as response) =
+              handler { ctx = client_addr; request }
+            in
+            let response = add_length_related_headers response in
+            match Body.contents body with
+            | `Empty ->
+              Reqd.respond_with_bigstring
+                reqd
+                (Response.to_http1 response)
+                Bigstringaf.empty
+            | `String s ->
+              Reqd.respond_with_string reqd (Response.to_http1 response) s
+            | `Bigstring { IOVec.buffer; off; len } ->
+              let bstr = Bigstringaf.sub ~off ~len buffer in
+              Reqd.respond_with_bigstring reqd (Response.to_http1 response) bstr
+            | `Stream stream ->
+              let response_body =
+                Reqd.respond_with_streaming reqd (Response.to_http1 response)
+              in
+              Lwt.async (fun () ->
+                  (* TODO: should we use `Lwt.on_success` and close the stream once
+                   * uploaded? Might be better for preventing leaks. *)
+                  let+ () = Lwt_stream.closed stream in
+                  flush_and_close response_body);
+              Lwt.ignore_result
+                (Lwt_stream.iter
+                   (fun { IOVec.buffer; off; len } ->
+                     Httpaf.Body.schedule_bigstring
+                       response_body
+                       ~off
+                       ~len
+                       buffer)
+                   stream))
+          (fun exn ->
+            Log.err (fun m ->
+                let backtrace = Printexc.get_backtrace () in
+                m
+                  "Exception while handling request: %s.@]@;%s"
+                  (Printexc.to_string exn)
+                  backtrace);
+            Reqd.report_exn reqd exn;
+            Lwt.return_unit))
   in
   Httpaf_lwt_unix.Server.create_connection_handler
     ?config

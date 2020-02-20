@@ -1,13 +1,15 @@
-{ pkgs, stdenv, lib, ocamlPackages, static ? false }:
+{ pkgs, stdenv, lib, ocamlPackages, static ? false, doCheck }:
+
+with ocamlPackages;
 
 rec {
-  piaf = ocamlPackages.buildDune2Package {
+  piaf = buildDune2Package {
     pname = "piaf";
     version = "0.0.1-dev";
 
     src = lib.gitignoreSource ./..;
-    nativeBuildInputs = with ocamlPackages; [dune_2];
-    propagatedBuildInputs = with ocamlPackages; [
+
+    propagatedBuildInputs = [
       bigstringaf
       httpaf
       httpaf-lwt-unix
@@ -15,11 +17,14 @@ rec {
       h2-lwt-unix
       logs
       lwt_ssl
+      magic-mime
       ssl
       uri
+
+      alcotest
     ];
 
-    doCheck = false;
+    inherit doCheck;
 
     meta = {
       description = "Client library for HTTP/1.X / HTTP/2 written entirely in OCaml.";
@@ -33,7 +38,7 @@ rec {
 
     src = lib.gitignoreSource ./..;
 
-    nativeBuildInputs = with ocamlPackages; [dune_2 ocaml findlib];
+    nativeBuildInputs = [dune_2 ocaml findlib];
 
     buildPhase = ''
       echo "running ${if static then "static" else "release"} build"
@@ -44,7 +49,7 @@ rec {
       mv _build/default/bin/carl.exe $out/bin/carl
     '';
 
-    buildInputs = with ocamlPackages; [
+    buildInputs = [
       piaf
       cmdliner
       fmt
@@ -52,7 +57,7 @@ rec {
       ezgzip
     ];
 
-    doCheck = false;
+    inherit doCheck;
 
     meta = {
       description = "Client library for HTTP/1.X / HTTP/2 written entirely in OCaml.";

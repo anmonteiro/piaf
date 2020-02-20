@@ -353,7 +353,13 @@ let make_request_info
       headers
   in
   let request =
-    Request.create meth ~version ~scheme ~headers:canonical_headers ~body target
+    Request.create
+      ~meth
+      ~version
+      ~scheme
+      ~headers:canonical_headers
+      ~body
+      target
   in
   { remaining_redirects; headers; request; meth; target; is_h2c_upgrade }
 
