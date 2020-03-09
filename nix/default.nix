@@ -1,4 +1,4 @@
-{ pkgs ? import ./sources.nix {}, doCheck ? false, ocamlVersion ? "4_09" }:
+{ pkgs ? import ./sources.nix {}, doCheck ? false, ocamlVersion ? "4_10" }:
 
 let
   pkgsCross = pkgs.pkgsCross.musl64.pkgsStatic;
