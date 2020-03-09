@@ -1,5 +1,7 @@
+{ ocamlVersion }:
+
 let
-  pkgs = import ../sources.nix {};
+  pkgs = import ../sources.nix { inherit ocamlVersion; };
   inherit (pkgs) lib stdenv fetchTarball ocamlPackages;
 
   piafPkgs =  (import ./.. {
