@@ -15,6 +15,7 @@ depends: [
   "ocaml-syntax-shims"
   "bigstringaf" {>= "0.5.0"}
   "httpaf"
+  "httpaf-lwt"
   "httpaf-lwt-unix"
   "h2" {>= "0.5.0"}
   "h2-lwt-unix" {>= "0.5.0"}
