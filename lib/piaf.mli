@@ -331,7 +331,7 @@ module Client : sig
     -> string
     -> (Response.t, string) Lwt_result.t
 
-  val shutdown : t -> unit
+  val shutdown : t -> unit Lwt.t
   (** [shutdown t] tears down the connection [t] and frees up all the resources
       associated with it. *)
 

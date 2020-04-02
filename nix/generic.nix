@@ -3,11 +3,13 @@
 with ocamlPackages;
 
 rec {
-  piaf = buildDune2Package {
+  piaf = buildDunePackage {
     pname = "piaf";
     version = "0.0.1-dev";
 
     src = lib.gitignoreSource ./..;
+
+    useDune2 = true;
 
     propagatedBuildInputs = [
       bigstringaf
