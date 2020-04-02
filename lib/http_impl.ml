@@ -223,6 +223,7 @@ let create_h2c_connection (module Http2 : Http_intf.HTTP2) ~http_request fd =
     error
 
 let shutdown
-    : type a. (module Http_intf.HTTPCommon with type Client.t = a) -> a -> unit
+    : type a.
+      (module Http_intf.HTTPCommon with type Client.t = a) -> a -> unit Lwt.t
   =
  fun (module Http) conn -> Http.Client.shutdown conn

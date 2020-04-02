@@ -212,7 +212,7 @@ let drain_response_body_and_shutdown
    * This is to avoid leaking memory. We're not going to use this
    * response body so it doesn't need to stay around. *)
   Lwt.async (fun () ->
-      let+ () = Body.drain_available response_body in
+      let* () = Body.drain_available response_body in
       Log.info (fun m ->
           m "Tearing down connection to %a" Connection_info.pp_hum conn_info);
       HTTPImpl.Client.shutdown handle)
@@ -464,7 +464,23 @@ module Oneshot = struct
     let target = Uri.path_and_query t.uri in
     let request_info = make_request_info t ~meth ~headers ~body target in
     t.persistent <- Request.persistent_connection request_info.request;
-    send_request_and_handle_response t ~body request_info
+    let response_result =
+      send_request_and_handle_response t ~body request_info
+    in
+    Lwt.async (fun () ->
+        let open Lwt.Syntax in
+        let* response = response_result in
+        match response with
+        | Ok { Response.body; _ } ->
+          (match body.contents with
+          | `Empty | `String _ | `Bigstring _ ->
+            shutdown t
+          | `Stream stream ->
+            let* () = Lwt_stream.closed stream in
+            shutdown t)
+        | Error _ ->
+          Lwt.return_unit);
+    response_result
 
   let request ?config ?headers ?body ~meth uri =
     call ?config ?headers ?body ~meth uri
