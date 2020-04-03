@@ -281,7 +281,11 @@ module Client : sig
 
   val create : ?config:Config.t -> Uri.t -> (t, string) Lwt_result.t
   (** [create ?config uri] opens a connection to [uri] (initially) that can be
-      used to issue multiple requests to the remote endpoint. *)
+      used to issue multiple requests to the remote endpoint.
+
+      A client instance represents a connection to a single remote endpoint, and
+      the remaining functions in this module will issue requests to that
+      endpoint only. *)
 
   val head
     :  t
@@ -331,7 +335,7 @@ module Client : sig
     -> string
     -> (Response.t, string) Lwt_result.t
 
-  val shutdown : t -> unit
+  val shutdown : t -> unit Lwt.t
   (** [shutdown t] tears down the connection [t] and frees up all the resources
       associated with it. *)
 
