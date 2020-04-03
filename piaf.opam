@@ -24,6 +24,7 @@ depends: [
   "ssl"
   "lwt_ssl"
   "uri"
+  "magic-mime"
 ]
 pin-depends: [
   [ "httpaf.dev" "git+https://github.com/anmonteiro/httpaf.git#fork" ]
