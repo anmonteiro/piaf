@@ -51,7 +51,7 @@ module type Client = sig
   type write_body
 
   val create_connection
-    :  ?config:Config.t
+    :  config:Config.t
     -> error_handler:error_handler
     -> socket
     -> t Lwt.t

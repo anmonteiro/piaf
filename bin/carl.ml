@@ -250,7 +250,8 @@ let piaf_config_of_cli
     Error msg
   | _, _ ->
     Ok
-      { Config.follow_redirects
+      { Config.default with
+        follow_redirects
       ; max_redirects
       ; max_http_version
       ; h2c_upgrade
@@ -295,11 +296,7 @@ module CLI = struct
   let cacert =
     let doc = "CA certificate to verify peer against" in
     let docv = "file" in
-    Arg.(
-      value
-      & opt (some string) (* lol nix *) None
-      (* (Some "/Users/anmonteiro/.nix-profile/etc/ssl/certs/ca-bundle.crt") *)
-      & info [ "cacert" ] ~doc ~docv)
+    Arg.(value & opt (some string) None & info [ "cacert" ] ~doc ~docv)
 
   let capath =
     let doc = "CA directory to verify peer against" in

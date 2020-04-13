@@ -68,7 +68,8 @@ module MakeHTTP1 (Httpaf_client : Httpaf_lwt.Client) :
     type response_handler = Response.t -> unit
 
     (* Error handler for HTTP/1 connections isn't used *)
-    let create_connection ?config:_ ~error_handler:_ fd = create_connection fd
+    let create_connection ~config ~error_handler:_ fd =
+      create_connection ~config:(Config.to_http1_config config) fd
 
     let request
         t ({ Request.message; _ } as req) ~error_handler ~response_handler

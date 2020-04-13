@@ -71,8 +71,9 @@ module MakeHTTP2 (H2_client : H2_lwt.Client) :
   module Client = struct
     include H2_client
 
-    let create_connection ?config:_ ~error_handler fd =
+    let create_connection ~config ~error_handler fd =
       create_connection
+        ~config:(Config.to_http2_config config)
         ~error_handler:(make_error_handler error_handler `Connection)
         fd
 
