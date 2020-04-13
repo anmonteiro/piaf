@@ -29,9 +29,12 @@
  * POSSIBILITY OF SUCH DAMAGE.
  *---------------------------------------------------------------------------*)
 
+let src = Logs.Src.create "piaf.config" ~doc:"Piaf Config module"
+
+module Log = (val Logs.src_log src : Logs.LOG)
+
 (* TODO:
  * - Authentication
- * - Buffer sizes (for http/af / h2)?
  * - Timeouts?
  *)
 
@@ -57,7 +60,15 @@ type t =
   ; min_tls_version : Versions.TLS.t
   ; max_tls_version : Versions.TLS.t
   ; tcp_nodelay : bool
-  ; connect_timeout : float
+  ; connect_timeout : float (* Buffer sizes *)
+  ; buffer_size : int
+        (** Buffer size used for requests and responses. Defaults to 16384 bytes *)
+  ; body_buffer_size : int
+        (** Buffer size used for request and response bodies. *)
+  ; enable_http2_server_push : bool
+        (** TODO(anmonteiro): these are HTTP/2 specific and we're probably OK
+            with the defaults *)
+        (* ; max_concurrent_streams : int ; initial_window_size : int *)
   }
 
 let default =
@@ -73,8 +84,38 @@ let default =
   ; max_tls_version = TLSv1_3
   ; tcp_nodelay = true
   ; connect_timeout = 30.0
+  ; buffer_size = 0x4000
+  ; body_buffer_size = 0x1000
+  ; (* TODO: we don't really support push yet. *)
+    enable_http2_server_push = false
   }
 
-let to_http1_config _ = None
+let to_http1_config { body_buffer_size; buffer_size; _ } =
+  { Httpaf.Config.read_buffer_size = buffer_size
+  ; response_buffer_size = buffer_size
+  ; request_body_buffer_size = body_buffer_size
+  ; response_body_buffer_size = body_buffer_size
+  }
 
-let to_http2_config _ = None
+let to_http2_config
+    { enable_http2_server_push; body_buffer_size; buffer_size; _ }
+  =
+  let h2_default_buffer_size = H2.Config.default.read_buffer_size in
+  let buffer_size =
+    if buffer_size < h2_default_buffer_size then (
+      Logs.warn (fun m ->
+          m
+            "Configured buffer size is smaller than the allowed by the HTTP/2 \
+             specification (%d). Defaulting to %d bytes."
+            buffer_size
+            h2_default_buffer_size);
+      h2_default_buffer_size)
+    else
+      buffer_size
+  in
+  { H2.Config.default with
+    read_buffer_size = buffer_size
+  ; request_body_buffer_size = body_buffer_size
+  ; response_body_buffer_size = body_buffer_size
+  ; enable_server_push = enable_http2_server_push
+  }

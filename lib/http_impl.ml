@@ -56,16 +56,19 @@ let make_error_handler notify_response_received (_, error) =
 let create_connection
     : type a.
       (module Http_intf.HTTPCommon with type Client.socket = a)
+      -> config:Config.t
       -> version:Versions.HTTP.t
       -> fd:Lwt_unix.file_descr
       -> a
       -> (Connection.t, string) result Lwt.t
   =
- fun (module Http_impl) ~version ~fd socket ->
+ fun (module Http_impl) ~config ~version ~fd socket ->
   let open Lwt.Syntax in
   let error_received, notify_error_received = Lwt.wait () in
   let error_handler = make_error_handler notify_error_received in
-  let* handle = Http_impl.Client.create_connection ~error_handler socket in
+  let* handle =
+    Http_impl.Client.create_connection ~config ~error_handler socket
+  in
   let conn =
     Connection.Conn
       { impl = (module Http_impl)

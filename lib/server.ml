@@ -155,6 +155,6 @@ let create ?config handler =
             Lwt.return_unit))
   in
   Httpaf_lwt_unix.Server.create_connection_handler
-    ?config
+    ?config:(Option.map Config.to_http1_config config)
     ~request_handler
     ~error_handler

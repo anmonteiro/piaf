@@ -68,7 +68,7 @@ let create_http_connection ~config fd =
       in
       (module Http1.HTTP : Http_intf.HTTP), version
   in
-  Http_impl.create_connection (module Http) ~version ~fd fd
+  Http_impl.create_connection (module Http) ~config ~version ~fd fd
 
 let create_https_connection ~config ~conn_info fd =
   let { Connection_info.host; _ } = conn_info in
@@ -122,7 +122,7 @@ let create_https_connection ~config ~conn_info fd =
            * protocol that we didn't specify. *)
           assert false)
     in
-    Http_impl.create_connection (module Https) ~version ~fd ssl_client
+    Http_impl.create_connection (module Https) ~config ~version ~fd ssl_client
 
 let close_connection ~conn_info fd =
   Log.info (fun m ->
@@ -201,11 +201,12 @@ let change_connection t conn_info =
   t.conn <- conn';
   t.conn_info <- conn_info
 
-let drain_response_body_and_shutdown
-    (Connection.Conn { impl = (module HTTPImpl); handle; _ })
-    ~conn_info
-    response_body
-  =
+let shutdown { conn = Connection.Conn { impl; handle; _ }; conn_info; _ } =
+  Log.info (fun m ->
+      m "Tearing down connection to %a" Connection_info.pp_hum conn_info);
+  Http_impl.shutdown (module (val impl)) handle
+
+let drain_response_body_and_shutdown t response_body =
   let open Lwt.Syntax in
   Log.debug (fun m -> m "Ignoring the response body");
   (* Junk what's available because we're going to close the connection.
@@ -213,9 +214,7 @@ let drain_response_body_and_shutdown
    * response body so it doesn't need to stay around. *)
   Lwt.async (fun () ->
       let* () = Body.drain_available response_body in
-      Log.info (fun m ->
-          m "Tearing down connection to %a" Connection_info.pp_hum conn_info);
-      HTTPImpl.Client.shutdown handle)
+      shutdown t)
 
 (* returns true if it succeeding in reusing the connection, false otherwise. *)
 let reuse_or_set_up_new_connection
@@ -400,7 +399,7 @@ let rec send_request_and_handle_response
     if did_reuse then
       Lwt.async (fun () -> Body.drain response.body)
     else
-      drain_response_body_and_shutdown conn ~conn_info response.body;
+      drain_response_body_and_shutdown t response.body;
     let target = Uri.path_and_query new_uri in
     let request_info' =
       make_request_info
@@ -421,9 +420,6 @@ let create ?(config = Config.default) uri =
   let* conn_info = Connection_info.of_uri uri in
   let+ conn = open_connection ~config conn_info in
   { conn; conn_info; persistent = true; uri; config }
-
-let shutdown { conn = Connection.Conn { impl; handle; _ }; _ } =
-  Http_impl.shutdown (module (val impl)) handle
 
 let call t ~meth ?(headers = []) ?(body = Body.empty) target =
   let open Lwt_result.Syntax in
