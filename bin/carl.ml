@@ -93,13 +93,21 @@ let format_header formatter (name, value) =
   Format.fprintf formatter "%a: %s" Fmt.(styled `Bold string) name value
 
 let pp_response_headers formatter { Response.headers; status; version; _ } =
+  let reason_phrase =
+    match status with
+    | #Status.standard as st ->
+      Format.asprintf " %s" (Status.default_reason_phrase st)
+    | `Code _ ->
+      ""
+  in
   Format.fprintf
     formatter
-    "@[%a %a@]@\n@[%a@]"
+    "@[%a %a%s@]@\n@[%a@]"
     Versions.HTTP.pp_hum
     version
     Status.pp_hum
     status
+    reason_phrase
     (Format.pp_print_list
        ~pp_sep:(fun f () -> Format.fprintf f "@\n")
        format_header)
