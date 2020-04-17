@@ -88,7 +88,7 @@ let add_length_related_headers ({ Response.message; body } as response) =
     | `Chunked ->
       Headers.add_unless_exists headers "transfer-encoding" "chunked"
     | `Close_delimited ->
-      Headers.add_unless_exists headers "transfer-encoding" "close"
+      Headers.add_unless_exists headers "connection" "close"
     | `Error _ | `Unknown ->
       headers
   in
