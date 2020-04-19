@@ -183,7 +183,9 @@ let handle_response ~cli { Response.message; body } =
         inflate_and_print response_body_stream
       | _ ->
         Lwt_stream.iter
-          (fun body_fragment -> Printf.printf "%s" body_fragment)
+          (fun body_fragment ->
+            Printf.printf "%s" body_fragment;
+            flush stdout)
           (Body.to_string_stream body)
   in
   `Ok ()

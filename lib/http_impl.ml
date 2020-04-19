@@ -94,8 +94,8 @@ let flush_and_close
   =
  fun (module Http_body) request_body ->
   let module Bodyw = Http_body.Write in
+  Bodyw.close_writer request_body;
   Bodyw.flush request_body (fun () ->
-      Bodyw.close_writer request_body;
       Log.info (fun m ->
           m "Request body has been completely and successfully uploaded"))
 
