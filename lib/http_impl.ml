@@ -54,27 +54,28 @@ let make_error_handler notify_response_received (_, error) =
   Lwt.wakeup notify_response_received (Error error_str)
 
 let create_connection
-    : type a.
-      (module Http_intf.HTTPCommon with type Client.socket = a)
+    : type a r.
+      (module Http_intf.HTTPCommon
+         with type Client.socket = a
+          and type Client.runtime = r)
       -> config:Config.t
       -> version:Versions.HTTP.t
-      -> fd:Lwt_unix.file_descr
       -> a
       -> (Connection.t, string) result Lwt.t
   =
- fun (module Http_impl) ~config ~version ~fd socket ->
+ fun (module Http_impl) ~config ~version socket ->
   let open Lwt.Syntax in
   let error_received, notify_error_received = Lwt.wait () in
   let error_handler = make_error_handler notify_error_received in
-  let* handle =
+  let* handle, runtime =
     Http_impl.Client.create_connection ~config ~error_handler socket
   in
   let conn =
     Connection.Conn
       { impl = (module Http_impl)
       ; handle
+      ; runtime
       ; connection_error_received = error_received
-      ; fd
       ; version
       }
   in
@@ -180,54 +181,68 @@ let send_request
     error_received
     connection_error_received
 
-let create_h2c_connection (module Http2 : Http_intf.HTTP2) ~http_request fd =
-  let open Lwt_result.Syntax in
-  let response_received, notify_response_received = Lwt.wait () in
-  let response_handler response =
-    Lwt.wakeup_later notify_response_received (Ok (Connection.R response))
-  in
-  let connection_error_received, notify_error_received = Lwt.wait () in
-  let error_handler = make_error_handler notify_error_received in
-  let response_error_received, notify_response_error_received = Lwt.wait () in
-  let response_error_handler =
-    make_error_handler notify_response_error_received
-  in
-  let http_request = Request.to_http1 http_request in
-  let* handle =
-    Http2.Client.create_h2c_connection
-      ~http_request
-      ~error_handler
-      (response_handler, response_error_handler)
-      fd
-  in
-  Log.info (fun m -> m "Connection state changed (HTTP/2 confirmed)");
-  (* Doesn't write the body by design. The server holds on to the HTTP/1.1 body
-   * that was sent as part of the upgrade. *)
-  let open Lwt.Syntax in
-  let+ result =
-    handle_response
-      (module Http2.Body)
-      response_received
-      response_error_received
-      connection_error_received
-  in
-  match result with
-  | Ok response ->
-    let conn =
-      Connection.Conn
-        { impl = (module Http2)
-        ; handle
-        ; connection_error_received
-        ; fd
-        ; version = Versions.HTTP.v2_0
-        }
+let create_h2c_connection
+    :  config:Config.t -> http_request:Request.t -> Scheme.Runtime.t
+    -> (Connection.t * Response.t, string) result Lwt.t
+  =
+ fun ~config ~http_request runtime ->
+  match runtime with
+  | HTTP http_runtime ->
+    let (module Http2) = (module Http2.HTTP : Http_intf.HTTP2) in
+    let response_received, notify_response_received = Lwt.wait () in
+    let response_handler response =
+      Lwt.wakeup_later notify_response_received (Ok (Connection.R response))
     in
-    Ok (conn, response)
-  | Error _ as error ->
-    error
+    let connection_error_received, notify_error_received = Lwt.wait () in
+    let error_handler = make_error_handler notify_error_received in
+    let response_error_received, notify_response_error_received = Lwt.wait () in
+    let response_error_handler =
+      make_error_handler notify_response_error_received
+    in
+    let http_request = Request.to_http1 http_request in
+    (match
+       Http2.Client.create_h2c
+         ~config
+         ~http_request
+         ~error_handler
+         (response_handler, response_error_handler)
+         http_runtime
+     with
+    | Ok handle ->
+      Log.info (fun m -> m "Connection state changed (HTTP/2 confirmed)");
+      (* Doesn't write the body by design. The server holds on to the HTTP/1.1 body
+       * that was sent as part of the upgrade. *)
+      let open Lwt.Syntax in
+      let+ result =
+        handle_response
+          (module Http2.Body)
+          response_received
+          response_error_received
+          connection_error_received
+      in
+      (match result with
+      | Ok response ->
+        let connection =
+          Connection.Conn
+            { impl = (module Http2)
+            ; handle
+            ; runtime
+            ; connection_error_received
+            ; version = Versions.HTTP.v2_0
+            }
+        in
+        Ok (connection, response)
+      | Error _ as error ->
+        error)
+    | Error msg ->
+      Lwt_result.fail msg)
+  | HTTPS _ ->
+    Lwt_result.fail
+      "Attempted to start HTTP/2 over cleartext TCP but was already \
+       communicating over HTTPS"
 
 let shutdown
-    : type a.
-      (module Http_intf.HTTPCommon with type Client.t = a) -> a -> unit Lwt.t
+    : type t.
+      (module Http_intf.HTTPCommon with type Client.t = t) -> t -> unit Lwt.t
   =
  fun (module Http) conn -> Http.Client.shutdown conn

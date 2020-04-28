@@ -46,6 +46,8 @@ type error_handler = error_type * error -> unit
 module type Client = sig
   type socket
 
+  type runtime
+
   type t
 
   type write_body
@@ -54,7 +56,7 @@ module type Client = sig
     :  config:Config.t
     -> error_handler:error_handler
     -> socket
-    -> t Lwt.t
+    -> (t * Scheme.Runtime.t) Lwt.t
 
   type response_handler = Response.t -> unit
 
@@ -77,25 +79,46 @@ module type HTTPCommon = sig
   module Client : Client with type write_body := Body.Write.t
 end
 
-module type HTTP = HTTPCommon with type Client.socket = Lwt_unix.file_descr
+module type HTTP1 = sig
+  module Body : Body.BODY
 
-module type HTTPS = HTTPCommon with type Client.socket = Lwt_ssl.socket
+  module Client : sig
+    include Client with type write_body := Body.Write.t
+
+    val upgrade : t -> Gluten.impl -> unit
+  end
+end
+
+module type HTTP =
+  HTTPCommon
+    with type Client.socket = Lwt_unix.file_descr
+     and type Client.runtime = Gluten_lwt_unix.Client.t
+
+module type HTTPS =
+  HTTPCommon
+    with type Client.socket = Lwt_ssl.socket
+     and type Client.runtime = Gluten_lwt_unix.Client.SSL.t
 
 (* Only needed for h2c upgrades (insecure HTTP/2) *)
 module type HTTP2 = sig
   module Body : Body.BODY
 
   module Client : sig
-    include Client with type write_body := Body.Write.t
+    include
+      Client
+        with type write_body := Body.Write.t
+         and type runtime = Gluten_lwt_unix.Client.t
 
-    val create_h2c_connection
-      :  ?config:Config.t
+    val create_h2c
+      :  config:Config.t
       -> ?push_handler:(Request.t -> (response_handler, unit) result)
       -> http_request:Httpaf.Request.t
       -> error_handler:error_handler
       -> response_handler * error_handler
-      -> socket
-      -> (t, string) result Lwt.t
+      -> runtime
+      -> (t, string) result
   end
 end
 with type Client.socket = Lwt_unix.file_descr
+ and type Client.runtime = Gluten_lwt_unix.Client.t
+ and type Client.t = H2_lwt_unix.Client.t

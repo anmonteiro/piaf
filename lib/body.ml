@@ -152,6 +152,17 @@ let drain_available { contents; _ } =
   | `Stream stream ->
     Lwt_stream.junk_old stream
 
+let when_closed t f =
+  Lwt.async (fun () ->
+      match t.contents with
+      | `Empty | `String _ | `Bigstring _ ->
+        f ();
+        Lwt.return_unit
+      | `Stream stream ->
+        let open Lwt.Syntax in
+        let+ () = Lwt_stream.closed stream in
+        f ())
+
 (* "Primitive" body types for http/af / h2 compatibility *)
 module type BODY = sig
   module Read : sig

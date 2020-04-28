@@ -43,6 +43,30 @@ let of_uri uri =
   | Some other ->
     Error (Format.asprintf "Unsupported scheme: %s" other)
 
-let to_string = function HTTP -> "http" | HTTPS -> "https"
+let to_string = function HTTP -> "HTTP" | HTTPS -> "HTTPS"
 
 let pp_hum formatter scheme = Format.fprintf formatter "%s" (to_string scheme)
+
+module Runtime = struct
+  type t =
+    | HTTP : Gluten_lwt_unix.Client.t -> t
+    | HTTPS : Gluten_lwt_unix.Client.SSL.t -> t
+
+  module type MAKE = sig
+    type runtime
+
+    val make : runtime -> t
+  end
+
+  module HTTP = struct
+    type runtime = Gluten_lwt_unix.Client.t
+
+    let make x = HTTP x
+  end
+
+  module HTTPS = struct
+    type runtime = Gluten_lwt_unix.Client.SSL.t
+
+    let make x = HTTPS x
+  end
+end

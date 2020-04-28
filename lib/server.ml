@@ -97,6 +97,7 @@ let add_length_related_headers ({ Response.message; body } as response) =
 let create ?config handler =
   (* TODO: error handling*)
   let request_handler client_addr reqd =
+    let { Gluten.Reqd.reqd; _ } = reqd in
     let request = Reqd.request reqd in
     let body_length = Httpaf.Request.body_length request in
     let request_body =
