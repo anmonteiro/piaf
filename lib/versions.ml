@@ -57,6 +57,8 @@ module HTTP = struct
   let v1_1 = { major = 1; minor = 1 }
 
   let v2_0 = { major = 2; minor = 0 }
+
+  let equal v1 v2 = compare v1 v2 = 0
 end
 
 module TLS = struct

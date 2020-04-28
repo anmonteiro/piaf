@@ -200,6 +200,7 @@ let create_h2c_connection (module Http2 : Http_intf.HTTP2) ~http_request fd =
       (response_handler, response_error_handler)
       fd
   in
+  Log.info (fun m -> m "Connection state changed (HTTP/2 confirmed)");
   (* Doesn't write the body by design. The server holds on to the HTTP/1.1 body
    * that was sent as part of the upgrade. *)
   let open Lwt.Syntax in

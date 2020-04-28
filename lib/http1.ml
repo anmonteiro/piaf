@@ -79,9 +79,20 @@ module MakeHTTP1 (Httpaf_client : Httpaf_lwt.Client) :
           match message.meth with
           | #Method.standard as meth ->
             meth
-          | _ ->
-            assert false
+          | `Other _ ->
+            (* XXX(anmonteiro): for methods defined outside of RFC7231, or
+             * custom methods, just assume `GET`.
+             *
+             * The only case where getting this wrong could matter is
+             * potentially assuming that the request method was CONNECT and it
+             * sent one of the forbidden headers according to * RFC7231§4.3.6:
+             *
+             *   A server MUST NOT send any Transfer-Encoding or Content-Length
+             *   header fields in a 2xx (Successful) response to CONNECT.
+             *)
+            `GET
         in
+        if request_method = `HEAD then Body.Read.close_reader body;
         let body =
           Piaf_body.of_prim_body
             (module Body : BODY with type Read.t = [ `read ] Httpaf.Body.t)
