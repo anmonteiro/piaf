@@ -303,6 +303,7 @@ let rec return_response
       } ) ->
     (match Headers.(get headers "connection", get headers "upgrade") with
     | Some ("Upgrade" | "upgrade"), Some "h2c" ->
+      Log.debug (fun m -> m "Received 101, server accepted HTTP/2 upgrade");
       (* TODO: this case needs to shutdown the HTTP/1.1 connection when it's
        * done using it. *)
       let (module Http2) = (module Http2.HTTP : Http_intf.HTTP2) in
@@ -311,6 +312,10 @@ let rec return_response
       let* h2_conn, response =
         Http_impl.create_h2c_connection (module Http2) ~http_request:request fd
       in
+      (* XXX(anmonteiro): This is not good enough, because we can't shutdown
+       * the connection as soon as one exchange is done. *)
+      (* Body.when_closed response.body (fun () -> *)
+      (* Http_impl.shutdown (module Http) handle); *)
       t.conn <- h2_conn;
       return_response t request_info response
     | _ ->
@@ -318,17 +323,16 @@ let rec return_response
   | _ ->
     Lwt_result.return response
 
-let is_h2c_upgrade ~config ~version =
+let is_h2c_upgrade ~config ~version ~scheme =
   match
     ( config.Config.http2_prior_knowledge
     , version
     , config.max_http_version
-    , config.h2c_upgrade )
+    , config.h2c_upgrade
+    , scheme )
   with
-  | false, cur_version, max_version, true
-    when Versions.HTTP.(
-           compare max_version v2_0 = 0 && compare cur_version v1_1 = 0) ->
-    true
+  | false, cur_version, max_version, true, Scheme.HTTP ->
+    Versions.HTTP.(equal max_version v2_0 && equal cur_version v1_1)
   | _ ->
     false
 
@@ -341,11 +345,22 @@ let make_request_info
     target
   =
   let { Connection_info.host; scheme; _ } = conn_info in
-  let is_h2c_upgrade = is_h2c_upgrade ~config ~version in
+  let is_h2c_upgrade = is_h2c_upgrade ~config ~version ~scheme in
+  let h2_settings = H2.Settings.to_base64 (Config.to_http2_settings config) in
   let canonical_headers =
-    (* TODO: send along desired connection settings (h2c). *)
+    (* Important that this doesn't shadow the labeled `headers` argument
+     * above. We need the original headers as seen by the called in order to
+     * reproduce them e.g. when following redirects. *)
+    let headers =
+      if is_h2c_upgrade then
+        ("Connection", "Upgrade, HTTP2-Settings")
+        :: ("Upgrade", "h2c")
+        :: ("HTTP2-Settings", Stdlib.Result.get_ok h2_settings)
+        :: headers
+      else
+        headers
+    in
     Headers.canonicalize_headers
-      ~is_h2c_upgrade
       ~version
       ~host
       ~body_length:body.Body.length

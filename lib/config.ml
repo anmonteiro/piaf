@@ -119,3 +119,5 @@ let to_http2_config
   ; response_body_buffer_size = body_buffer_size
   ; enable_server_push = enable_http2_server_push
   }
+
+let to_http2_settings t = H2.Config.to_settings (to_http2_config t)

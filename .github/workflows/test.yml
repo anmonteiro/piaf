@@ -13,10 +13,9 @@ jobs:
     steps:
     - uses: actions/checkout@v2
     - uses: cachix/install-nix-action@v8
-    - uses: cachix/cachix-action@v5
+    - uses: cachix/cachix-action@v6
       with:
         name: anmonteiro
-        file: nix/ci/test.nix
-        attributes: native musl64
-        nixBuildArgs: --argstr ocamlVersion ${{ matrix.ocamlVersion }}
         signingKey: '${{ secrets.CACHIX_SIGNING_KEY }}'
+    - name: "Run nix-build"
+      run: nix-build ./nix/ci/test.nix -A native -A musl64 --argstr ocamlVersion ${{ matrix.ocamlVersion }}
