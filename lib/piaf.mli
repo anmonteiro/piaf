@@ -177,6 +177,8 @@ module Body : sig
   val to_string : t -> string Lwt.t
 
   val drain : t -> unit Lwt.t
+
+  val when_closed : t -> (unit -> unit) -> unit
 end
 
 module Request : sig

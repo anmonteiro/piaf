@@ -29,6 +29,8 @@
  * POSSIBILITY OF SUCH DAMAGE.
  *---------------------------------------------------------------------------*)
 
+open Monads
+
 let make_error_handler real_handler type_ error =
   let error : Http_intf.error =
     match error with
@@ -43,10 +45,13 @@ module Piaf_body = Body
 
 module type BODY = Body.BODY
 
-module MakeHTTP2 (H2_client : H2_lwt.Client) :
+module MakeHTTP2
+    (H2_client : H2_lwt.Client)
+    (Runtime_scheme : Scheme.Runtime.MAKE with type runtime = H2_client.runtime) :
   Http_intf.HTTPCommon
     with type Client.t = H2_client.t
      and type Client.socket = H2_client.socket
+     and type Client.runtime = H2_client.runtime
      and type Body.Read.t = [ `read ] H2.Body.t
      and type Body.Write.t = [ `write ] H2.Body.t = struct
   module Body :
@@ -72,10 +77,14 @@ module MakeHTTP2 (H2_client : H2_lwt.Client) :
     include H2_client
 
     let create_connection ~config ~error_handler fd =
-      create_connection
-        ~config:(Config.to_http2_config config)
-        ~error_handler:(make_error_handler error_handler `Connection)
-        fd
+      let open Lwt.Syntax in
+      let+ t =
+        create_connection
+          ~config:(Config.to_http2_config config)
+          ~error_handler:(make_error_handler error_handler `Connection)
+          fd
+      in
+      t, Runtime_scheme.make t.runtime
 
     type response_handler = Response.t -> unit
 
@@ -98,26 +107,27 @@ module MakeHTTP2 (H2_client : H2_lwt.Client) :
 end
 
 module HTTP : Http_intf.HTTP2 = struct
-  module HTTP_X :
+  module HTTP_2 :
     Http_intf.HTTPCommon
       with type Client.t = H2_lwt_unix.Client.t
        and type Client.socket = Lwt_unix.file_descr
+       and type Client.runtime = H2_lwt_unix.Client.runtime
       with type Body.Read.t = [ `read ] H2.Body.t
        and type Body.Write.t = [ `write ] H2.Body.t =
-    MakeHTTP2 (H2_lwt_unix.Client)
+    MakeHTTP2 (H2_lwt_unix.Client) (Scheme.Runtime.HTTP)
 
-  include (HTTP_X : module type of HTTP_X with module Client := HTTP_X.Client)
+  include (HTTP_2 : module type of HTTP_2 with module Client := HTTP_2.Client)
 
   module Client = struct
-    include HTTP_X.Client
+    include HTTP_2.Client
 
-    let create_h2c_connection
-        ?config:_
+    let create_h2c
+        ~config
         ?push_handler:_
         ~http_request
         ~error_handler
         (response_handler, response_error_handler)
-        fd
+        runtime
       =
       let response_handler response body =
         let body =
@@ -138,12 +148,25 @@ module HTTP : Http_intf.HTTP2 = struct
         in
         response_error_handler (`Stream, error)
       in
-      H2_lwt_unix.Client.create_h2c_connection
-        ~http_request
-        ~error_handler:(make_error_handler error_handler `Connection)
-        (response_handler, response_error_handler)
-        fd
+      let connection =
+        H2.Client_connection.create_h2c
+          ~config:(Config.to_http2_config config)
+          ~http_request
+          ~error_handler:(make_error_handler error_handler `Connection)
+          (response_handler, response_error_handler)
+      in
+      Stdlib.Result.map
+        (fun connection ->
+          (* Perform the runtime upgrade -- stop speaking HTTP/1.1, start
+           * speaking HTTP/2 by feeding Gluten the `H2.Client_connection`
+           * protocol. *)
+          Gluten_lwt_unix.Client.upgrade
+            runtime
+            (Gluten.make (module H2.Client_connection) connection);
+          { H2_lwt_unix.Client.connection; runtime })
+        connection
   end
 end
 
-module HTTPS : Http_intf.HTTPS = MakeHTTP2 (H2_lwt_unix.Client.SSL)
+module HTTPS : Http_intf.HTTPS =
+  MakeHTTP2 (H2_lwt_unix.Client.SSL) (Scheme.Runtime.HTTPS)

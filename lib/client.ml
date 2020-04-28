@@ -68,7 +68,7 @@ let create_http_connection ~config fd =
       in
       (module Http1.HTTP : Http_intf.HTTP), version
   in
-  Http_impl.create_connection (module Http) ~config ~version ~fd fd
+  Http_impl.create_connection (module Http) ~config ~version fd
 
 let create_https_connection ~config ~conn_info fd =
   let { Connection_info.host; _ } = conn_info in
@@ -122,7 +122,7 @@ let create_https_connection ~config ~conn_info fd =
            * protocol that we didn't specify. *)
           assert false)
     in
-    Http_impl.create_connection (module Https) ~config ~version ~fd ssl_client
+    Http_impl.create_connection (module Https) ~config ~version ssl_client
 
 let close_connection ~conn_info fd =
   Log.info (fun m ->
@@ -201,12 +201,24 @@ let change_connection t conn_info =
   t.conn <- conn';
   t.conn_info <- conn_info
 
-let shutdown { conn = Connection.Conn { impl; handle; _ }; conn_info; _ } =
+(* This function and `drain_available_body_bytes_and_shutdown` both take a
+ * `conn_info` and a `Connection.t` instead of just a `t` too allow reuse when
+ * shutting down old connection.
+ *
+ * Due to the fact that `t.conn` is mutable, we could run into weird
+ * asynchronous edge cases and shut down the connection that's currently in use
+ * instead of the old one. *)
+let shutdown_conn ~conn_info (Connection.Conn { impl; handle; _ }) =
   Log.info (fun m ->
-      m "Tearing down connection to %a" Connection_info.pp_hum conn_info);
+      m
+        "Tearing down %a connection to %a"
+        Scheme.pp_hum
+        conn_info.Connection_info.scheme
+        Connection_info.pp_hum
+        conn_info);
   Http_impl.shutdown (module (val impl)) handle
 
-let drain_response_body_and_shutdown t response_body =
+let drain_available_body_bytes_and_shutdown ~conn_info conn response_body =
   let open Lwt.Syntax in
   Log.debug (fun m -> m "Ignoring the response body");
   (* Junk what's available because we're going to close the connection.
@@ -214,7 +226,9 @@ let drain_response_body_and_shutdown t response_body =
    * response body so it doesn't need to stay around. *)
   Lwt.async (fun () ->
       let* () = Body.drain_available response_body in
-      shutdown t)
+      shutdown_conn ~conn_info conn)
+
+let shutdown { conn; conn_info; _ } = shutdown_conn ~conn_info conn
 
 (* returns true if it succeeding in reusing the connection, false otherwise. *)
 let reuse_or_set_up_new_connection
@@ -277,7 +291,7 @@ type request_info =
   }
 
 let rec return_response
-    ({ conn = Connection.Conn { impl = (module Http); fd; _ }
+    ({ conn = Connection.Conn { impl = (module Http); runtime; _ }
      ; conn_info
      ; config
      ; _
@@ -304,18 +318,12 @@ let rec return_response
     (match Headers.(get headers "connection", get headers "upgrade") with
     | Some ("Upgrade" | "upgrade"), Some "h2c" ->
       Log.debug (fun m -> m "Received 101, server accepted HTTP/2 upgrade");
-      (* TODO: this case needs to shutdown the HTTP/1.1 connection when it's
-       * done using it. *)
       let (module Http2) = (module Http2.HTTP : Http_intf.HTTP2) in
       let* () = Body.drain body in
       let open Lwt_result.Syntax in
       let* h2_conn, response =
-        Http_impl.create_h2c_connection (module Http2) ~http_request:request fd
+        Http_impl.create_h2c_connection ~config ~http_request:request runtime
       in
-      (* XXX(anmonteiro): This is not good enough, because we can't shutdown
-       * the connection as soon as one exchange is done. *)
-      (* Body.when_closed response.body (fun () -> *)
-      (* Http_impl.shutdown (module Http) handle); *)
       t.conn <- h2_conn;
       return_response t request_info response
     | _ ->
@@ -414,7 +422,10 @@ let rec send_request_and_handle_response
     if did_reuse then
       Lwt.async (fun () -> Body.drain response.body)
     else
-      drain_response_body_and_shutdown t response.body;
+      (* In this branch, don't bother waiting for the entire response body to
+       * arrive, we're going to shut down the connection either way. Just hang
+       * up. *)
+      drain_available_body_bytes_and_shutdown ~conn_info conn response.body;
     let target = Uri.path_and_query new_uri in
     let request_info' =
       make_request_info

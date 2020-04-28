@@ -29,6 +29,7 @@
  * POSSIBILITY OF SUCH DAMAGE.
  *---------------------------------------------------------------------------*)
 
+open Monads
 module Piaf_body = Body
 
 module type BODY = Body.BODY
@@ -54,10 +55,14 @@ module Body :
   end
 end
 
-module MakeHTTP1 (Httpaf_client : Httpaf_lwt.Client) :
-  Http_intf.HTTPCommon
+module MakeHTTP1
+    (Httpaf_client : Httpaf_lwt.Client)
+    (Runtime_scheme : Scheme.Runtime.MAKE
+                        with type runtime = Httpaf_client.runtime) :
+  Http_intf.HTTP1
     with type Client.t = Httpaf_client.t
      and type Client.socket = Httpaf_client.socket
+     and type Client.runtime = Httpaf_client.runtime
      and type Body.Read.t = [ `read ] Httpaf.Body.t
      and type Body.Write.t = [ `write ] Httpaf.Body.t = struct
   module Body = Body
@@ -69,7 +74,9 @@ module MakeHTTP1 (Httpaf_client : Httpaf_lwt.Client) :
 
     (* Error handler for HTTP/1 connections isn't used *)
     let create_connection ~config ~error_handler:_ fd =
-      create_connection ~config:(Config.to_http1_config config) fd
+      let open Lwt.Syntax in
+      let+ t = create_connection ~config:(Config.to_http1_config config) fd in
+      t, Runtime_scheme.make t.runtime
 
     let request
         t ({ Request.message; _ } as req) ~error_handler ~response_handler
@@ -118,6 +125,8 @@ module MakeHTTP1 (Httpaf_client : Httpaf_lwt.Client) :
   end
 end
 
-module HTTP : Http_intf.HTTP = MakeHTTP1 (Httpaf_lwt_unix.Client)
+module HTTP : Http_intf.HTTP =
+  MakeHTTP1 (Httpaf_lwt_unix.Client) (Scheme.Runtime.HTTP)
 
-module HTTPS : Http_intf.HTTPS = MakeHTTP1 (Httpaf_lwt_unix.Client.SSL)
+module HTTPS : Http_intf.HTTPS =
+  MakeHTTP1 (Httpaf_lwt_unix.Client.SSL) (Scheme.Runtime.HTTPS)

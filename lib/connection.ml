@@ -139,8 +139,8 @@ type t =
              with type Client.t = 'a
               and type Body.Read.t = 'b)
       ; handle : 'a
+      ; runtime : Scheme.Runtime.t
       ; connection_error_received : (ok_ret, string) result Lwt.t
-      ; fd : Lwt_unix.file_descr
       ; version : Version.t  (** HTTP version that this connection speaks *)
       }
       -> t
