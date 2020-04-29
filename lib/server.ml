@@ -84,11 +84,12 @@ let add_length_related_headers ({ Response.message; body } as response) =
   let headers =
     match Body.length body with
     | `Fixed n ->
-      Headers.add_unless_exists headers "content-length" (Int64.to_string n)
+      Headers.(
+        add_unless_exists headers Well_known.content_length (Int64.to_string n))
     | `Chunked ->
-      Headers.add_unless_exists headers "transfer-encoding" "chunked"
+      Headers.(add_unless_exists headers Well_known.transfer_encoding "chunked")
     | `Close_delimited ->
-      Headers.add_unless_exists headers "connection" "close"
+      Headers.(add_unless_exists headers Well_known.connection "close")
     | `Error _ | `Unknown ->
       headers
   in
@@ -97,7 +98,7 @@ let add_length_related_headers ({ Response.message; body } as response) =
 let create ?config handler =
   (* TODO: error handling*)
   let request_handler client_addr reqd =
-    let { Gluten.Reqd.reqd; _ } = reqd in
+    let { Gluten.reqd; _ } = reqd in
     let request = Reqd.request reqd in
     let body_length = Httpaf.Request.body_length request in
     let request_body =

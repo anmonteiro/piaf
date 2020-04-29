@@ -129,16 +129,8 @@ let close_connection ~conn_info fd =
       m "Closing connection to %a" Connection_info.pp_hum conn_info);
   Lwt_unix.close fd
 
-let connect ?src ~config ~conn_info fd =
+let connect ~config ~conn_info fd =
   let { Connection_info.addresses; _ } = conn_info in
-  let open Lwt.Syntax in
-  let* () =
-    match src with
-    | None ->
-      Lwt.return_unit
-    | Some src_sa ->
-      Lwt_unix.bind fd src_sa
-  in
   (* TODO: try addresses in e.g. a round robin fashion? *)
   let address = List.hd addresses in
   Lwt.catch
@@ -168,9 +160,9 @@ let connect ?src ~config ~conn_info fd =
              "FIXME: unhandled connection error (%s)"
              (Printexc.to_string exn)))
 
-let make_impl ?src ~config ~conn_info fd =
+let make_impl ~config ~conn_info fd =
   let open Lwt_result.Syntax in
-  let* () = connect ?src ~config ~conn_info fd in
+  let* () = connect ~config ~conn_info fd in
   Log.info (fun m -> m "Connected to %a" Connection_info.pp_hum conn_info);
   let open Lwt.Syntax in
   let* impl =
@@ -211,9 +203,9 @@ let change_connection t conn_info =
 let shutdown_conn ~conn_info (Connection.Conn { impl; handle; _ }) =
   Log.info (fun m ->
       m
-        "Tearing down %a connection to %a"
-        Scheme.pp_hum
-        conn_info.Connection_info.scheme
+        "Tearing down %s connection to %a"
+        (String.uppercase_ascii
+           (Scheme.to_string conn_info.Connection_info.scheme))
         Connection_info.pp_hum
         conn_info);
   Http_impl.shutdown (module (val impl)) handle
@@ -315,7 +307,10 @@ let rec return_response
       ; http2_prior_knowledge = false
       ; _
       } ) ->
-    (match Headers.(get headers "connection", get headers "upgrade") with
+    (match
+       Headers.(
+         get headers Well_known.connection, get headers Well_known.upgrade)
+     with
     | Some ("Upgrade" | "upgrade"), Some "h2c" ->
       Log.debug (fun m -> m "Received 101, server accepted HTTP/2 upgrade");
       let (module Http2) = (module Http2.HTTP : Http_intf.HTTP2) in
@@ -360,9 +355,10 @@ let make_request_info
      * above. We need the original headers as seen by the called in order to
      * reproduce them e.g. when following redirects. *)
     let headers =
+      let open Headers in
       if is_h2c_upgrade then
-        ("Connection", "Upgrade, HTTP2-Settings")
-        :: ("Upgrade", "h2c")
+        (Well_known.connection, "Upgrade, HTTP2-Settings")
+        :: (Well_known.upgrade, "h2c")
         :: ("HTTP2-Settings", Stdlib.Result.get_ok h2_settings)
         :: headers
       else
@@ -400,7 +396,7 @@ let rec send_request_and_handle_response
     ( H2.Status.is_redirection response.message.status
     , config.follow_redirects
     , remaining_redirects
-    , Headers.get response.message.headers "location" )
+    , Headers.(get response.message.headers Well_known.location) )
   with
   | true, true, 0, _ ->
     (* Response is a redirect, but we can't follow any more. *)
@@ -452,6 +448,7 @@ let call t ~meth ?(headers = []) ?(body = Body.empty) target =
   (* Need to try to reconnect to the base host on every call, if redirects are
    * enabled, because the connection manager could have tried to follow a
    * redirect. *)
+  (* TODO: we should probably remember _permanent_ redirects. *)
   let* _did_reuse =
     if t.config.follow_redirects then
       reuse_or_set_up_new_connection t t.uri

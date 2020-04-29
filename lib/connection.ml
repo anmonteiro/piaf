@@ -52,7 +52,7 @@ let resolve_host ~port hostname =
 
 module Connection_info = struct
   (* This represents information that changes from connection to connection,
-   * i.e.  if one of these parameters changes between redirects we need to
+   * i.e. if one of these parameters changes between redirects we need to
    * establish a new connection. *)
   type t =
     { port : int

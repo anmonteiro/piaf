@@ -31,13 +31,33 @@
 
 include H2.Headers
 
+module Well_known = struct
+  module HTTP1 = struct
+    let host = "host"
+  end
+
+  module HTTP2 = struct
+    let host = ":authority"
+  end
+
+  let connection = "connection"
+
+  let content_length = "content-length"
+
+  let location = "location"
+
+  let upgrade = "upgrade"
+
+  let transfer_encoding = "transfer-encoding"
+end
+
 (* TODO: Add user-agent if not defined *)
 let canonicalize_headers ~body_length ~host ~version headers =
   let headers =
     match version with
     | { Versions.HTTP.major = 2; _ } ->
       of_list
-        ((":authority", host)
+        ((Well_known.HTTP2.host, host)
         :: List.map
              (fun (name, value) -> String.lowercase_ascii name, value)
              headers)
@@ -51,3 +71,12 @@ let canonicalize_headers ~body_length ~host ~version headers =
     add_unless_exists headers "content-length" (Int64.to_string n)
   | _ ->
     headers
+
+let host t ~version =
+  match version with
+  | { Versions.HTTP.major = 2; _ } ->
+    get t Well_known.HTTP2.host
+  | { major = 1; _ } ->
+    get t Well_known.HTTP1.host
+  | _ ->
+    None
