@@ -205,10 +205,6 @@ let fail_with_too_old_ssl max_tls_version =
   Lwt_result.fail reason
 
 (* Assumes Lwt_unix.connect has already been called. *)
-(* TODO: hostname validation as per
- * https://github.com/savonet/ocaml-ssl/pull/49
- * https://wiki.openssl.org/index.php/Hostname_validation
- *)
 let connect ~hostname ~config ~alpn_protocols fd =
   let open Lwt_result.Syntax in
   let { Config.allow_insecure
@@ -275,6 +271,9 @@ let connect ~hostname ~config ~alpn_protocols fd =
       let s = Lwt_ssl.embed_uninitialized_socket fd ctx in
       let ssl_sock = Lwt_ssl.ssl_socket_of_uninitialized_socket s in
       Ssl.set_client_SNI_hostname ssl_sock hostname;
+      (* https://wiki.openssl.org/index.php/Hostname_validation *)
+      Ssl.set_hostflags ssl_sock [ No_partial_wildcards ];
+      Ssl.set_host ssl_sock hostname;
       let open Lwt.Syntax in
       let+ socket_or_error =
         Lwt.catch
