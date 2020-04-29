@@ -57,7 +57,7 @@ end
 
 module MakeHTTP1
     (Httpaf_client : Httpaf_lwt.Client)
-    (Runtime_scheme : Scheme.Runtime.MAKE
+    (Runtime_scheme : Scheme.Runtime.SCHEME
                         with type runtime = Httpaf_client.runtime) :
   Http_intf.HTTP1
     with type Client.t = Httpaf_client.t

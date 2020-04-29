@@ -1,5 +1,5 @@
 (*----------------------------------------------------------------------------
- * Copyright (c) 2019, António Nuno Monteiro
+ * Copyright (c) 2019-2020, António Nuno Monteiro
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -43,7 +43,7 @@ let of_uri uri =
   | Some other ->
     Error (Format.asprintf "Unsupported scheme: %s" other)
 
-let to_string = function HTTP -> "HTTP" | HTTPS -> "HTTPS"
+let to_string = function HTTP -> "http" | HTTPS -> "https"
 
 let pp_hum formatter scheme = Format.fprintf formatter "%s" (to_string scheme)
 
@@ -52,7 +52,7 @@ module Runtime = struct
     | HTTP : Gluten_lwt_unix.Client.t -> t
     | HTTPS : Gluten_lwt_unix.Client.SSL.t -> t
 
-  module type MAKE = sig
+  module type SCHEME = sig
     type runtime
 
     val make : runtime -> t

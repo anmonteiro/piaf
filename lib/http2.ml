@@ -47,7 +47,8 @@ module type BODY = Body.BODY
 
 module MakeHTTP2
     (H2_client : H2_lwt.Client)
-    (Runtime_scheme : Scheme.Runtime.MAKE with type runtime = H2_client.runtime) :
+    (Runtime_scheme : Scheme.Runtime.SCHEME
+                        with type runtime = H2_client.runtime) :
   Http_intf.HTTPCommon
     with type Client.t = H2_client.t
      and type Client.socket = H2_client.socket

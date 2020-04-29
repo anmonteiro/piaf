@@ -129,9 +129,6 @@ module Config : sig
     ; body_buffer_size : int
           (** Buffer size used for request and response bodies. *)
     ; enable_http2_server_push : bool
-          (** TODO(anmonteiro): these are HTTP/2 specific and we're probably OK
-              with the defaults *)
-          (* ; max_concurrent_streams : int ; initial_window_size : int *)
     }
 
   val default : t

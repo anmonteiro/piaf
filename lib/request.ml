@@ -42,9 +42,11 @@ type t =
   ; body : Body.t
   }
 
-let uri { message = { target; _ }; _ } =
-  (* TODO: add host too? *)
-  Uri.(canonicalize (of_string target))
+let uri { message = { scheme; target; headers; version; _ }; _ } =
+  let host = Headers.host ~version headers in
+  let scheme = Scheme.to_string scheme in
+  let uri = Uri.with_uri ~host ~scheme:(Some scheme) (Uri.of_string target) in
+  Uri.canonicalize uri
 
 let meth { message = { meth; _ }; _ } = meth
 
@@ -73,10 +75,8 @@ let to_http1 { message = { meth; target; version; headers; _ }; _ } =
   in
   Httpaf.Request.create ~version ~headers:http1_headers meth target
 
-let to_h2 { message = { meth; target; headers; _ }; _ } =
-  (* We only support H2 over HTTPS.
-   * TODO: this can be relaxed *)
-  H2.Request.create ~scheme:"https" ~headers meth target
+let to_h2 { message = { meth; target; headers; scheme; _ }; _ } =
+  H2.Request.create ~scheme:(Scheme.to_string scheme) ~headers meth target
 
 let persistent_connection { message = { version; headers; _ }; _ } =
   Message.persistent_connection version headers
