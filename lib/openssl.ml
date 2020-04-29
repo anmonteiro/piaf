@@ -272,6 +272,7 @@ let connect ~hostname ~config ~alpn_protocols fd =
       let ssl_sock = Lwt_ssl.ssl_socket_of_uninitialized_socket s in
       Ssl.set_client_SNI_hostname ssl_sock hostname;
       (* https://wiki.openssl.org/index.php/Hostname_validation *)
+      Ssl.set_hostflags ssl_sock [ No_partial_wildcards ];
       Ssl.set_host ssl_sock hostname;
       let open Lwt.Syntax in
       let+ socket_or_error =
