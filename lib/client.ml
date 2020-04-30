@@ -238,40 +238,42 @@ let reuse_or_set_up_new_connection
     ; uri = new_uri
     }
   in
-  match
-    ( t.persistent
-    , Connection_info.equal_without_resolving conn_info new_conn_info )
-  with
-  | true, true ->
-    (* If we're redirecting within the same host / port / scheme, no need
-     * to re-establish a new connection. *)
-    Log.debug (fun m ->
-        m "Reusing the same connection as the host / port didn't change");
-    (* URI could've changed *)
-    t.conn_info <- new_conn_info;
-    Lwt_result.return true
-  | true, false ->
-    let* new_addresses =
-      Connection.resolve_host ~port:new_conn_info.port new_conn_info.host
-    in
-    (* Now we know the new address *)
-    let new_conn_info = { new_conn_info with addresses = new_addresses } in
-    (* Really avoiding having to establish a new connection here. If the
-     * new host resolves to the same address and the port matches *)
-    if Connection_info.equal conn_info new_conn_info then (
+  let+ did_reuse =
+    match
+      ( t.persistent
+      , Connection_info.equal_without_resolving conn_info new_conn_info )
+    with
+    | true, true ->
+      (* If we're redirecting within the same host / port / scheme, no need
+       * to re-establish a new connection. *)
       Log.debug (fun m ->
-          m "Reusing the same connection as the remote address didn't change");
-      (* URI could've changed *)
-      t.conn_info <- new_conn_info;
-      Lwt_result.return true)
-    else (* No way to avoid establishing a new connection. *)
+          m "Reusing the same connection as the host / port didn't change");
+      Lwt_result.return true
+    | false, true ->
+      (* No way to avoid establishing a new connection if the previous one
+         wasn't persistent. *)
       let+ () = change_connection t new_conn_info in
       false
-  | false, _ ->
-    (* No way to avoid establishing a new connection if the previous one wasn't
-       persistent. *)
-    let+ () = change_connection t new_conn_info in
-    false
+    | persistent, false ->
+      let* new_addresses =
+        Connection.resolve_host ~port:new_conn_info.port new_conn_info.host
+      in
+      (* Now we know the new address *)
+      let new_conn_info = { new_conn_info with addresses = new_addresses } in
+      (* Really avoiding having to establish a new connection here. If the
+       * new host resolves to the same address and the port matches *)
+      if Connection_info.equal conn_info new_conn_info && persistent then (
+        Log.debug (fun m ->
+            m "Reusing the same connection as the remote address didn't change");
+        (* URI could've changed *)
+        Lwt_result.return true)
+      else (* No way to avoid establishing a new connection. *)
+        let+ () = change_connection t new_conn_info in
+        false
+  in
+  (* Even if we reused the connection, the URI could've changed. *)
+  t.conn_info <- new_conn_info;
+  did_reuse
 
 type request_info =
   { remaining_redirects : int

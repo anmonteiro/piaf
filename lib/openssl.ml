@@ -1,5 +1,5 @@
 (*----------------------------------------------------------------------------
- * Copyright (c) 2019, António Nuno Monteiro
+ * Copyright (c) 2019-2020, António Nuno Monteiro
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -305,7 +305,6 @@ let connect ~hostname ~config ~alpn_protocols fd =
       | Error _ssl_error ->
         (* If we're here, `allow_insecure` better be false, otherwise we forgot to
          * handle some failure mode. The assert below will make use remember. *)
-        assert (not allow_insecure);
         let verify_result = Ssl.get_verify_result ssl_sock in
         let msg =
           Format.asprintf
@@ -314,4 +313,5 @@ let connect ~hostname ~config ~alpn_protocols fd =
             verify_result
         in
         Log.err (fun m -> m "%s" msg);
+        assert (not allow_insecure);
         Error msg)
