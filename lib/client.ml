@@ -238,7 +238,7 @@ let reuse_or_set_up_new_connection
     ; uri = new_uri
     }
   in
-  let+ result =
+  let+ did_reuse =
     match
       ( t.persistent
       , Connection_info.equal_without_resolving conn_info new_conn_info )
@@ -273,7 +273,7 @@ let reuse_or_set_up_new_connection
   in
   (* Even if we reused the connection, the URI could've changed. *)
   t.conn_info <- new_conn_info;
-  result
+  did_reuse
 
 type request_info =
   { remaining_redirects : int
