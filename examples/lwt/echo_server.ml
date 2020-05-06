@@ -59,7 +59,6 @@ let sse_response push =
 let request_handler ({ request; _ } : Unix.sockaddr Server.ctx) =
   match Request.meth request with
   | `POST ->
-    Format.eprintf "HI@.";
     let body, push = Lwt_stream.create () in
     sse_response push;
     let response = Response.of_string_stream ~body `OK in
@@ -80,7 +79,10 @@ let main port =
 
 let () =
   setup_log Debug;
-  Sys.(set_signal sigpipe (Signal_handle (fun _ -> Format.eprintf "handle@.")));
+  Sys.(
+    set_signal
+      sigpipe
+      (Signal_handle (fun _ -> Format.eprintf "handle sigpipe@.")));
   let port = ref 8080 in
   Arg.parse
     [ "-p", Arg.Set_int port, " Listening port number (8080 by default)" ]
