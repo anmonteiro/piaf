@@ -144,7 +144,10 @@ let create ?config handler =
                        response_body
                        ~off
                        ~len
-                       buffer)
+                       buffer;
+                     Httpaf.Body.flush response_body (fun () ->
+                         Log.debug (fun m ->
+                             m "Flushed output chunk of length %d" len)))
                    stream))
           (fun exn ->
             Log.err (fun m ->

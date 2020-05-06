@@ -60,9 +60,9 @@ let contents { contents; _ } = contents
 
 let empty = create ~length:(`Fixed 0L) `Empty
 
-let of_stream ?(length = `Unknown) stream = create ~length (`Stream stream)
+let of_stream ?(length = `Chunked) stream = create ~length (`Stream stream)
 
-let of_string_stream ?(length = `Unknown) stream =
+let of_string_stream ?(length = `Chunked) stream =
   let stream =
     Lwt_stream.map
       (fun s ->
