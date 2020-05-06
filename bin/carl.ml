@@ -61,7 +61,7 @@ let setup_log ?style_renderer level =
     { Logs.report }
   in
   Fmt_tty.setup_std_outputs ?style_renderer ();
-  Logs.set_level level;
+  Logs.set_level (Some level);
   Logs.set_reporter format_reporter
 
 type cli =
@@ -276,7 +276,7 @@ let piaf_config_of_cli
       }
 
 let main ({ log_level; urls; _ } as cli) =
-  setup_log (Some log_level);
+  setup_log log_level;
   match piaf_config_of_cli cli with
   | Error msg ->
     `Error (false, msg)

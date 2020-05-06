@@ -1,3 +1,3 @@
 (executables
- (names lwt_get lwt_get_pipelined)
+ (names lwt_get lwt_get_pipelined echo_server)
  (libraries piaf logs logs.fmt fmt.tty))
