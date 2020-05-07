@@ -145,17 +145,7 @@ module Body : sig
     | `Close_delimited
     ]
 
-  type contents =
-    private
-    [ `Empty
-    | `String of string
-    | `Bigstring of Bigstringaf.t H2.IOVec.t
-    | `Stream of Bigstringaf.t H2.IOVec.t Lwt_stream.t
-    ]
-
   val length : t -> length
-
-  val contents : t -> contents
 
   val empty : t
 
@@ -259,6 +249,12 @@ module Response : sig
     -> ?headers:Headers.t
     -> body:Bigstringaf.t H2.IOVec.t Lwt_stream.t
     -> Status.t
+    -> t
+
+  val upgrade
+    :  ?version:Versions.HTTP.t
+    -> ?headers:Headers.t
+    -> ((Gluten.impl -> unit) -> unit)
     -> t
 
   val of_file : ?version:Versions.HTTP.t -> ?headers:Headers.t -> string -> t

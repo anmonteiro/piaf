@@ -494,7 +494,7 @@ module Oneshot = struct
         match response with
         | Ok { Response.body; _ } ->
           (match body.contents with
-          | `Empty | `String _ | `Bigstring _ ->
+          | `Empty _ | `String _ | `Bigstring _ ->
             shutdown t
           | `Stream stream ->
             let* () = Lwt_stream.closed stream in

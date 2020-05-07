@@ -63,7 +63,7 @@ let of_http1 ?(body = Body.empty) request =
       { meth
       ; target
       ; version
-      ; headers = H2.Headers.of_rev_list (Httpaf.Headers.to_rev_list headers)
+      ; headers = Headers.of_rev_list (Httpaf.Headers.to_rev_list headers)
       ; scheme = Scheme.HTTP
       }
   ; body
@@ -71,7 +71,7 @@ let of_http1 ?(body = Body.empty) request =
 
 let to_http1 { message = { meth; target; version; headers; _ }; _ } =
   let http1_headers =
-    Httpaf.Headers.of_rev_list (H2.Headers.to_rev_list headers)
+    Httpaf.Headers.of_rev_list (Headers.to_rev_list headers)
   in
   Httpaf.Request.create ~version ~headers:http1_headers meth target
 
