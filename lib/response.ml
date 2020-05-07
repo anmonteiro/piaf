@@ -84,6 +84,13 @@ let of_file ?version ?(headers = Headers.empty) path =
           push None));
   create ?version ~headers ~body:(Body.of_string_stream stream) `OK
 
+let upgrade ?version ?(headers = Headers.empty) upgrade_handler =
+  create
+    ?version
+    ~headers
+    ~body:(Body.create ~length:(`Fixed 0L) (`Empty upgrade_handler))
+    `Switching_protocols
+
 let status { message = { status; _ }; _ } = status
 
 let headers { message = { headers; _ }; _ } = headers

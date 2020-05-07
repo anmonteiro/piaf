@@ -156,7 +156,7 @@ let send_request
   in
   Lwt.async (fun () ->
       match body.contents with
-      | `Empty ->
+      | `Empty _ ->
         Bodyw.close_writer request_body;
         Lwt.return_unit
       | `String s ->

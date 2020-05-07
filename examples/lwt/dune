@@ -1,3 +1,9 @@
 (executables
  (names lwt_get lwt_get_pipelined echo_server)
+ (modules lwt_get lwt_get_pipelined echo_server)
  (libraries piaf logs logs.fmt fmt.tty))
+
+(executable
+ (name echo_server_upgrade)
+ (modules echo_server_upgrade)
+ (libraries piaf digestif.c websocketaf))

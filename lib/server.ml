@@ -98,7 +98,7 @@ let add_length_related_headers ({ Response.message; body } as response) =
 let create ?config handler =
   (* TODO: error handling*)
   let request_handler client_addr reqd =
-    let { Gluten.reqd; _ } = reqd in
+    let { Gluten.reqd; upgrade } = reqd in
     let request = Reqd.request reqd in
     let body_length = Httpaf.Request.body_length request in
     let request_body =
@@ -117,20 +117,27 @@ let create ?config handler =
               handler { ctx = client_addr; request }
             in
             let response = add_length_related_headers response in
+            let http1_response = Response.to_http1 response in
             match Body.contents body with
-            | `Empty ->
-              Reqd.respond_with_bigstring
-                reqd
-                (Response.to_http1 response)
-                Bigstringaf.empty
+            | `Empty upgrade_handler ->
+              if upgrade_handler == Body.default_upgrade then (* No upgrade *)
+                Reqd.respond_with_bigstring
+                  reqd
+                  http1_response
+                  Bigstringaf.empty
+              else (
+                (* we created it ourselves *)
+                assert (response.message.status = `Switching_protocols);
+                Reqd.respond_with_upgrade reqd http1_response.headers (fun () ->
+                    upgrade_handler upgrade))
             | `String s ->
-              Reqd.respond_with_string reqd (Response.to_http1 response) s
+              Reqd.respond_with_string reqd http1_response s
             | `Bigstring { IOVec.buffer; off; len } ->
               let bstr = Bigstringaf.sub ~off ~len buffer in
-              Reqd.respond_with_bigstring reqd (Response.to_http1 response) bstr
+              Reqd.respond_with_bigstring reqd http1_response bstr
             | `Stream stream ->
               let response_body =
-                Reqd.respond_with_streaming reqd (Response.to_http1 response)
+                Reqd.respond_with_streaming reqd http1_response
               in
               Lwt.async (fun () ->
                   (* TODO: should we use `Lwt.on_success` and close the stream once

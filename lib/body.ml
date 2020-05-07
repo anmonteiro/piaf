@@ -41,7 +41,7 @@ type length =
   ]
 
 type contents =
-  [ `Empty
+  [ `Empty of (Gluten.impl -> unit) -> unit (* upgrade handler *)
   | `String of string
   | `Bigstring of Bigstringaf.t IOVec.t
   | `Stream of Bigstringaf.t IOVec.t Lwt_stream.t
@@ -52,13 +52,15 @@ type t =
   ; contents : contents
   }
 
+let default_upgrade = Sys.opaque_identity (fun _ -> ())
+
 let create ~length contents = { length; contents }
 
 let length { length; _ } = length
 
 let contents { contents; _ } = contents
 
-let empty = create ~length:(`Fixed 0L) `Empty
+let empty = create ~length:(`Fixed 0L) (`Empty default_upgrade)
 
 let of_stream ?(length = `Chunked) stream = create ~length (`Stream stream)
 
@@ -85,7 +87,7 @@ let of_bigstring ?(off = 0) ?len bstr =
 
 let to_stream { contents; _ } =
   match contents with
-  | `Empty ->
+  | `Empty _ ->
     Lwt_stream.of_list []
   | `String s ->
     Lwt_stream.of_list [ Bigstringaf.of_string ~off:0 ~len:(String.length s) s ]
@@ -98,7 +100,7 @@ let to_stream { contents; _ } =
 
 let to_string { contents; length } =
   match contents with
-  | `Empty ->
+  | `Empty _ ->
     Lwt.return ""
   | `String s ->
     Lwt.return s
@@ -127,7 +129,7 @@ let to_string { contents; length } =
 
 let to_string_stream { contents; _ } =
   match contents with
-  | `Empty ->
+  | `Empty _ ->
     Lwt_stream.of_list []
   | `String s ->
     Lwt_stream.of_list [ s ]
@@ -140,14 +142,14 @@ let to_string_stream { contents; _ } =
 
 let drain { contents; _ } =
   match contents with
-  | `Empty | `String _ | `Bigstring _ ->
+  | `Empty _ | `String _ | `Bigstring _ ->
     Lwt.return_unit
   | `Stream stream ->
     Lwt_stream.junk_while (fun _ -> true) stream
 
 let drain_available { contents; _ } =
   match contents with
-  | `Empty | `String _ | `Bigstring _ ->
+  | `Empty _ | `String _ | `Bigstring _ ->
     Lwt.return_unit
   | `Stream stream ->
     Lwt_stream.junk_old stream
@@ -155,7 +157,7 @@ let drain_available { contents; _ } =
 let when_closed t f =
   Lwt.async (fun () ->
       match t.contents with
-      | `Empty | `String _ | `Bigstring _ ->
+      | `Empty _ | `String _ | `Bigstring _ ->
         f ();
         Lwt.return_unit
       | `Stream stream ->
