@@ -56,6 +56,14 @@ let sse_response push =
       push (Some "event: end\ndata: 1\n\n");
       push None)
 
+let error_handler _client_addr ?request:_ ~respond _err =
+  let body, push = Lwt_stream.create () in
+  sse_response push;
+  respond
+    ~headers:(Headers.of_list [ "connection", "close" ])
+    (Body.of_string_stream body);
+  Lwt.return_unit
+
 let request_handler ({ request; _ } : Unix.sockaddr Server.ctx) =
   match request.meth with
   | `POST ->
@@ -71,7 +79,7 @@ let main port =
   Lwt.async (fun () ->
       Lwt_io.establish_server_with_client_socket
         listen_address
-        (Server.create ?config:None request_handler)
+        (Server.create ?config:None ~error_handler request_handler)
       >|= fun _server ->
       Printf.printf "Listening on port %i and echoing POST requests.\n%!" port);
   let forever, _ = Lwt.wait () in

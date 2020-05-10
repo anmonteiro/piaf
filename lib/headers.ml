@@ -80,3 +80,7 @@ let host t ~version =
     get t Well_known.HTTP1.host
   | _ ->
     None
+
+let of_http1 headers = of_rev_list (Httpaf.Headers.to_rev_list headers)
+
+let to_http1 headers = Httpaf.Headers.of_rev_list (to_rev_list headers)

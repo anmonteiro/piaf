@@ -407,6 +407,12 @@ module Server : sig
 
   val create
     :  ?config:Config.t
+    -> ?error_handler:
+         (Unix.sockaddr
+          -> ?request:Request.t
+          -> respond:(headers:Headers.t -> Body.t -> unit)
+          -> Httpaf.Server_connection.error
+          -> unit Lwt.t)
     -> Unix.sockaddr Handler.t
     -> Unix.sockaddr
     -> Httpaf_lwt_unix.Server.socket
