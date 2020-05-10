@@ -66,6 +66,10 @@ end
 
 include Handler
 
+module Error_handler = struct
+  type t = unit
+end
+
 let add_length_related_headers headers body =
   (* TODO: check `Httpaf.Response.body_length` because we may have to issue a
    * 0-length response body. *)

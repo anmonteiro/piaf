@@ -398,6 +398,10 @@ module Server : sig
     val not_found : 'a -> Response.t Lwt.t
   end
 
+  module Error_handler : sig
+    type t
+  end
+
   type 'ctx ctx = 'ctx Handler.ctx =
     { ctx : 'ctx
     ; request : Request.t
@@ -410,9 +414,9 @@ module Server : sig
     -> ?error_handler:
          (Unix.sockaddr
           -> ?request:Request.t
-          -> respond:(headers:Headers.t -> Body.t -> unit)
+          -> respond:(headers:Headers.t -> Body.t -> Error_handler.t)
           -> Httpaf.Server_connection.error
-          -> unit Lwt.t)
+          -> Error_handler.t Lwt.t)
     -> Unix.sockaddr Handler.t
     -> Unix.sockaddr
     -> Httpaf_lwt_unix.Server.socket
