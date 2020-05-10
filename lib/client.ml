@@ -291,7 +291,7 @@ let rec return_response
      ; _
      } as t)
     ({ request; _ } as request_info)
-    ({ Response.message = { status; headers; version; _ }; body } as response)
+    ({ Response.status; headers; version; body } as response)
   =
   let open Lwt.Syntax in
   let { Connection_info.scheme; _ } = conn_info in
@@ -395,10 +395,10 @@ let rec send_request_and_handle_response
   (* TODO: 201 created can also return a Location header. Should we follow
    * those? *)
   match
-    ( H2.Status.is_redirection response.message.status
+    ( H2.Status.is_redirection response.status
     , config.follow_redirects
     , remaining_redirects
-    , Headers.(get response.message.headers Well_known.location) )
+    , Headers.(get response.headers Well_known.location) )
   with
   | true, true, 0, _ ->
     (* Response is a redirect, but we can't follow any more. *)

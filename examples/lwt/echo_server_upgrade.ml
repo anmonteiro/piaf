@@ -45,17 +45,14 @@ let connection_handler =
     upgrade (Gluten.make (module Websocketaf.Server_connection) ws_conn)
   in
   let request_handler { Server.request; ctx } =
-    let request_method, headers =
-      Piaf.Request.(meth request, headers request)
-    in
     let httpaf_headers =
-      Httpaf.Headers.of_rev_list (Headers.to_rev_list headers)
+      Httpaf.Headers.of_rev_list (Headers.to_rev_list request.headers)
     in
     let response =
       match
         Websocketaf.Handshake.upgrade_headers
           ~sha1
-          ~request_method
+          ~request_method:request.meth
           httpaf_headers
       with
       | Ok upgrade_headers ->

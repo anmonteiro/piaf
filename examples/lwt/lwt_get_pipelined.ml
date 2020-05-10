@@ -36,7 +36,7 @@ let request host =
   let* () =
     Lwt_stream.iter_s
       (fun chunk -> Lwt_io.printf "%s" chunk)
-      (Response.body response |> Body.to_string_stream)
+      (Body.to_string_stream response.body)
   in
   let open Lwt_syntax.Result in
   let* response = Client.get client "/blog" in
@@ -44,7 +44,7 @@ let request host =
   let+ () =
     Lwt_stream.iter_s
       (fun chunk -> Lwt_io.printf "%s" chunk)
-      (Response.body response |> Body.to_string_stream)
+      (Body.to_string_stream response.body)
   in
   Ok ()
 

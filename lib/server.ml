@@ -76,8 +76,7 @@ let flush_and_close response_body =
   Httpaf.Body.flush response_body (fun () ->
       Httpaf.Body.close_writer response_body)
 
-let add_length_related_headers ({ Response.message; body } as response) =
-  let { Response.headers; _ } = message in
+let add_length_related_headers ({ Response.headers; body; _ } as response) =
   (* TODO: check `Httpaf.Response.body_length` because we may have to issue a
    * 0-length response body. *)
   (* Don't step over an explicit `content-length` header. *)
@@ -93,7 +92,7 @@ let add_length_related_headers ({ Response.message; body } as response) =
     | `Error _ | `Unknown ->
       headers
   in
-  { response with message = { message with headers } }
+  { response with headers }
 
 let create ?config handler =
   (* TODO: error handling*)
@@ -127,7 +126,7 @@ let create ?config handler =
                   Bigstringaf.empty
               else (
                 (* we created it ourselves *)
-                assert (response.message.status = `Switching_protocols);
+                assert (response.status = `Switching_protocols);
                 Reqd.respond_with_upgrade reqd http1_response.headers (fun () ->
                     upgrade_handler upgrade))
             | `String s ->

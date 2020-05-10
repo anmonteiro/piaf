@@ -32,15 +32,11 @@
 open Monads
 module Status = H2.Status
 
-type message =
+type t =
   { (* `H2.Status.t` is a strict superset of `Httpaf.Status.t` *)
     status : Status.t
   ; headers : Headers.t
   ; version : Versions.HTTP.t
-  }
-
-type t =
-  { message : message
   ; body : Body.t
   }
 
@@ -51,7 +47,7 @@ let create
     ?(body = Body.empty)
     status
   =
-  { message = { status; headers; version }; body }
+  { status; headers; version; body }
 
 let of_string ?version ?headers ~body status =
   create ?version ?headers ~body:(Body.of_string body) status
@@ -91,25 +87,15 @@ let upgrade ?version ?(headers = Headers.empty) upgrade_handler =
     ~body:(Body.create ~length:(`Fixed 0L) (`Empty upgrade_handler))
     `Switching_protocols
 
-let status { message = { status; _ }; _ } = status
-
-let headers { message = { headers; _ }; _ } = headers
-
-let body { body; _ } = body
-
-let of_message_and_body message body = { message; body }
-
 let of_http1 ?(body = Body.empty) response =
   let { Httpaf.Response.status; version; headers; _ } = response in
-  { message =
-      { status = (status :> Status.t)
-      ; headers = H2.Headers.of_rev_list (Httpaf.Headers.to_rev_list headers)
-      ; version
-      }
+  { status = (status :> Status.t)
+  ; headers = H2.Headers.of_rev_list (Httpaf.Headers.to_rev_list headers)
+  ; version
   ; body
   }
 
-let to_http1 { message = { status; headers; version }; _ } =
+let to_http1 { status; headers; version; _ } =
   let http1_headers =
     Httpaf.Headers.of_rev_list (H2.Headers.to_rev_list headers)
   in
@@ -128,12 +114,12 @@ let of_h2 ?(body = Body.empty) response =
    * only pseudo-header that can appear in HTTP/2.0 responses, and H2 checks
    * that there aren't others. *)
   let headers = H2.Headers.remove headers ":status" in
-  { message = { status; headers; version = { major = 2; minor = 0 } }; body }
+  { status; headers; version = { major = 2; minor = 0 }; body }
 
-let persistent_connection { message = { version; headers; _ }; _ } =
+let persistent_connection { version; headers; _ } =
   Message.persistent_connection version headers
 
-let pp_hum formatter { message = { headers; status; version; _ }; _ } =
+let pp_hum formatter { headers; status; version; _ } =
   let format_header formatter (name, value) =
     Format.fprintf formatter "%s: %s" name value
   in
