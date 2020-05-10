@@ -78,12 +78,10 @@ module MakeHTTP1
       let+ t = create_connection ~config:(Config.to_http1_config config) fd in
       t, Runtime_scheme.make t.runtime
 
-    let request
-        t ({ Request.message; _ } as req) ~error_handler ~response_handler
-      =
+    let request t req ~error_handler ~response_handler =
       let response_handler response body =
         let request_method =
-          match message.meth with
+          match req.Request.meth with
           | #Method.standard as meth ->
             meth
           | `Other _ ->

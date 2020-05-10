@@ -157,16 +157,16 @@ let inflate_and_print stream =
   in
   Printf.printf "%s" (Buffer.contents result_buf)
 
-let handle_response ~cli { Response.message; body } =
+let handle_response ~cli ({ Response.body; _ } as response) =
   let open Lwt.Syntax in
   let { head; compressed; _ } = cli in
   let+ () =
     if head then (
-      Logs.app (fun m -> m "%a" pp_response_headers message);
+      Logs.app (fun m -> m "%a" pp_response_headers response);
       Lwt.async (fun () -> Body.drain body);
       Lwt.return_unit)
     else
-      match compressed, Headers.get message.headers "content-encoding" with
+      match compressed, Headers.get response.headers "content-encoding" with
       | true, Some encoding when String.lowercase_ascii encoding = "gzip" ->
         (* We requested a compressed response, and we got a compressed response
          * back. *)

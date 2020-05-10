@@ -29,59 +29,47 @@
  * POSSIBILITY OF SUCH DAMAGE.
  *---------------------------------------------------------------------------*)
 
-type message =
+type t =
   { meth : Method.t
   ; target : string
   ; version : Versions.HTTP.t
   ; headers : Headers.t
   ; scheme : Scheme.t
-  }
-
-type t =
-  { message : message
   ; body : Body.t
   }
 
-let uri { message = { scheme; target; headers; version; _ }; _ } =
+let uri { scheme; target; headers; version; _ } =
   let host = Headers.host ~version headers in
   let scheme = Scheme.to_string scheme in
   let uri = Uri.with_uri ~host ~scheme:(Some scheme) (Uri.of_string target) in
   Uri.canonicalize uri
 
-let meth { message = { meth; _ }; _ } = meth
-
-let headers { message = { headers; _ }; _ } = headers
-
-let body { body; _ } = body
-
 let create ~scheme ~version ?(headers = Headers.empty) ~meth ~body target =
-  { message = { meth; target; version; headers; scheme }; body }
+  { meth; target; version; headers; scheme; body }
 
 let of_http1 ?(body = Body.empty) request =
   let { Httpaf.Request.meth; target; version; headers } = request in
-  { message =
-      { meth
-      ; target
-      ; version
-      ; headers = Headers.of_rev_list (Httpaf.Headers.to_rev_list headers)
-      ; scheme = Scheme.HTTP
-      }
+  { meth
+  ; target
+  ; version
+  ; headers = Headers.of_rev_list (Httpaf.Headers.to_rev_list headers)
+  ; scheme = Scheme.HTTP
   ; body
   }
 
-let to_http1 { message = { meth; target; version; headers; _ }; _ } =
+let to_http1 { meth; target; version; headers; _ } =
   let http1_headers =
     Httpaf.Headers.of_rev_list (Headers.to_rev_list headers)
   in
   Httpaf.Request.create ~version ~headers:http1_headers meth target
 
-let to_h2 { message = { meth; target; headers; scheme; _ }; _ } =
+let to_h2 { meth; target; headers; scheme; _ } =
   H2.Request.create ~scheme:(Scheme.to_string scheme) ~headers meth target
 
-let persistent_connection { message = { version; headers; _ }; _ } =
+let persistent_connection { version; headers; _ } =
   Message.persistent_connection version headers
 
-let pp_hum formatter { message = { meth; target; version; headers; _ }; _ } =
+let pp_hum formatter { meth; target; version; headers; _ } =
   let format_header formatter (name, value) =
     Format.fprintf formatter "%s: %s" name value
   in

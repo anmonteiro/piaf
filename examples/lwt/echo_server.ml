@@ -57,7 +57,7 @@ let sse_response push =
       push None)
 
 let request_handler ({ request; _ } : Unix.sockaddr Server.ctx) =
-  match Request.meth request with
+  match request.meth with
   | `POST ->
     let body, push = Lwt_stream.create () in
     sse_response push;

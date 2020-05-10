@@ -169,16 +169,12 @@ module Body : sig
 end
 
 module Request : sig
-  type message = private
+  type t = private
     { meth : Method.t
     ; target : string
     ; version : Versions.HTTP.t
     ; headers : Headers.t
     ; scheme : Scheme.t
-    }
-
-  type t = private
-    { message : message
     ; body : Body.t
     }
 
@@ -193,26 +189,16 @@ module Request : sig
 
   val uri : t -> Uri.t
 
-  val meth : t -> Method.t
-
-  val headers : t -> Headers.t
-
-  val body : t -> Body.t
-
   val persistent_connection : t -> bool
 
   val pp_hum : Format.formatter -> t -> unit [@@ocaml.toplevel_printer]
 end
 
 module Response : sig
-  type message = private
+  type t = private
     { status : Status.t
     ; headers : Headers.t
     ; version : Versions.HTTP.t
-    }
-
-  type t = private
-    { message : message
     ; body : Body.t
     }
 
@@ -258,12 +244,6 @@ module Response : sig
     -> t
 
   val of_file : ?version:Versions.HTTP.t -> ?headers:Headers.t -> string -> t
-
-  val status : t -> Status.t
-
-  val headers : t -> Headers.t
-
-  val body : t -> Body.t
 
   val persistent_connection : t -> bool
 
