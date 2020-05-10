@@ -59,10 +59,12 @@ let sse_response push =
 let error_handler _client_addr ?request:_ ~respond _err =
   let body, push = Lwt_stream.create () in
   sse_response push;
-  respond
-    ~headers:(Headers.of_list [ "connection", "close" ])
-    (Body.of_string_stream body);
-  Lwt.return_unit
+  let error_handler =
+    respond
+      ~headers:(Headers.of_list [ "connection", "close" ])
+      (Body.of_string_stream body)
+  in
+  Lwt.return error_handler
 
 let request_handler ({ request; _ } : Unix.sockaddr Server.ctx) =
   match request.meth with
