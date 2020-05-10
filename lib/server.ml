@@ -66,7 +66,7 @@ end
 
 include Handler
 
-module Error_handler = struct
+module Error_response = struct
   type t = unit
 end
 

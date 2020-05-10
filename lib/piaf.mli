@@ -398,7 +398,7 @@ module Server : sig
     val not_found : 'a -> Response.t Lwt.t
   end
 
-  module Error_handler : sig
+  module Error_response : sig
     type t
   end
 
@@ -414,9 +414,9 @@ module Server : sig
     -> ?error_handler:
          (Unix.sockaddr
           -> ?request:Request.t
-          -> respond:(headers:Headers.t -> Body.t -> Error_handler.t)
+          -> respond:(headers:Headers.t -> Body.t -> Error_response.t)
           -> Httpaf.Server_connection.error
-          -> Error_handler.t Lwt.t)
+          -> Error_response.t Lwt.t)
     -> Unix.sockaddr Handler.t
     -> Unix.sockaddr
     -> Httpaf_lwt_unix.Server.socket
