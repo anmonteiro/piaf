@@ -151,13 +151,14 @@ let request_handler handler client_addr reqd =
           let http1_response = Response.to_http1 response in
           match Body.contents body with
           | `Empty upgrade_handler ->
-            if upgrade_handler == Body.default_upgrade then (* No upgrade *)
+            if Body.Optional_handler.is_none upgrade_handler then
+              (* No upgrade *)
               Reqd.respond_with_bigstring reqd http1_response Bigstringaf.empty
             else (
               (* we created it ourselves *)
               assert (response.status = `Switching_protocols);
               Reqd.respond_with_upgrade reqd http1_response.headers (fun () ->
-                  upgrade_handler upgrade))
+                  Body.Optional_handler.call_if_some upgrade_handler upgrade))
           | `String s ->
             Reqd.respond_with_string reqd http1_response s
           | `Bigstring { IOVec.buffer; off; len } ->

@@ -32,6 +32,37 @@
 open Monads
 module IOVec = H2.IOVec
 
+module Optional_handler : sig
+  type t
+
+  val none : t
+
+  val some : ((Gluten.impl -> unit) -> unit) -> t
+
+  val is_none : t -> bool
+
+  val is_some : t -> bool
+
+  val call_if_some : t -> (Gluten.impl -> unit) -> unit
+end = struct
+  type t = (Gluten.impl -> unit) -> unit
+
+  let none = Sys.opaque_identity (fun _ -> ())
+
+  let some f =
+    if f == none then
+      failwith
+        "Optional_handler.some: the argument to the function can't be \
+         represented as a value";
+    f
+
+  let is_none t = t == none
+
+  let is_some t = not (is_none t)
+
+  let call_if_some t = t
+end
+
 type length =
   [ `Fixed of Int64.t
   | `Chunked
@@ -41,7 +72,7 @@ type length =
   ]
 
 type contents =
-  [ `Empty of (Gluten.impl -> unit) -> unit (* upgrade handler *)
+  [ `Empty of Optional_handler.t
   | `String of string
   | `Bigstring of Bigstringaf.t IOVec.t
   | `Stream of Bigstringaf.t IOVec.t Lwt_stream.t
@@ -52,15 +83,13 @@ type t =
   ; contents : contents
   }
 
-let default_upgrade = Sys.opaque_identity (fun _ -> ())
-
 let create ~length contents = { length; contents }
 
 let length { length; _ } = length
 
 let contents { contents; _ } = contents
 
-let empty = create ~length:(`Fixed 0L) (`Empty default_upgrade)
+let empty = create ~length:(`Fixed 0L) (`Empty Optional_handler.none)
 
 let of_stream ?(length = `Chunked) stream = create ~length (`Stream stream)
 

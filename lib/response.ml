@@ -84,7 +84,10 @@ let upgrade ?version ?(headers = Headers.empty) upgrade_handler =
   create
     ?version
     ~headers
-    ~body:(Body.create ~length:(`Fixed 0L) (`Empty upgrade_handler))
+    ~body:
+      (Body.create
+         ~length:(`Fixed 0L)
+         (`Empty (Body.Optional_handler.some upgrade_handler)))
     `Switching_protocols
 
 let of_http1 ?(body = Body.empty) response =
