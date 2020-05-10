@@ -52,16 +52,13 @@ let of_http1 ?(body = Body.empty) request =
   { meth
   ; target
   ; version
-  ; headers = Headers.of_rev_list (Httpaf.Headers.to_rev_list headers)
+  ; headers = Headers.of_http1 headers
   ; scheme = Scheme.HTTP
   ; body
   }
 
 let to_http1 { meth; target; version; headers; _ } =
-  let http1_headers =
-    Httpaf.Headers.of_rev_list (Headers.to_rev_list headers)
-  in
-  Httpaf.Request.create ~version ~headers:http1_headers meth target
+  Httpaf.Request.create ~version ~headers:(Headers.to_http1 headers) meth target
 
 let to_h2 { meth; target; headers; scheme; _ } =
   H2.Request.create ~scheme:(Scheme.to_string scheme) ~headers meth target
