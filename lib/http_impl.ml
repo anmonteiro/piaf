@@ -125,6 +125,9 @@ let handle_response
           "@[<v 0>Received response:@]@]@;<0 2>@[<v 0>%a@]@."
           Response.pp_hum
           response);
+    (* TODO: needs to wrap reading of the body in the error promises too, because
+     * there could be an error _while_ reading the body that we don't handle
+     * right now. *)
     Ok response
   | Error _ as error ->
     (* TODO: Close the connection if we receive a connection error *)

@@ -229,7 +229,7 @@ module type BODY = sig
   end
 end
 
-let of_prim_body
+let[@ocaml.warning "-21"] of_prim_body
     : type a. (module BODY with type Read.t = a) -> body_length:length -> a -> t
   =
  fun (module Http_body) ~body_length body ->
@@ -246,6 +246,7 @@ let of_prim_body
          * comment for an explanation why:
          * https://github.com/inhabitedtype/httpaf/issues/140#issuecomment-517072327
          *)
+        (* failwith "Uncomment me to see a bug handling the response body."; *)
         let fragment_copy = Bigstringaf.copy ~off ~len fragment in
         let iovec = { IOVec.buffer = fragment_copy; off = 0; len } in
         Lwt.wakeup_later notify (Some iovec));
