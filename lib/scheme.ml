@@ -41,7 +41,7 @@ let of_uri uri =
     Ok HTTPS
   (* We don't support anything else *)
   | Some other ->
-    Error (Format.asprintf "Unsupported scheme: %s" other)
+    Error (`Msg (Format.asprintf "Unsupported scheme: %s" other))
 
 let to_string = function HTTP -> "http" | HTTPS -> "https"
 

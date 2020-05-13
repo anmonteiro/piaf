@@ -81,9 +81,15 @@ type contents =
 type t =
   { length : length
   ; contents : contents
+  ; mutable error_received : Error.t Lwt.t
   }
 
-let create ~length contents = { length; contents }
+(* Never resolves, giving a chance for the normal successful flow to always
+ * resolve. *)
+let default_error_received, _ = Lwt.wait ()
+
+let create ~length contents =
+  { length; contents; error_received = default_error_received }
 
 let length { length; _ } = length
 
@@ -127,7 +133,7 @@ let to_stream { contents; _ } =
       (fun { IOVec.buffer; off; len } -> Bigstringaf.sub ~off ~len buffer)
       stream
 
-let to_string { contents; length } =
+let to_string { contents; length; _ } =
   match contents with
   | `Empty _ ->
     Lwt.return ""
@@ -143,7 +149,7 @@ let to_string { contents; length } =
         Int64.to_int n
       | _ ->
         (* TODO: use some config? *)
-        100
+        0x100
     in
     let result_buffer = Buffer.create len in
     let+ () =
@@ -229,6 +235,8 @@ module type BODY = sig
   end
 end
 
+let embed_error_received t error_received = t.error_received <- error_received
+
 let[@ocaml.warning "-21"] of_prim_body
     : type a. (module BODY with type Read.t = a) -> body_length:length -> a -> t
   =
@@ -242,6 +250,7 @@ let[@ocaml.warning "-21"] of_prim_body
         Body.close_reader body;
         Lwt.wakeup_later notify None)
       ~on_read:(fun fragment ~off ~len ->
+        (* TODO: delete this. This is fixed in the http/af version we use. *)
         (* Note: we always need to make a copy here for now. See the following
          * comment for an explanation why:
          * https://github.com/inhabitedtype/httpaf/issues/140#issuecomment-517072327

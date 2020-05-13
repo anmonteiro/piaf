@@ -90,13 +90,14 @@ module MakeHTTP1
              *
              * The only case where getting this wrong could matter is
              * potentially assuming that the request method was CONNECT and it
-             * sent one of the forbidden headers according to * RFC7231§4.3.6:
+             * sent one of the forbidden headers according to RFC7231§4.3.6:
              *
              *   A server MUST NOT send any Transfer-Encoding or Content-Length
              *   header fields in a 2xx (Successful) response to CONNECT.
              *)
             `GET
         in
+        (* TODO: revisit whether this is necessary. *)
         if request_method = `HEAD then Body.Read.close_reader body;
         let body =
           Piaf_body.of_prim_body
@@ -109,10 +110,12 @@ module MakeHTTP1
         response_handler (Response.of_http1 ~body response)
       in
       let error_handler error =
-        let error =
+        let error : Error.t =
           match error with
-          | `Invalid_response_body_length response ->
-            `Invalid_response_body_length (Response.of_http1 response)
+          | `Invalid_response_body_length { Httpaf.Response.status; headers; _ }
+            ->
+            `Invalid_response_body_length
+              ((status :> H2.Status.t), Headers.of_http1 headers)
           | (`Exn _ | `Malformed_response _) as other ->
             other
         in

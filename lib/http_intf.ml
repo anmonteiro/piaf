@@ -29,19 +29,7 @@
  * POSSIBILITY OF SUCH DAMAGE.
  *---------------------------------------------------------------------------*)
 
-type error_type =
-  [ `Connection
-  | `Stream
-  ]
-
-type error =
-  [ `Exn of exn
-  | `Invalid_response_body_length of Response.t
-  | `Malformed_response of string
-  | `Protocol_error of H2.Error_code.t * string
-  ]
-
-type error_handler = error_type * error -> unit
+type error_handler = Error.kind * Error.t -> unit
 
 module type Client = sig
   type socket

@@ -32,6 +32,7 @@
 module Body = Body
 module Config = Config
 module Client = Client
+module Error = Error
 module Headers = Headers
 module Method = Method
 module Request = Request

@@ -217,7 +217,7 @@ let request ~cli ~config uri =
   | Ok response ->
     handle_response ~cli response
   | Error e ->
-    Lwt.return (`Error (false, e))
+    Lwt.return (`Error (false, Error.to_string e))
 
 let rec request_many ~cli ~config urls =
   let open Lwt.Syntax in

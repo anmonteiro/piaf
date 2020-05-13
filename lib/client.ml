@@ -147,18 +147,20 @@ let connect ~config ~conn_info fd =
             (config.connect_timeout *. 1000.)
         in
         Logs.err (fun m -> m "%s" msg);
-        Lwt_result.fail msg
+        Lwt_result.fail (`Connect_error msg)
       | Unix.Unix_error (ECONNREFUSED, _, _) ->
         Lwt_result.fail
-          (Format.asprintf
-             "Failed connecting to %a: connection refused"
-             Connection_info.pp_hum
-             conn_info)
+          (`Connect_error
+            (Format.asprintf
+               "Failed connecting to %a: connection refused"
+               Connection_info.pp_hum
+               conn_info))
       | exn ->
         Lwt_result.fail
-          (Format.asprintf
-             "FIXME: unhandled connection error (%s)"
-             (Printexc.to_string exn)))
+          (`Connect_error
+            (Format.asprintf
+               "FIXME: unhandled connection error (%s)"
+               (Printexc.to_string exn))))
 
 let make_impl ~config ~conn_info fd =
   let open Lwt_result.Syntax in
@@ -406,7 +408,7 @@ let rec send_request_and_handle_response
       Format.asprintf "Maximum (%d) redirects followed" config.max_redirects
     in
     Log.err (fun m -> m "%s" msg);
-    Lwt_result.fail msg
+    Lwt_result.fail (`Connect_error msg)
   | true, true, _, Some location ->
     let { Connection_info.scheme; _ } = conn_info in
     let new_uri = Uri.parse_with_base_uri ~scheme ~uri location in

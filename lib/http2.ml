@@ -32,10 +32,10 @@
 open Monads
 
 let make_error_handler real_handler type_ error =
-  let error : Http_intf.error =
+  let error : Error.t =
     match error with
-    | `Invalid_response_body_length response ->
-      `Invalid_response_body_length (Response.of_h2 response)
+    | `Invalid_response_body_length { H2.Response.status; headers; _ } ->
+      `Invalid_response_body_length (status, headers)
     | (`Exn _ | `Malformed_response _ | `Protocol_error _) as other ->
       other
   in
@@ -139,15 +139,8 @@ module HTTP : Http_intf.HTTP2 = struct
         in
         response_handler (Response.of_h2 ~body response)
       in
-      let response_error_handler error =
-        let error : Http_intf.error =
-          match error with
-          | `Invalid_response_body_length response ->
-            `Invalid_response_body_length (Response.of_h2 response)
-          | (`Exn _ | `Malformed_response _ | `Protocol_error _) as other ->
-            other
-        in
-        response_error_handler (`Stream, error)
+      let response_error_handler =
+        make_error_handler response_error_handler `Stream
       in
       let connection =
         H2.Client_connection.create_h2c

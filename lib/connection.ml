@@ -45,7 +45,7 @@ let resolve_host ~port hostname =
   match addresses with
   | [] ->
     let msg = Format.asprintf "Can't resolve hostname: %s" hostname in
-    Error msg
+    Error (`Connect_error msg)
   | xs ->
     (* TODO: add resolved canonical hostname *)
     Ok (List.map (fun { Unix.ai_addr; _ } -> ai_addr) xs)
@@ -119,7 +119,7 @@ module Connection_info = struct
       { scheme; uri; host; port; addresses }
     | None ->
       Lwt_result.fail
-        (Format.asprintf "Missing host part for: %a" Uri.pp_hum uri)
+        (`Msg (Format.asprintf "Missing host part for: %a" Uri.pp_hum uri))
 
   let pp_address fmt = function
     | Unix.ADDR_INET (addr, port) ->
@@ -140,11 +140,7 @@ type t =
               and type Body.Read.t = 'b)
       ; handle : 'a
       ; runtime : Scheme.Runtime.t
-      ; connection_error_received : (ok_ret, string) result Lwt.t
+      ; connection_error_received : Error.t Lwt.t
       ; version : Version.t  (** HTTP version that this connection speaks *)
       }
       -> t
-
-and ok_ret =
-  | C of t
-  | R of Response.t
