@@ -245,8 +245,8 @@ module Body : sig
 
   (** {3 Conversion to [Lwt_stream.t]} *)
 
-  (** The functions below convert a [Piaf.Body.t] to an [Lwt_stream.t]. These *
-      functions should be used sparingly, and only when interacting with other *
+  (** The functions below convert a [Piaf.Body.t] to an [Lwt_stream.t]. These
+      functions should be used sparingly, and only when interacting with other
       APIs that require their argument to be a [Lwt_stream.t].
 
       These functions return a tuple of two elements. In addition to returning a
