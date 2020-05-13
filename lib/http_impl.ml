@@ -70,10 +70,7 @@ let create_connection
       ; version
       }
   in
-  (* TODO(anmonteiro): this is not 100% correct. In an HTTP/2 connection there could
-   * be an unrecoverable connection error at any point in time which causes
-   * the connection to shutdown. *)
-  Lwt.pick
+  Lwt.choose
     [ Lwt_result.return conn; Lwt_result.error connection_error_received ]
 
 let flush_and_close
@@ -109,10 +106,9 @@ let handle_response
           "@[<v 0>Received response:@]@]@;<0 2>@[<v 0>%a@]@."
           Response.pp_hum
           response);
-    Body.embed_error_received response.body response_error_p;
-    (* TODO: needs to wrap reading of the body in the error promises too, because
-     * there could be an error _while_ reading the body that we don't handle
-     * right now. *)
+    Body.embed_error_received
+      response.body
+      (Lwt.choose [ connection_error_p; response_error_p ]);
     Ok response
   | Error _ as error ->
     (* TODO: Close the connection if we receive a connection error *)

@@ -172,15 +172,96 @@ module Body : sig
 
   val of_bigstring : ?off:int -> ?len:int -> Bigstringaf.t -> t
 
-  val to_stream : t -> Bigstringaf.t Lwt_stream.t
-
-  val to_string_stream : t -> string Lwt_stream.t
-
-  val to_string : t -> string Lwt.t
+  val to_string : t -> (string, Error.t) result Lwt.t
 
   val drain : t -> unit Lwt.t
 
   val when_closed : t -> (unit -> unit) -> unit
+
+  (** {3 Traversal} *)
+
+  val fold
+    :  (Bigstringaf.t Faraday.iovec -> 'a -> 'a)
+    -> t
+    -> 'a
+    -> ('a, Error.t) result Lwt.t
+
+  val fold_string
+    :  (string -> 'a -> 'a)
+    -> t
+    -> 'a
+    -> ('a, Error.t) result Lwt.t
+
+  val fold_s
+    :  (Bigstringaf.t Faraday.iovec -> 'a -> 'a Lwt.t)
+    -> t
+    -> 'a
+    -> ('a, Error.t) result Lwt.t
+
+  val fold_string_s
+    :  (string -> 'a -> 'a Lwt.t)
+    -> t
+    -> 'a
+    -> ('a, Error.t) result Lwt.t
+
+  val iter
+    :  (Bigstringaf.t Faraday.iovec -> unit)
+    -> t
+    -> (unit, Error.t) result Lwt.t
+
+  val iter_string : (string -> unit) -> t -> (unit, Error.t) result Lwt.t
+
+  val iter_s
+    :  (Bigstringaf.t Faraday.iovec -> unit Lwt.t)
+    -> t
+    -> (unit, Error.t) result Lwt.t
+
+  val iter_string_s
+    :  (string -> unit Lwt.t)
+    -> t
+    -> (unit, Error.t) result Lwt.t
+
+  val iter_p
+    :  (Bigstringaf.t Faraday.iovec -> unit Lwt.t)
+    -> t
+    -> (unit, Error.t) result Lwt.t
+
+  val iter_string_p
+    :  (string -> unit Lwt.t)
+    -> t
+    -> (unit, Error.t) result Lwt.t
+
+  val iter_n
+    :  ?max_concurrency:int
+    -> (Bigstringaf.t Faraday.iovec -> unit Lwt.t)
+    -> t
+    -> (unit, Error.t) result Lwt.t
+
+  val iter_string_n
+    :  ?max_concurrency:int
+    -> (string -> unit Lwt.t)
+    -> t
+    -> (unit, Error.t) result Lwt.t
+
+  (** {3 Conversion to [Lwt_stream.t]} *)
+
+  (** The functions below convert a [Piaf.Body.t] to an [Lwt_stream.t]. These *
+      functions should be used sparingly, and only when interacting with other *
+      APIs that require their argument to be a [Lwt_stream.t].
+
+      These functions return a tuple of two elements. In addition to returning a
+      [Lwt_stream.t], the tuple's second element is a promise that will sleep
+      until the stream is consumed (and closed). This promise will resolve to
+      [Ok ()] if the body was successfully transferred from the peer; otherwise,
+      it will return [Error error] with an error of type [Error.t] detailing the
+      failure that caused the body to not have been fully transferred from the
+      peer. *)
+
+  val to_stream
+    :  t
+    -> Bigstringaf.t H2.IOVec.t Lwt_stream.t * (unit, Error.t) result Lwt.t
+
+  val to_string_stream : t -> string Lwt_stream.t * (unit, Error.t) result Lwt.t
 end
 
 module Request : sig

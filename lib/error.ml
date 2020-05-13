@@ -13,8 +13,8 @@ type t =
   ]
 
 let to_string = function
-  | `Exn _exn ->
-    "toine" (* Printexc.to_string exn *)
+  | `Exn exn ->
+    Printexc.to_string exn
   | `Invalid_response_body_length (status, headers) ->
     Format.asprintf
       "Invalid Response body length. Status: %a, Headers: %a"
@@ -26,7 +26,7 @@ let to_string = function
     Format.asprintf "Malformed Response: %s" msg
   | `Protocol_error (code, msg) ->
     Format.asprintf
-      "Protocol Error %a%s%s"
+      "Protocol Error (%a)%s%s"
       H2.Error_code.pp_hum
       code
       (if msg = "" then "" else ": ")
