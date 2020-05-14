@@ -214,23 +214,18 @@ let is_closed t =
   | `Stream stream ->
     Lwt_stream.is_closed stream
 
-let when_closed t f =
-  Lwt.async (fun () ->
-      match t.contents with
-      | `Empty _ | `String _ | `Bigstring _ ->
-        f ();
-        Lwt.return_unit
-      | `Stream stream ->
-        let open Lwt.Syntax in
-        let+ () = Lwt_stream.closed stream in
-        f ())
-
 let closed t =
   match t.contents with
   | `Empty _ | `String _ | `Bigstring _ ->
-    Lwt.return_unit
+    Lwt_result.return ()
   | `Stream stream ->
-    Lwt_stream.closed stream
+    or_error t ~stream ()
+
+let when_closed t f =
+  Lwt.async (fun () ->
+      let open Lwt.Syntax in
+      let+ result = closed t in
+      f result)
 
 (* "Primitive" body types for http/af / h2 compatibility *)
 module type BODY = sig

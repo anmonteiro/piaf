@@ -178,9 +178,9 @@ module Body : sig
 
   val is_closed : t -> bool
 
-  val closed : t -> unit Lwt.t
+  val closed : t -> (unit, Error.t) result Lwt.t
 
-  val when_closed : t -> (unit -> unit) -> unit
+  val when_closed : t -> ((unit, Error.t) result -> unit) -> unit
 
   (** {3 Traversal} *)
 
