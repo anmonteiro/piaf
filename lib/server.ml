@@ -96,13 +96,17 @@ let stream_response_body response_body stream =
        * uploaded? Might be better for preventing leaks. *)
       let+ () = Lwt_stream.closed stream in
       flush_and_close response_body);
-  Lwt.ignore_result
-    (Lwt_stream.iter
-       (fun { IOVec.buffer; off; len } ->
-         Httpaf.Body.schedule_bigstring response_body ~off ~len buffer;
-         Httpaf.Body.flush response_body (fun () ->
-             Log.debug (fun m -> m "Flushed output chunk of length %d" len)))
-       stream)
+  Lwt.async (fun () ->
+      Lwt_stream.iter
+        (fun { IOVec.buffer; off; len } ->
+          (* If the peer left abruptly the connection will be shutdown. Avoid
+           * crashing the server with exceptions related to the writer being
+           * closed. *)
+          if not (Httpaf.Body.is_closed response_body) then (
+            Httpaf.Body.schedule_bigstring response_body ~off ~len buffer;
+            Httpaf.Body.flush response_body (fun () ->
+                Log.debug (fun m -> m "Flushed output chunk of length %d" len))))
+        stream)
 
 let make_error_handler error_handler client_addr ?request error start_response =
   let respond ~headers body =
