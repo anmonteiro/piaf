@@ -175,34 +175,66 @@ let protocols_to_disable min max =
   let protocols, _ = List.partition f Versions.TLS.ordered in
   protocols
 
-let ssl_error_to_string = function
-  | Ssl.Error_none ->
-    "Error_none"
-  | Error_ssl ->
-    "Error_ssl"
-  | Error_want_read ->
-    "Error_want_read"
-  | Error_want_write ->
-    "Error_want_write"
-  | Error_want_x509_lookup ->
-    "Error_want_x509_lookup"
-  | Error_syscall ->
-    "Error_syscall"
-  | Error_zero_return ->
-    "Error_zero_return"
-  | Error_want_connect ->
-    "Error_want_connect"
-  | Error_want_accept ->
-    "Error_want_accept"
+module Error = struct
+  let ssl_error_to_string = function
+    | Ssl.Error_none ->
+      "Error_none"
+    | Error_ssl ->
+      "Error_ssl"
+    | Error_want_read ->
+      "Error_want_read"
+    | Error_want_write ->
+      "Error_want_write"
+    | Error_want_x509_lookup ->
+      "Error_want_x509_lookup"
+    | Error_syscall ->
+      "Error_syscall"
+    | Error_zero_return ->
+      "Error_zero_return"
+    | Error_want_connect ->
+      "Error_want_connect"
+    | Error_want_accept ->
+      "Error_want_accept"
 
-let fail_with_too_old_ssl max_tls_version =
-  let reason =
-    Format.asprintf
-      "OpenSSL wasn't compiled with %a support"
-      Versions.TLS.pp_hum
-      max_tls_version
-  in
-  Lwt_result.fail (`Connect_error reason)
+  let ssl_error_to_string ssl_error =
+    let error_string =
+      match ssl_error with
+      | ( Ssl.Error_none
+        | Error_want_read
+        | Error_want_write
+        | Error_want_connect
+        | Error_want_accept
+        | Error_want_x509_lookup ) as e ->
+        Log.err (fun m ->
+            m
+              "`%s` should never be raised. Please report an issue."
+              (ssl_error_to_string e));
+        assert false
+      | Error_ssl ->
+        "SSL Error"
+      | Error_syscall ->
+        (* Some I/O error occurred. The OpenSSL error queue may contain more
+           information on the error. *)
+        "Syscall Error"
+      | Error_zero_return ->
+        (* The TLS/SSL connection has been closed. If the protocol version is
+           SSL 3.0 or TLS 1.0, this result code is returned only if a closure
+           alert has occurred in the protocol, i.e. if the connection has been
+           closed cleanly. Note that in this case [Error_zero_return] does not
+           necessarily indicate that the underlying transport has been closed. *)
+        "SSL Connection closed"
+    in
+    Format.asprintf "%s: %s" error_string (Ssl.get_error_string ())
+
+  let fail_with_too_old_ssl max_tls_version =
+    let reason =
+      Format.asprintf
+        "OpenSSL wasn't compiled with %a support"
+        Versions.TLS.pp_hum
+        max_tls_version
+    in
+    Lwt_result.fail (`Connect_error reason)
+end
 
 (* Assumes Lwt_unix.connect has already been called. *)
 let connect ~hostname ~config ~alpn_protocols fd =
@@ -237,9 +269,9 @@ let connect ~hostname ~config ~alpn_protocols fd =
           Client_context)
     with
     | exception Ssl.Method_error ->
-      fail_with_too_old_ssl max_tls_version
+      Error.fail_with_too_old_ssl max_tls_version
     | exception Invalid_argument _ ->
-      fail_with_too_old_ssl max_tls_version
+      Error.fail_with_too_old_ssl max_tls_version
     | ctx ->
       let disabled_protocols =
         List.map
@@ -279,13 +311,10 @@ let connect ~hostname ~config ~alpn_protocols fd =
         Lwt.catch
           (fun () -> Lwt_result.ok (Lwt_ssl.ssl_perform_handshake s))
           (function
-            | Ssl.Connection_error ssl_error as exn ->
-              Format.eprintf
-                "ERR: %s: %S@\n(%s)@."
-                (ssl_error_to_string ssl_error)
-                (Ssl.get_error_string ())
-                (Printexc.to_string exn);
-              Lwt_result.fail ssl_error
+            | Ssl.Connection_error ssl_error ->
+              let msg = Error.ssl_error_to_string ssl_error in
+              Log.err (fun m -> m "%s" msg);
+              Lwt_result.fail (`Connect_error msg)
             | _ ->
               assert false)
       in
@@ -302,17 +331,13 @@ let connect ~hostname ~config ~alpn_protocols fd =
         (* Verification succeeded, or `allow_insecure` is true *)
         log_cert_info ~allow_insecure ssl_sock;
         Ok ssl_socket
-      | Error _ssl_error ->
-        (* If we're here, `allow_insecure` better be false, otherwise we forgot
-         * to handle some failure mode. The assert below will make us remember.
-         *)
+      | Error e ->
         let verify_result = Ssl.get_verify_result ssl_sock in
-        let msg =
-          Format.asprintf
-            "%a"
-            (pp_cert_verify_result ~allow_insecure)
-            verify_result
-        in
-        Log.err (fun m -> m "%s" msg);
-        assert (not allow_insecure);
-        Error (`Connect_error msg))
+        if verify_result <> 0 then (
+          (* If we're here, `allow_insecure` better be false, otherwise we
+           * forgot to handle some failure mode. The assert below will make us
+           * remember. *)
+          assert (not allow_insecure);
+          Log.err (fun m ->
+              m "%a" (pp_cert_verify_result ~allow_insecure) verify_result));
+        Error e)
