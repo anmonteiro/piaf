@@ -42,6 +42,8 @@ end
 module Lwt_result = struct
   include Lwt_result
 
+  let error e = Lwt.map (fun e -> Error e) e
+
   module Syntax = struct
     let ( let+ ) x f = map f x
 

@@ -148,47 +148,48 @@ let inflate_chunk zstream result_buffer chunk =
   inner ~off:0 ~len:(String.length chunk)
 
 (* TODO: try / catch *)
-let inflate_and_print stream =
-  let open Lwt.Syntax in
+let inflate_and_print response_body =
+  let open Lwt_result.Syntax in
   let zstream = Zlib.inflate_init false in
   let result_buf = Buffer.create 1024 in
   let+ () =
-    Lwt_stream.iter (fun chunk -> inflate_chunk zstream result_buf chunk) stream
+    Body.iter_string
+      (fun chunk -> inflate_chunk zstream result_buf chunk)
+      response_body
   in
   Printf.printf "%s" (Buffer.contents result_buf)
 
 let handle_response ~cli ({ Response.body; _ } as response) =
-  let open Lwt.Syntax in
+  let open Lwt_result.Syntax in
   let { head; compressed; _ } = cli in
-  let+ () =
-    if head then (
-      Logs.app (fun m -> m "%a" pp_response_headers response);
-      Lwt.async (fun () -> Body.drain body);
-      Lwt.return_unit)
-    else
-      match compressed, Headers.get response.headers "content-encoding" with
-      | true, Some encoding when String.lowercase_ascii encoding = "gzip" ->
-        (* We requested a compressed response, and we got a compressed response
-         * back. *)
-        let* response_body_str = Body.to_string body in
-        (match Ezgzip.decompress response_body_str with
-        | Ok body_str ->
-          Lwt_io.printf "%s" body_str
-        | Error _ ->
-          assert false)
-      | true, Some encoding when String.lowercase_ascii encoding = "deflate" ->
-        (* We requested a compressed response, and we got a compressed response
-         * back. *)
-        let response_body_stream = Body.to_string_stream body in
-        inflate_and_print response_body_stream
-      | _ ->
-        Lwt_stream.iter
-          (fun body_fragment ->
-            Printf.printf "%s" body_fragment;
-            flush stdout)
-          (Body.to_string_stream body)
-  in
-  `Ok ()
+  if head then (
+    Logs.app (fun m -> m "%a" pp_response_headers response);
+    Lwt.async (fun () ->
+        let open Lwt.Syntax in
+        let+ _ = Body.drain body in
+        ());
+    Lwt.return_ok ())
+  else
+    match compressed, Headers.get response.headers "content-encoding" with
+    | true, Some encoding when String.lowercase_ascii encoding = "gzip" ->
+      (* We requested a compressed response, and we got a compressed response
+       * back. *)
+      let+ response_body_str = Body.to_string body in
+      (match Ezgzip.decompress response_body_str with
+      | Ok body_str ->
+        Printf.printf "%s" body_str
+      | Error _ ->
+        assert false)
+    | true, Some encoding when String.lowercase_ascii encoding = "deflate" ->
+      (* We requested a compressed response, and we got a compressed response
+       * back. *)
+      inflate_and_print body
+    | _ ->
+      Body.iter_string
+        (fun body_fragment ->
+          Printf.printf "%s" body_fragment;
+          flush stdout)
+        body
 
 let build_headers ~cli:{ headers; user_agent; referer; compressed; _ } =
   let headers = ("User-Agent", user_agent) :: headers in
@@ -206,18 +207,14 @@ let build_headers ~cli:{ headers; user_agent; referer; compressed; _ } =
 
 let request ~cli ~config uri =
   let module Client = Client.Oneshot in
-  let open Lwt.Syntax in
+  let open Lwt_result.Syntax in
   let { meth; data; _ } = cli in
   let headers = build_headers ~cli in
   let body =
     match data with Some s -> Some (Body.of_string s) | None -> None
   in
-  let* res = Client.request ~config ~meth ~headers ?body uri in
-  match res with
-  | Ok response ->
-    handle_response ~cli response
-  | Error e ->
-    Lwt.return (`Error (false, e))
+  let* response = Client.request ~config ~meth ~headers ?body uri in
+  handle_response ~cli response
 
 let rec request_many ~cli ~config urls =
   let open Lwt.Syntax in
@@ -228,7 +225,11 @@ let rec request_many ~cli ~config urls =
   | x :: xs ->
     let uri = uri_of_string ~scheme:default_proto x in
     let* r = request ~cli ~config uri in
-    (match r with `Ok () -> request_many ~cli ~config xs | _ -> Lwt.return r)
+    (match r with
+    | Ok () ->
+      request_many ~cli ~config xs
+    | Error e ->
+      Lwt.return (`Error (false, Error.to_string e)))
 
 let log_level_of_list = function [] -> Logs.App | [ _ ] -> Info | _ -> Debug
 

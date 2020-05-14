@@ -36,6 +36,8 @@ module Log = (val Logs.src_log src : Logs.LOG)
 (* TODO:
  * - Authentication
  * - Timeouts?
+ * - Retries
+ *   - 8.1.4 in https://www.w3.org/Protocols/rfc2616/rfc2616-sec8.html
  *)
 
 type t =

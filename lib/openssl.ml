@@ -106,7 +106,7 @@ let load_verify_locations ?(cacert = "") ?(capath = "") ctx =
   match Ssl.load_verify_locations ctx cacert capath with
   | () ->
     Ok ()
-  | exception Invalid_argument msg ->
+  | exception (Invalid_argument _ as exn) ->
     Log.err (fun m ->
         m
           "@[<v 0>Error setting certificate verify locations:@]@]@;\
@@ -114,7 +114,7 @@ let load_verify_locations ?(cacert = "") ?(capath = "") ctx =
            <0 2>@[<h 0>CApath:@ %s@]"
           (if cacert = "" then "none" else cacert)
           (if capath = "" then "none" else capath));
-    Error msg
+    Error (`Exn exn)
 
 let configure_verify_locations ctx cacert capath =
   let promise, resolver = Lwt.wait () in
@@ -128,7 +128,7 @@ let configure_verify_locations ctx cacert capath =
           if Ssl.set_default_verify_paths ctx then
             Ok ()
           else
-            Error "Failed to set default verify paths"
+            Error (`Connect_error "Failed to set default verify paths")
       in
       Lwt.wakeup_later resolver result;
       Lwt.return_unit);
@@ -202,7 +202,7 @@ let fail_with_too_old_ssl max_tls_version =
       Versions.TLS.pp_hum
       max_tls_version
   in
-  Lwt_result.fail reason
+  Lwt_result.fail (`Connect_error reason)
 
 (* Assumes Lwt_unix.connect has already been called. *)
 let connect ~hostname ~config ~alpn_protocols fd =
@@ -228,7 +228,7 @@ let connect ~hostname ~config ~alpn_protocols fd =
         max_tls_version
     in
     Log.err (fun m -> m "%s" msg);
-    Lwt_result.fail msg)
+    Lwt_result.fail (`Connect_error msg))
   else
     match
       Ssl.(
@@ -303,8 +303,9 @@ let connect ~hostname ~config ~alpn_protocols fd =
         log_cert_info ~allow_insecure ssl_sock;
         Ok ssl_socket
       | Error _ssl_error ->
-        (* If we're here, `allow_insecure` better be false, otherwise we forgot to
-         * handle some failure mode. The assert below will make use remember. *)
+        (* If we're here, `allow_insecure` better be false, otherwise we forgot
+         * to handle some failure mode. The assert below will make us remember.
+         *)
         let verify_result = Ssl.get_verify_result ssl_sock in
         let msg =
           Format.asprintf
@@ -314,4 +315,4 @@ let connect ~hostname ~config ~alpn_protocols fd =
         in
         Log.err (fun m -> m "%s" msg);
         assert (not allow_insecure);
-        Error msg)
+        Error (`Connect_error msg))

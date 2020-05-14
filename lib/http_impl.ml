@@ -40,18 +40,7 @@ let src = Logs.Src.create "piaf.http" ~doc:"Piaf HTTP module"
 module Log = (val Logs.src_log src : Logs.LOG)
 
 let make_error_handler notify_response_received (_, error) =
-  let error_str =
-    match error with
-    | `Malformed_response s ->
-      s
-    | `Exn exn ->
-      Printexc.to_string exn
-    | `Protocol_error (_code, msg) ->
-      Format.asprintf "Protocol Error: %S" msg
-    | `Invalid_response_body_length _ ->
-      Format.asprintf "invalid response body length"
-  in
-  Lwt.wakeup notify_response_received (Error error_str)
+  Lwt.wakeup notify_response_received error
 
 let create_connection
     : type a r.
@@ -61,12 +50,14 @@ let create_connection
       -> config:Config.t
       -> version:Versions.HTTP.t
       -> a
-      -> (Connection.t, string) result Lwt.t
+      -> (Connection.t, Error.t) result Lwt.t
   =
  fun (module Http_impl) ~config ~version socket ->
   let open Lwt.Syntax in
-  let error_received, notify_error_received = Lwt.wait () in
-  let error_handler = make_error_handler notify_error_received in
+  let connection_error_received, notify_connection_error_received =
+    Lwt.wait ()
+  in
+  let error_handler = make_error_handler notify_connection_error_received in
   let* handle, runtime =
     Http_impl.Client.create_connection ~config ~error_handler socket
   in
@@ -75,20 +66,12 @@ let create_connection
       { impl = (module Http_impl)
       ; handle
       ; runtime
-      ; connection_error_received = error_received
+      ; connection_error_received
       ; version
       }
   in
-  let+ result =
-    Lwt.pick [ Lwt_result.return (Connection.C conn); error_received ]
-  in
-  match result with
-  | Ok (C conn) ->
-    Ok conn
-  | Ok (R _) ->
-    assert false
-  | Error _ as err ->
-    err
+  Lwt.choose
+    [ Lwt_result.return conn; Lwt_result.error connection_error_received ]
 
 let flush_and_close
     : type a. (module Body.BODY with type Write.t = a) -> a -> unit
@@ -101,30 +84,31 @@ let flush_and_close
           m "Request body has been completely and successfully uploaded"))
 
 let handle_response
-    : type a.
-      (module Body.BODY with type Read.t = a)
-      -> (Connection.ok_ret, string) result Lwt.t
-      -> (Connection.ok_ret, string) result Lwt.t
-      -> (Connection.ok_ret, string) result Lwt.t
-      -> (Response.t, string) result Lwt.t
+    :  Response.t Lwt.t -> Error.t Lwt.t -> Error.t Lwt.t
+    -> (Response.t, Error.t) result Lwt.t
   =
- fun (module Http_body) response_p response_error_p connection_error_p ->
+ fun response_p response_error_p connection_error_p ->
   let open Lwt.Syntax in
-  (* Use `Lwt.choose` specifically so that we don't cancel the error_received
-   * promise. We want it to stick around for subsequent requests on the
-   * connection. *)
+  (* Use `Lwt.choose` specifically so that we don't cancel the
+   * `connection_error_p` promise. We want it to stick around for subsequent
+   * requests on the connection. *)
   let+ result =
-    Lwt.choose [ response_p; response_error_p; connection_error_p ]
+    Lwt.choose
+      [ Lwt_result.ok response_p
+      ; Lwt_result.error response_error_p
+      ; Lwt_result.error connection_error_p
+      ]
   in
   match result with
-  | Ok (Connection.C _) ->
-    assert false
-  | Ok (R response) ->
+  | Ok response ->
     Log.info (fun m ->
         m
           "@[<v 0>Received response:@]@]@;<0 2>@[<v 0>%a@]@."
           Response.pp_hum
           response);
+    Body.embed_error_received
+      response.body
+      (Lwt.choose [ connection_error_p; response_error_p ]);
     Ok response
   | Error _ as error ->
     (* TODO: Close the connection if we receive a connection error *)
@@ -143,12 +127,10 @@ let send_request
   in
   let module Client = Http.Client in
   let module Bodyw = Http.Body.Write in
-  let response_received, notify_response_received = Lwt.wait () in
-  let response_handler response =
-    Lwt.wakeup_later notify_response_received (Ok (Connection.R response))
-  in
-  let error_received, notify_error_received = Lwt.wait () in
-  let error_handler = make_error_handler notify_error_received in
+  let response_received, notify_response = Lwt.wait () in
+  let response_handler response = Lwt.wakeup_later notify_response response in
+  let error_received, notify_error = Lwt.wait () in
+  let error_handler = make_error_handler notify_error in
   Log.info (fun m ->
       m "@[<v 0>Sending request:@]@]@;<0 2>@[<v 0>%a@]@." Request.pp_hum request);
   let request_body =
@@ -175,15 +157,14 @@ let send_request
           (fun { IOVec.buffer; off; len } ->
             Bodyw.schedule_bigstring request_body ~off ~len buffer)
           stream);
-  handle_response
-    (module Http.Body)
-    response_received
-    error_received
-    connection_error_received
+  handle_response response_received error_received connection_error_received
+
+let can't_upgrade msg =
+  Lwt_result.fail (`Protocol_error (H2.Error_code.HTTP_1_1_Required, msg))
 
 let create_h2c_connection
     :  config:Config.t -> http_request:Request.t -> Scheme.Runtime.t
-    -> (Connection.t * Response.t, string) result Lwt.t
+    -> (Connection.t * Response.t, Error.t) result Lwt.t
   =
  fun ~config ~http_request runtime ->
   match runtime with
@@ -191,7 +172,7 @@ let create_h2c_connection
     let (module Http2) = (module Http2.HTTP : Http_intf.HTTP2) in
     let response_received, notify_response_received = Lwt.wait () in
     let response_handler response =
-      Lwt.wakeup_later notify_response_received (Ok (Connection.R response))
+      Lwt.wakeup_later notify_response_received response
     in
     let connection_error_received, notify_error_received = Lwt.wait () in
     let error_handler = make_error_handler notify_error_received in
@@ -215,7 +196,6 @@ let create_h2c_connection
       let open Lwt.Syntax in
       let+ result =
         handle_response
-          (module Http2.Body)
           response_received
           response_error_received
           connection_error_received
@@ -235,9 +215,9 @@ let create_h2c_connection
       | Error _ as error ->
         error)
     | Error msg ->
-      Lwt_result.fail msg)
+      can't_upgrade msg)
   | HTTPS _ ->
-    Lwt_result.fail
+    can't_upgrade
       "Attempted to start HTTP/2 over cleartext TCP but was already \
        communicating over HTTPS"
 
