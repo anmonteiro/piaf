@@ -174,7 +174,11 @@ module Body : sig
 
   val to_string : t -> (string, Error.t) result Lwt.t
 
-  val drain : t -> unit Lwt.t
+  val drain : t -> (unit, Error.t) result Lwt.t
+
+  val is_closed : t -> bool
+
+  val closed : t -> unit Lwt.t
 
   val when_closed : t -> (unit -> unit) -> unit
 

@@ -191,12 +191,14 @@ let to_string_stream ({ contents; _ } as t) =
   in
   stream, or_error ~stream t ()
 
-let drain { contents; _ } =
+let drain ({ contents; _ } as t) =
+  let open Lwt.Syntax in
   match contents with
   | `Empty _ | `String _ | `Bigstring _ ->
-    Lwt.return_unit
+    Lwt_result.return ()
   | `Stream stream ->
-    Lwt_stream.junk_while (fun _ -> true) stream
+    let* () = Lwt_stream.junk_while (fun _ -> true) stream in
+    or_error t ~stream ()
 
 let drain_available { contents; _ } =
   match contents with
@@ -204,6 +206,13 @@ let drain_available { contents; _ } =
     Lwt.return_unit
   | `Stream stream ->
     Lwt_stream.junk_old stream
+
+let is_closed t =
+  match t.contents with
+  | `Empty _ | `String _ | `Bigstring _ ->
+    true
+  | `Stream stream ->
+    Lwt_stream.is_closed stream
 
 let when_closed t f =
   Lwt.async (fun () ->
@@ -215,6 +224,13 @@ let when_closed t f =
         let open Lwt.Syntax in
         let+ () = Lwt_stream.closed stream in
         f ())
+
+let closed t =
+  match t.contents with
+  | `Empty _ | `String _ | `Bigstring _ ->
+    Lwt.return_unit
+  | `Stream stream ->
+    Lwt_stream.closed stream
 
 (* "Primitive" body types for http/af / h2 compatibility *)
 module type BODY = sig

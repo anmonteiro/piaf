@@ -295,7 +295,6 @@ let rec return_response
     ({ request; _ } as request_info)
     ({ Response.status; headers; version; body } as response)
   =
-  let open Lwt.Syntax in
   let { Connection_info.scheme; _ } = conn_info in
   (* A particular set of conditions must be true: we're receiving an HTTP
    * response, over HTTP/1.1, that has status 101, and we've asked to upgrade
@@ -318,8 +317,8 @@ let rec return_response
     | Some ("Upgrade" | "upgrade"), Some "h2c" ->
       Log.debug (fun m -> m "Received 101, server accepted HTTP/2 upgrade");
       let (module Http2) = (module Http2.HTTP : Http_intf.HTTP2) in
-      let* () = Body.drain body in
       let open Lwt_result.Syntax in
+      let* () = Body.drain body in
       let* h2_conn, response =
         Http_impl.create_h2c_connection ~config ~http_request:request runtime
       in
@@ -420,7 +419,10 @@ let rec send_request_and_handle_response
      * Otherwise, if we couldn't reuse the connection, drain the response body
      * and additionally shut down the old connection. *)
     if did_reuse then
-      Lwt.async (fun () -> Body.drain response.body)
+      Lwt.async (fun () ->
+          let open Lwt.Syntax in
+          let+ _ = Body.drain response.body in
+          ())
     else
       (* In this branch, don't bother waiting for the entire response body to
        * arrive, we're going to shut down the connection either way. Just hang

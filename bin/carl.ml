@@ -164,7 +164,10 @@ let handle_response ~cli ({ Response.body; _ } as response) =
   let { head; compressed; _ } = cli in
   if head then (
     Logs.app (fun m -> m "%a" pp_response_headers response);
-    Lwt.async (fun () -> Body.drain body);
+    Lwt.async (fun () ->
+        let open Lwt.Syntax in
+        let+ _ = Body.drain body in
+        ());
     Lwt.return_ok ())
   else
     match compressed, Headers.get response.headers "content-encoding" with
