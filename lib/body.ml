@@ -287,7 +287,13 @@ let[@ocaml.warning "-21"] of_prim_body
         Lwt.wakeup_later notify (Some iovec));
     let t = Lazy.force t in
     Lwt.choose
-      [ body_chunk_p; Lwt.bind t.error_received (fun _ -> Lwt.return_none) ]
+      [ body_chunk_p
+      ; Lwt.bind t.error_received (fun _ ->
+            (* `None` closes the stream. The promise `t.error_received` remains
+             * fulfilled, which signals that the stream hasn't closed cleanly.
+             *)
+            Lwt.return_none)
+      ]
   in
   let rec t =
     lazy (of_stream ~length:body_length (Lwt_stream.from (read_fn t)))
