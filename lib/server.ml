@@ -90,11 +90,7 @@ let flush_and_close response_body =
       Httpaf.Body.close_writer response_body)
 
 let stream_response_body response_body stream =
-  let open Lwt.Syntax in
-  Lwt.async (fun () ->
-      (* TODO: should we use `Lwt.on_success` and close the stream once
-       * uploaded? Might be better for preventing leaks. *)
-      let+ () = Lwt_stream.closed stream in
+  Lwt.on_success (Lwt_stream.closed stream) (fun () ->
       flush_and_close response_body);
   Lwt.async (fun () ->
       Lwt_stream.iter

@@ -221,11 +221,7 @@ let closed t =
   | `Stream stream ->
     or_error t ~stream ()
 
-let when_closed t f =
-  Lwt.async (fun () ->
-      let open Lwt.Syntax in
-      let+ result = closed t in
-      f result)
+let when_closed t f = Lwt.on_success (closed t) f
 
 (* "Primitive" body types for http/af / h2 compatibility *)
 module type BODY = sig
@@ -264,7 +260,7 @@ end
 
 let embed_error_received t error_received = t.error_received <- error_received
 
-let[@ocaml.warning "-21"] of_prim_body
+let of_prim_body
     : type a. (module BODY with type Read.t = a) -> body_length:length -> a -> t
   =
  fun (module Http_body) ~body_length body ->
