@@ -111,15 +111,16 @@ module Connection_info = struct
   let of_uri uri =
     let open Lwt_result.Syntax in
     let uri = Uri.canonicalize uri in
-    match Uri.host uri with
-    | Some host ->
-      let* scheme = Lwt.return (Scheme.of_uri uri) in
+    match Uri.host uri, Scheme.of_uri uri with
+    | Some host, Ok scheme ->
       let port = infer_port ~scheme uri in
       let+ addresses = resolve_host ~port host in
       { scheme; uri; host; port; addresses }
-    | None ->
+    | None, _ ->
       Lwt_result.fail
         (`Msg (Format.asprintf "Missing host part for: %a" Uri.pp_hum uri))
+    | _, (Error _ as error) ->
+      Lwt.return error
 
   let pp_address fmt = function
     | Unix.ADDR_INET (addr, port) ->

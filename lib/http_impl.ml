@@ -119,7 +119,6 @@ let send_request
     -> (Response.t, 'err) Lwt_result.t
   =
  fun conn ~body request ->
-  let open Lwt.Syntax in
   let (Connection.Conn
         { impl = (module Http); handle; connection_error_received; _ })
     =
@@ -150,8 +149,7 @@ let send_request
         flush_and_close (module Http.Body) request_body;
         Lwt.return_unit
       | `Stream stream ->
-        Lwt.async (fun () ->
-            let+ () = Lwt_stream.closed stream in
+        Lwt.on_success (Lwt_stream.closed stream) (fun () ->
             flush_and_close (module Http.Body) request_body);
         Lwt_stream.iter
           (fun { IOVec.buffer; off; len } ->

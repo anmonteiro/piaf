@@ -419,10 +419,7 @@ let rec send_request_and_handle_response
      * Otherwise, if we couldn't reuse the connection, drain the response body
      * and additionally shut down the old connection. *)
     if did_reuse then
-      Lwt.async (fun () ->
-          let open Lwt.Syntax in
-          let+ _ = Body.drain response.body in
-          ())
+      Lwt.ignore_result (Body.drain response.body)
     else
       (* In this branch, don't bother waiting for the entire response body to
        * arrive, we're going to shut down the connection either way. Just hang
