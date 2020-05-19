@@ -224,3 +224,8 @@ let shutdown
       (module Http_intf.HTTPCommon with type Client.t = t) -> t -> unit Lwt.t
   =
  fun (module Http) conn -> Http.Client.shutdown conn
+
+let is_closed
+    : type t. (module Http_intf.HTTPCommon with type Client.t = t) -> t -> bool
+  =
+ fun (module Http) conn -> Http.Client.is_closed conn
