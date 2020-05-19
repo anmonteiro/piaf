@@ -103,7 +103,7 @@ let handle_response
   | Ok response ->
     Log.info (fun m ->
         m
-          "@[<v 0>Received response:@]@]@;<0 2>@[<v 0>%a@]@."
+          "@[<v 0>Received response:@]@]@;<0 2>@[<v 0>%a@]"
           Response.pp_hum
           response);
     Body.embed_error_received
