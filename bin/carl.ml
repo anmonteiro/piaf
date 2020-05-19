@@ -87,6 +87,8 @@ type cli =
   ; connect_timeout : float
   ; referer : string option
   ; compressed : bool
+  ; user : string option
+  ; oauth2_bearer : string option
   }
 
 let format_header formatter (name, value) =
@@ -191,7 +193,9 @@ let handle_response ~cli ({ Response.body; _ } as response) =
           flush stdout)
         body
 
-let build_headers ~cli:{ headers; user_agent; referer; compressed; _ } =
+let build_headers
+    ~cli:{ headers; user_agent; referer; compressed; oauth2_bearer; user; _ }
+  =
   let headers = ("User-Agent", user_agent) :: headers in
   let headers =
     match referer with
@@ -200,15 +204,38 @@ let build_headers ~cli:{ headers; user_agent; referer; compressed; _ } =
     | Some referer ->
       ("Referer", referer) :: headers
   in
-  if compressed then
-    ("Accept-Encoding", "deflate, gzip") :: headers
-  else
+  let headers =
+    if compressed then
+      ("Accept-Encoding", "deflate, gzip") :: headers
+    else
+      headers
+  in
+  match oauth2_bearer, user with
+  | Some token, _ ->
+    Logs.debug (fun m ->
+        let user = match user with Some user -> user | None -> "''" in
+        m "Server authorization using Bearer with user %s" user);
+    (* Bearer token overrides `user` *)
+    ("Authorization", "Bearer " ^ token) :: headers
+  | None, Some user ->
+    Logs.debug (fun m -> m "Server authorization using Basic with user %s" user);
+    ("Authorization", "Basic " ^ Base64.encode_exn user) :: headers
+  | None, None ->
     headers
 
 let request ~cli ~config uri =
   let module Client = Client.Oneshot in
   let open Lwt_result.Syntax in
   let { meth; data; _ } = cli in
+  let uri_user = Uri.userinfo uri in
+  let cli =
+    match cli.user with
+    | None ->
+      { cli with user = uri_user }
+    | Some _ ->
+      (* `-u` overrides the URI userinfo *)
+      cli
+  in
   let headers = build_headers ~cli in
   let body =
     match data with Some s -> Some (Body.of_string s) | None -> None
@@ -451,6 +478,16 @@ module CLI = struct
       & opt string "carl/0.0.0-experimental"
       & info [ "A"; "user-agent" ] ~doc ~docv)
 
+  let user =
+    let doc = "Server user and password" in
+    let docv = "user:password" in
+    Arg.(value & opt (some string) None & info [ "u"; "user" ] ~doc ~docv)
+
+  let oauth2_bearer =
+    let doc = "OAuth 2 Bearer Token" in
+    let docv = "token" in
+    Arg.(value & opt (some string) None & info [ "oauth2-bearer" ] ~doc ~docv)
+
   let urls =
     let docv = "URLs" in
     Arg.(non_empty & pos_all string [] & info [] ~docv)
@@ -482,6 +519,8 @@ module CLI = struct
       tlsv1_3
       max_tls_version
       user_agent
+      user
+      oauth2_bearer
       verbose
       urls
     =
@@ -542,6 +581,8 @@ module CLI = struct
     ; compressed
     ; connect_timeout
     ; referer
+    ; user
+    ; oauth2_bearer
     }
 
   let default_cmd =
@@ -573,6 +614,8 @@ module CLI = struct
       $ tlsv1_3
       $ tls_max_version
       $ user_agent
+      $ user
+      $ oauth2_bearer
       $ verbose
       $ urls)
 
