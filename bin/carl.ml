@@ -61,14 +61,14 @@ let setup_log ?style_renderer level =
     { Logs.report }
   in
   Fmt_tty.setup_std_outputs ?style_renderer ();
-  Logs.set_level (Some level);
+  Logs.set_level ~all:true level;
   Logs.set_reporter format_reporter
 
 type cli =
   { follow_redirects : bool
   ; max_redirects : int
   ; meth : Method.t
-  ; log_level : Logs.level
+  ; log_level : Logs.level option
   ; urls : string list
   ; data : string option
   ; default_proto : string
@@ -258,7 +258,13 @@ let rec request_many ~cli ~config urls =
     | Error e ->
       Lwt.return (`Error (false, Error.to_string e)))
 
-let log_level_of_list = function [] -> Logs.App | [ _ ] -> Info | _ -> Debug
+let log_level_of_list ~silent = function
+  | [] ->
+    if silent then None else Some Logs.App
+  | [ _ ] ->
+    Some Info
+  | _ ->
+    Some Debug
 
 let piaf_config_of_cli
     { follow_redirects
@@ -421,6 +427,10 @@ module CLI = struct
     let docv = "URL" in
     Arg.(value & opt (some string) None & info [ "e"; "referer" ] ~doc ~docv)
 
+  let silent =
+    let doc = "Silent mode" in
+    Arg.(value & flag & info [ "s"; "silent" ] ~doc)
+
   let verbose =
     let doc = "Verbosity (use multiple times to increase)" in
     Arg.(value & flag_all & info [ "v"; "verbose" ] ~doc)
@@ -521,6 +531,7 @@ module CLI = struct
       user_agent
       user
       oauth2_bearer
+      silent
       verbose
       urls
     =
@@ -537,7 +548,7 @@ module CLI = struct
           `GET
         | _, Some meth, _ ->
           meth)
-    ; log_level = log_level_of_list verbose
+    ; log_level = log_level_of_list ~silent verbose
     ; urls
     ; default_proto
     ; head
@@ -616,6 +627,7 @@ module CLI = struct
       $ user_agent
       $ user
       $ oauth2_bearer
+      $ silent
       $ verbose
       $ urls)
 
