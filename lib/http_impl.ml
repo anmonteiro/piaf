@@ -103,7 +103,7 @@ let handle_response
   | Ok response ->
     Log.info (fun m ->
         m
-          "@[<v 0>Received response:@]@]@;<0 2>@[<v 0>%a@]@."
+          "@[<v 0>Received response:@]@]@;<0 2>@[<v 0>%a@]"
           Response.pp_hum
           response);
     Body.embed_error_received
@@ -224,3 +224,8 @@ let shutdown
       (module Http_intf.HTTPCommon with type Client.t = t) -> t -> unit Lwt.t
   =
  fun (module Http) conn -> Http.Client.shutdown conn
+
+let is_closed
+    : type t. (module Http_intf.HTTPCommon with type Client.t = t) -> t -> bool
+  =
+ fun (module Http) conn -> Http.Client.is_closed conn
