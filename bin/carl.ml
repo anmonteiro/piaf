@@ -64,6 +64,10 @@ let setup_log ?style_renderer level =
   Logs.set_level ~all:true level;
   Logs.set_reporter format_reporter
 
+type output =
+  | Stdout
+  | Channel of string
+
 type cli =
   { follow_redirects : bool
   ; max_redirects : int
@@ -74,6 +78,7 @@ type cli =
   ; default_proto : string
   ; head : bool
   ; headers : (string * string) list
+  ; include_ : bool
   ; max_http_version : Versions.HTTP.t
   ; h2c_upgrade : bool
   ; http2_prior_knowledge : bool
@@ -89,6 +94,8 @@ type cli =
   ; compressed : bool
   ; user : string option
   ; oauth2_bearer : string option
+  ; is_tty : bool
+  ; output : output
   }
 
 let format_header formatter (name, value) =
@@ -130,6 +137,25 @@ let rec uri_of_string ~scheme s =
   | Some _, Some _ ->
     maybe_uri
 
+let ok = Ok ()
+
+let return_ok = Lwt.return ok
+
+let print_string ~cli channel s =
+  let open Lwt.Syntax in
+  if cli.is_tty && String.contains s '\000' then (
+    let msg =
+      "Binary output can mess up your terminal. Use \"--output -\" to tell \
+       carl to output it to your terminal anyway, or consider \"--output \
+       <FILE>\" to save to a file."
+    in
+    Logs.warn (fun m -> m "%s" msg);
+    Lwt_result.fail (`Msg msg))
+  else
+    let* () = Lwt_io.write channel s in
+    let* () = Lwt_io.flush channel in
+    return_ok
+
 let inflate_chunk zstream result_buffer chunk =
   let buf_size = 1024 in
   let buf = Bytes.create buf_size in
@@ -150,7 +176,7 @@ let inflate_chunk zstream result_buffer chunk =
   inner ~off:0 ~len:(String.length chunk)
 
 (* TODO: try / catch *)
-let inflate_and_print response_body =
+let inflate response_body =
   let open Lwt_result.Syntax in
   let zstream = Zlib.inflate_init false in
   let result_buf = Buffer.create 1024 in
@@ -159,39 +185,69 @@ let inflate_and_print response_body =
       (fun chunk -> inflate_chunk zstream result_buf chunk)
       response_body
   in
-  Printf.printf "%s" (Buffer.contents result_buf)
+  Buffer.contents result_buf
 
 let handle_response ~cli ({ Response.body; _ } as response) =
-  let open Lwt_result.Syntax in
-  let { head; compressed; _ } = cli in
-  if head then (
+  let open Lwt.Syntax in
+  let { head; compressed; include_; _ } = cli in
+  if head || include_ then
     Logs.app (fun m -> m "%a" pp_response_headers response);
+  if head then (
     Lwt.async (fun () ->
         let open Lwt.Syntax in
         let+ _ = Body.drain body in
         ());
-    Lwt.return_ok ())
+    return_ok)
   else
-    match compressed, Headers.get response.headers "content-encoding" with
-    | true, Some encoding when String.lowercase_ascii encoding = "gzip" ->
-      (* We requested a compressed response, and we got a compressed response
-       * back. *)
-      let+ response_body_str = Body.to_string body in
-      (match Ezgzip.decompress response_body_str with
-      | Ok body_str ->
-        Printf.printf "%s" body_str
-      | Error _ ->
-        assert false)
-    | true, Some encoding when String.lowercase_ascii encoding = "deflate" ->
-      (* We requested a compressed response, and we got a compressed response
-       * back. *)
-      inflate_and_print body
-    | _ ->
-      Body.iter_string
-        (fun body_fragment ->
-          Printf.printf "%s" body_fragment;
-          flush stdout)
-        body
+    let* channel =
+      match cli.output with
+      | Stdout ->
+        Lwt.return Lwt_io.stdout
+      | Channel filename ->
+        Lwt_io.open_file
+          ~mode:Output
+          ~flags:Unix.[ O_NONBLOCK; O_WRONLY; O_TRUNC; O_CREAT ]
+          filename
+    in
+    let* result =
+      let open Lwt_result.Syntax in
+      match compressed, Headers.get response.headers "content-encoding" with
+      | true, Some encoding when String.lowercase_ascii encoding = "gzip" ->
+        (* We requested a compressed response, and we got a compressed response
+         * back. *)
+        let* response_body_str = Body.to_string body in
+        (match Ezgzip.decompress response_body_str with
+        | Ok body_str ->
+          print_string ~cli channel body_str
+        | Error _ ->
+          assert false)
+      | true, Some encoding when String.lowercase_ascii encoding = "deflate" ->
+        (* We requested a compressed response, and we got a compressed response
+         * back. *)
+        let* s = inflate body in
+        print_string ~cli channel s
+      | _ ->
+        let open Lwt.Syntax in
+        let stream, _or_error = Body.to_string_stream body in
+        Lwt.catch
+          (fun () ->
+            let* chunk = Lwt_stream.next stream in
+            let open Lwt_result.Syntax in
+            let* () = print_string ~cli channel chunk in
+            Body.iter_string
+              (fun body_fragment ->
+                ignore (print_string ~cli channel body_fragment))
+              body)
+          (fun _empty -> Lwt_result.ok Lwt.return_unit)
+    in
+    let+ () =
+      match cli.output with
+      | Stdout ->
+        Lwt.return_unit
+      | Channel _ ->
+        Lwt_io.close channel
+    in
+    result
 
 let build_headers
     ~cli:{ headers; user_agent; referer; compressed; oauth2_bearer; user; _ }
@@ -248,19 +304,24 @@ let rec request_many ~cli ~config urls =
   let { default_proto; _ } = cli in
   match urls with
   | [] ->
-    Lwt.return (`Ok ())
-  | x :: xs ->
+    (* Never happens, cmdliner guarantees we get a non-empty list. *)
+    assert false
+  | [ x ] ->
     let uri = uri_of_string ~scheme:default_proto x in
     let* r = request ~cli ~config uri in
     (match r with
     | Ok () ->
-      request_many ~cli ~config xs
+      Lwt.return (`Ok ())
     | Error e ->
       Lwt.return (`Error (false, Error.to_string e)))
+  | x :: xs ->
+    let uri = uri_of_string ~scheme:default_proto x in
+    let* _r = request ~cli ~config uri in
+    request_many ~cli ~config xs
 
 let log_level_of_list ~silent = function
   | [] ->
-    if silent then None else Some Logs.App
+    if silent then None else Some Logs.Warning
   | [ _ ] ->
     Some Info
   | _ ->
@@ -317,8 +378,7 @@ let main ({ log_level; urls; _ } as cli) =
   | Ok config ->
     Lwt_main.run (request_many ~cli ~config urls)
 
-(* -o, --output <file> Write to file instead of stdout
- * -T, --upload-file <file> Transfer local FILE to destination
+(* -T, --upload-file <file> Transfer local FILE to destination
  * --resolve <host:port:address[,address]...> Resolve the host+port to this address
  * --retry <num>   Retry request if transient problems occur
  * --retry-connrefused Retry on connection refused (use with --retry)
@@ -393,6 +453,10 @@ module CLI = struct
     let doc = "Pass custom header(s) to server" in
     let docv = "header" in
     Arg.(value & opt_all header_conv [] & info [ "H"; "header" ] ~doc ~docv)
+
+  let include_ =
+    let doc = "Include protocol response headers in the output" in
+    Arg.(value & flag & info [ "i"; "include" ] ~doc)
 
   let follow_redirects =
     let doc = "Follow redirects" in
@@ -498,6 +562,22 @@ module CLI = struct
     let docv = "token" in
     Arg.(value & opt (some string) None & info [ "oauth2-bearer" ] ~doc ~docv)
 
+  let output =
+    let output_conv =
+      let parse s =
+        let output = match s with "-" -> Stdout | file -> Channel file in
+        Ok output
+      in
+      let print formatter output =
+        let s = match output with Stdout -> "stdout" | Channel f -> f in
+        Format.fprintf formatter "%s" s
+      in
+      Arg.conv ~docv:"method" (parse, print)
+    in
+    let doc = "Write to file instead of stdout" in
+    let docv = "file" in
+    Arg.(value & opt output_conv Stdout & info [ "o"; "output" ] ~doc ~docv)
+
   let urls =
     let docv = "URLs" in
     Arg.(non_empty & pos_all string [] & info [] ~docv)
@@ -511,6 +591,7 @@ module CLI = struct
       default_proto
       head
       headers
+      include_
       insecure
       follow_redirects
       max_redirects
@@ -533,6 +614,7 @@ module CLI = struct
       oauth2_bearer
       silent
       verbose
+      output
       urls
     =
     { follow_redirects
@@ -553,6 +635,7 @@ module CLI = struct
     ; default_proto
     ; head
     ; headers
+    ; include_
     ; max_http_version =
         (let open Versions.HTTP in
         match use_http_2, use_http_1_1, use_http_1_0 with
@@ -594,6 +677,8 @@ module CLI = struct
     ; referer
     ; user
     ; oauth2_bearer
+    ; is_tty = Unix.isatty Unix.stdout
+    ; output
     }
 
   let default_cmd =
@@ -607,6 +692,7 @@ module CLI = struct
       $ default_proto
       $ head
       $ headers
+      $ include_
       $ insecure
       $ follow_redirects
       $ max_redirects
@@ -629,6 +715,7 @@ module CLI = struct
       $ oauth2_bearer
       $ silent
       $ verbose
+      $ output
       $ urls)
 
   let cmd =
