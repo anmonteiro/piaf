@@ -304,6 +304,7 @@ let rec request_many ~cli ~config urls =
   let { default_proto; _ } = cli in
   match urls with
   | [] ->
+    (* Never happens, cmdliner guarantees we get a non-empty list. *)
     assert false
   | [ x ] ->
     let uri = uri_of_string ~scheme:default_proto x in
