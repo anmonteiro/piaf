@@ -64,6 +64,10 @@ let setup_log ?style_renderer level =
   Logs.set_level ~all:true level;
   Logs.set_reporter format_reporter
 
+type output =
+  | Stdout
+  | Channel of string
+
 type cli =
   { follow_redirects : bool
   ; max_redirects : int
@@ -91,6 +95,7 @@ type cli =
   ; user : string option
   ; oauth2_bearer : string option
   ; is_tty : bool
+  ; output : output
   }
 
 let format_header formatter (name, value) =
@@ -136,25 +141,20 @@ let ok = Ok ()
 
 let return_ok = Lwt.return ok
 
-let print_string ~cli s =
-  if cli.is_tty then
-    let is_binary_output = String.contains s '\000' in
-    if is_binary_output then (
-      let msg =
-        "Binary output can mess up your terminal. Use \"--output -\" to tell \
-         carl to output it to your terminal anyway, or consider \"--output \
-         <FILE>\" to save to a file."
-      in
-      Logs.warn (fun m -> m "%s" msg);
-      Lwt_result.fail (`Msg msg))
-    else (
-      print_string s;
-      flush stdout;
-      return_ok)
-  else (
-    print_string s;
-    flush stdout;
-    return_ok)
+let print_string ~cli channel s =
+  let open Lwt.Syntax in
+  if cli.is_tty && String.contains s '\000' then (
+    let msg =
+      "Binary output can mess up your terminal. Use \"--output -\" to tell \
+       carl to output it to your terminal anyway, or consider \"--output \
+       <FILE>\" to save to a file."
+    in
+    Logs.warn (fun m -> m "%s" msg);
+    Lwt_result.fail (`Msg msg))
+  else
+    let* () = Lwt_io.write channel s in
+    let* () = Lwt_io.flush channel in
+    return_ok
 
 let inflate_chunk zstream result_buffer chunk =
   let buf_size = 1024 in
@@ -188,7 +188,7 @@ let inflate response_body =
   Buffer.contents result_buf
 
 let handle_response ~cli ({ Response.body; _ } as response) =
-  let open Lwt_result.Syntax in
+  let open Lwt.Syntax in
   let { head; compressed; include_; _ } = cli in
   if head || include_ then
     Logs.app (fun m -> m "%a" pp_response_headers response);
@@ -199,33 +199,55 @@ let handle_response ~cli ({ Response.body; _ } as response) =
         ());
     return_ok)
   else
-    match compressed, Headers.get response.headers "content-encoding" with
-    | true, Some encoding when String.lowercase_ascii encoding = "gzip" ->
-      (* We requested a compressed response, and we got a compressed response
-       * back. *)
-      let* response_body_str = Body.to_string body in
-      (match Ezgzip.decompress response_body_str with
-      | Ok body_str ->
-        print_string ~cli body_str
-      | Error _ ->
-        assert false)
-    | true, Some encoding when String.lowercase_ascii encoding = "deflate" ->
-      (* We requested a compressed response, and we got a compressed response
-       * back. *)
-      let* s = inflate body in
-      print_string ~cli s
-    | _ ->
-      let open Lwt.Syntax in
-      let stream, _or_error = Body.to_string_stream body in
-      Lwt.catch
-        (fun () ->
-          let* chunk = Lwt_stream.next stream in
-          let open Lwt_result.Syntax in
-          let* () = print_string ~cli chunk in
-          Body.iter_string
-            (fun body_fragment -> ignore (print_string ~cli body_fragment))
-            body)
-        (fun _empty -> Lwt_result.ok Lwt.return_unit)
+    let* channel =
+      match cli.output with
+      | Stdout ->
+        Lwt.return Lwt_io.stdout
+      | Channel filename ->
+        Lwt_io.open_file
+          ~mode:Output
+          ~flags:Unix.[ O_NONBLOCK; O_WRONLY; O_TRUNC; O_CREAT ]
+          filename
+    in
+    let* result =
+      let open Lwt_result.Syntax in
+      match compressed, Headers.get response.headers "content-encoding" with
+      | true, Some encoding when String.lowercase_ascii encoding = "gzip" ->
+        (* We requested a compressed response, and we got a compressed response
+         * back. *)
+        let* response_body_str = Body.to_string body in
+        (match Ezgzip.decompress response_body_str with
+        | Ok body_str ->
+          print_string ~cli channel body_str
+        | Error _ ->
+          assert false)
+      | true, Some encoding when String.lowercase_ascii encoding = "deflate" ->
+        (* We requested a compressed response, and we got a compressed response
+         * back. *)
+        let* s = inflate body in
+        print_string ~cli channel s
+      | _ ->
+        let open Lwt.Syntax in
+        let stream, _or_error = Body.to_string_stream body in
+        Lwt.catch
+          (fun () ->
+            let* chunk = Lwt_stream.next stream in
+            let open Lwt_result.Syntax in
+            let* () = print_string ~cli channel chunk in
+            Body.iter_string
+              (fun body_fragment ->
+                ignore (print_string ~cli channel body_fragment))
+              body)
+          (fun _empty -> Lwt_result.ok Lwt.return_unit)
+    in
+    let+ () =
+      match cli.output with
+      | Stdout ->
+        Lwt.return_unit
+      | Channel _ ->
+        Lwt_io.close channel
+    in
+    result
 
 let build_headers
     ~cli:{ headers; user_agent; referer; compressed; oauth2_bearer; user; _ }
@@ -355,8 +377,7 @@ let main ({ log_level; urls; _ } as cli) =
   | Ok config ->
     Lwt_main.run (request_many ~cli ~config urls)
 
-(* -o, --output <file> Write to file instead of stdout
- * -T, --upload-file <file> Transfer local FILE to destination
+(* -T, --upload-file <file> Transfer local FILE to destination
  * --resolve <host:port:address[,address]...> Resolve the host+port to this address
  * --retry <num>   Retry request if transient problems occur
  * --retry-connrefused Retry on connection refused (use with --retry)
@@ -540,6 +561,22 @@ module CLI = struct
     let docv = "token" in
     Arg.(value & opt (some string) None & info [ "oauth2-bearer" ] ~doc ~docv)
 
+  let output =
+    let output_conv =
+      let parse s =
+        let output = match s with "-" -> Stdout | file -> Channel file in
+        Ok output
+      in
+      let print formatter output =
+        let s = match output with Stdout -> "stdout" | Channel f -> f in
+        Format.fprintf formatter "%s" s
+      in
+      Arg.conv ~docv:"method" (parse, print)
+    in
+    let doc = "Write to file instead of stdout" in
+    let docv = "file" in
+    Arg.(value & opt output_conv Stdout & info [ "o"; "output" ] ~doc ~docv)
+
   let urls =
     let docv = "URLs" in
     Arg.(non_empty & pos_all string [] & info [] ~docv)
@@ -576,6 +613,7 @@ module CLI = struct
       oauth2_bearer
       silent
       verbose
+      output
       urls
     =
     { follow_redirects
@@ -639,6 +677,7 @@ module CLI = struct
     ; user
     ; oauth2_bearer
     ; is_tty = Unix.isatty Unix.stdout
+    ; output
     }
 
   let default_cmd =
@@ -675,6 +714,7 @@ module CLI = struct
       $ oauth2_bearer
       $ silent
       $ verbose
+      $ output
       $ urls)
 
   let cmd =
