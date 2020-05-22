@@ -156,6 +156,24 @@ let print_string ~cli channel s =
     let* () = Lwt_io.flush channel in
     return_ok
 
+let report_progess ~cli len total_len =
+  match cli.output, total_len with
+  | Channel "-", _ ->
+    ()
+  | Channel _, `Fixed total_len ->
+    let total_bars = 40 in
+    let pct_complete = Int64.(to_int (div (of_int (len * 100)) total_len)) in
+    (* We show 40 bars *)
+    let bars = pct_complete / (100 / total_bars) in
+    let spaces = total_bars - bars in
+    Format.eprintf
+      "\r[%s%s] %d%%%!"
+      (String.concat "" (List.init bars (fun _ -> "\u{25a0}")))
+      (String.make spaces ' ')
+      pct_complete
+  | _ ->
+    ()
+
 let inflate_chunk zstream result_buffer chunk =
   let buf_size = 1024 in
   let buf = Bytes.create buf_size in
@@ -241,17 +259,29 @@ let handle_response ~cli ({ Response.body; _ } as response) =
         print_string ~cli channel s
       | _ ->
         let open Lwt.Syntax in
-        let stream, _or_error = Body.to_string_stream body in
+        let stream, _or_error = Body.to_stream body in
+        let total_len = Body.length body in
         Lwt.catch
           (fun () ->
-            let* chunk = Lwt_stream.next stream in
+            let* { Piaf.IOVec.buffer; off; len } = Lwt_stream.next stream in
+            report_progess ~cli len total_len;
+            let chunk = Bigstringaf.substring buffer ~off ~len in
             let open Lwt_result.Syntax in
             let* () = print_string ~cli channel chunk in
-            Body.iter_string
-              (fun body_fragment ->
-                ignore (print_string ~cli channel body_fragment))
-              body)
-          (fun _empty -> Lwt_result.ok Lwt.return_unit)
+            let* _ =
+              Body.fold_s
+                (fun { Piaf.IOVec.buffer; off; len } running_total ->
+                  let open Lwt.Syntax in
+                  let new_total = len + running_total in
+                  report_progess ~cli new_total total_len;
+                  let body_fragment = Bigstringaf.substring buffer ~off ~len in
+                  let+ _ = print_string ~cli channel body_fragment in
+                  new_total)
+                body
+                len
+            in
+            return_ok)
+          (fun _empty -> return_ok)
   in
   let+ () =
     match cli.output with
