@@ -28,6 +28,7 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  *---------------------------------------------------------------------------*)
+module IOVec : module type of H2.IOVec
 
 module Method : module type of Method
 
@@ -164,7 +165,7 @@ module Body : sig
 
   val empty : t
 
-  val of_stream : ?length:length -> Bigstringaf.t H2.IOVec.t Lwt_stream.t -> t
+  val of_stream : ?length:length -> Bigstringaf.t IOVec.t Lwt_stream.t -> t
 
   val of_string_stream : ?length:length -> string Lwt_stream.t -> t
 
@@ -185,7 +186,7 @@ module Body : sig
   (** {3 Traversal} *)
 
   val fold
-    :  (Bigstringaf.t Faraday.iovec -> 'a -> 'a)
+    :  (Bigstringaf.t IOVec.t -> 'a -> 'a)
     -> t
     -> 'a
     -> ('a, Error.t) Lwt_result.t
@@ -263,7 +264,7 @@ module Body : sig
 
   val to_stream
     :  t
-    -> Bigstringaf.t H2.IOVec.t Lwt_stream.t * (unit, Error.t) Lwt_result.t
+    -> Bigstringaf.t IOVec.t Lwt_stream.t * (unit, Error.t) Lwt_result.t
 
   val to_string_stream : t -> string Lwt_stream.t * (unit, Error.t) Lwt_result.t
 end
@@ -333,7 +334,7 @@ module Response : sig
   val of_stream
     :  ?version:Versions.HTTP.t
     -> ?headers:Headers.t
-    -> body:Bigstringaf.t H2.IOVec.t Lwt_stream.t
+    -> body:Bigstringaf.t IOVec.t Lwt_stream.t
     -> Status.t
     -> t
 

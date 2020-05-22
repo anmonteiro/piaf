@@ -34,6 +34,7 @@ module Config = Config
 module Client = Client
 module Error = Error
 module Headers = Headers
+module IOVec = H2.IOVec
 module Method = Method
 module Request = Request
 module Response = Response
