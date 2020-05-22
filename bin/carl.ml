@@ -162,23 +162,53 @@ module Ansi = struct
   let line_up = "\u{1B}[A"
 end
 
+module Size = struct
+  let gb = int_of_float (1024. ** 3.)
+
+  let mb = int_of_float (1024. ** 2.)
+
+  let kb = 1024
+end
+
 let report_progess ?(first = false) ~cli len total_len =
   match cli.output, total_len with
   | Channel "-", _ ->
     ()
-  | Channel _, `Fixed total_len ->
+  | Stdout, _ when Unix.isatty Unix.stdout ->
+    ()
+  | (Stdout | Channel _), `Fixed total_len ->
     let total_bars = 40. in
     let pct_complete = Int64.(to_float (div (mul len 100L) total_len)) in
     (* We show 40 bars *)
     let bars = ceil (pct_complete /. (100. /. total_bars)) in
     let spaces = total_bars -. bars in
     Format.eprintf
-      "%s%s[%s%s] %d%%@\n%!"
-      Ansi.clear_line
-      (if not first then Ansi.line_up else "")
+      "%s[%s%s] %d%%@\n%!"
+      (if not first then Ansi.clear_line ^ Ansi.line_up else Ansi.clear_line)
       (String.concat "" (List.init (int_of_float bars) (fun _ -> "\u{25a0}")))
       (String.make (int_of_float spaces) ' ')
       (int_of_float pct_complete)
+  | (Stdout | Channel _), (`Chunked | `Unknown | `Close_delimited) ->
+    let len = Int64.to_int len in
+    let len, unit_ =
+      match len with
+      | len when len >= Size.gb ->
+        float_of_int len /. float_of_int Size.gb, "G"
+      | len when len >= Size.mb ->
+        float_of_int len /. float_of_int Size.mb, "M"
+      | len when len >= Size.kb ->
+        float_of_int len /. float_of_int Size.kb, "k"
+      | _ ->
+        float_of_int len, "B"
+    in
+    Format.eprintf
+      "%s Transferred:@;<0 3>@[<v 0>%.2f%s@]@\n%!"
+      (if not first then
+         Ansi.clear_line ^ Ansi.line_up ^ Ansi.clear_line ^ Ansi.line_up
+      else
+        Ansi.clear_line)
+      len
+      unit_
   | _ ->
     ()
 
