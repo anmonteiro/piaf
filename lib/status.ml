@@ -1,5 +1,5 @@
 (*----------------------------------------------------------------------------
- * Copyright (c) 2019-2020, António Nuno Monteiro
+ * Copyright (c) 2020, António Nuno Monteiro
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -29,17 +29,12 @@
  * POSSIBILITY OF SUCH DAMAGE.
  *---------------------------------------------------------------------------*)
 
-module Body = Body
-module Config = Config
-module Client = Client
-module Error = Error
-module Headers = Headers
-module IOVec = H2.IOVec
-module Method = Method
-module Request = Request
-module Response = Response
-module Scheme = Scheme
-module Status = Status
-module Versions = Versions
-module Server = Server
-module Cookies = Cookies
+include H2.Status
+
+let is_permanent_redirection = function
+  | `Moved_permanently
+  (* https://tools.ietf.org/html/rfc7538#section-3 *)
+  | `Code 308 ->
+    true
+  | _ ->
+    false

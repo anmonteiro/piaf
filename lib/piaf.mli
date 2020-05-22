@@ -32,10 +32,7 @@ module IOVec : module type of H2.IOVec
 
 module Method : module type of Method
 
-module Headers : module type of struct
-  (* `H2.Status.t` is a strict superset of `Httpaf.Status.t` *)
-  include H2.Headers
-end
+module Headers : module type of Headers
 
 module Scheme : sig
   type t =
@@ -49,9 +46,7 @@ module Scheme : sig
   val pp_hum : Format.formatter -> t -> unit [@@ocaml.toplevel_printer]
 end
 
-module Status : module type of struct
-  include H2.Status
-end
+module Status : module type of Status
 
 module Versions : sig
   module HTTP : sig

@@ -38,13 +38,13 @@ let src = Logs.Src.create "piaf.client" ~doc:"Piaf Client module"
 
 module Log = (val Logs.src_log src : Logs.LOG)
 
-(* TODO: could probably think about keeping the original connection around
- * forever since every subsequent request is going to use it. *)
 type t =
   { mutable conn : Connection.t
   ; mutable conn_info : Connection_info.t
   ; mutable persistent : bool
-  ; uri : Uri.t (* The connection URI. Request entrypoints connect here. *)
+  ; mutable uri : Uri.t
+        (* The connection URI. Request entrypoints connect here.
+         * Mutable so that we remember permanent redirects. *)
   ; config : Config.t
   }
 
@@ -425,6 +425,7 @@ let rec send_request_and_handle_response
        * arrive, we're going to shut down the connection either way. Just hang
        * up. *)
       drain_available_body_bytes_and_shutdown ~conn_info conn response.body;
+    if Status.is_permanent_redirection response.status then t.uri <- new_uri;
     let target = Uri.path_and_query new_uri in
     let request_info' =
       make_request_info
@@ -450,8 +451,7 @@ let call t ~meth ?(headers = []) ?(body = Body.empty) target =
   let open Lwt_result.Syntax in
   (* Need to try to reconnect to the base host on every call, if redirects are
    * enabled, because the connection manager could have tried to follow a
-   * redirect. *)
-  (* TODO: we should probably remember _permanent_ redirects. *)
+   * temporary redirect. We remember permanent redirects. *)
   let (Connection.Conn { impl = (module Http); handle; _ }) = t.conn in
   let* _did_reuse =
     if t.config.follow_redirects || Http_impl.is_closed (module Http) handle

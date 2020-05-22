@@ -190,7 +190,7 @@ let report_progess ?(first = false) ~cli len total_len =
       (int_of_float pct_complete)
   | (Stdout | Channel _), (`Chunked | `Unknown | `Close_delimited) ->
     let len = Int64.to_int len in
-    let len, unit_ =
+    let len, unit =
       match len with
       | len when len >= Size.gb ->
         float_of_int len /. float_of_int Size.gb, "G"
@@ -208,7 +208,7 @@ let report_progess ?(first = false) ~cli len total_len =
       else
         Ansi.clear_line)
       len
-      unit_
+      unit
   | _ ->
     ()
 
