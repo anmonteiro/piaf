@@ -156,21 +156,29 @@ let print_string ~cli channel s =
     let* () = Lwt_io.flush channel in
     return_ok
 
-let report_progess ~cli len total_len =
+module Ansi = struct
+  let clear_line = "\u{1B}[2K"
+
+  let line_up = "\u{1B}[A"
+end
+
+let report_progess ?(first = false) ~cli len total_len =
   match cli.output, total_len with
   | Channel "-", _ ->
     ()
   | Channel _, `Fixed total_len ->
-    let total_bars = 40 in
-    let pct_complete = Int64.(to_int (div (of_int (len * 100)) total_len)) in
+    let total_bars = 40. in
+    let pct_complete = Int64.(to_float (div (mul len 100L) total_len)) in
     (* We show 40 bars *)
-    let bars = pct_complete / (100 / total_bars) in
-    let spaces = total_bars - bars in
+    let bars = ceil (pct_complete /. (100. /. total_bars)) in
+    let spaces = total_bars -. bars in
     Format.eprintf
-      "\r[%s%s] %d%%%!"
-      (String.concat "" (List.init bars (fun _ -> "\u{25a0}")))
-      (String.make spaces ' ')
-      pct_complete
+      "%s%s[%s%s] %d%%@\n%!"
+      Ansi.clear_line
+      (if not first then Ansi.line_up else "")
+      (String.concat "" (List.init (int_of_float bars) (fun _ -> "\u{25a0}")))
+      (String.make (int_of_float spaces) ' ')
+      (int_of_float pct_complete)
   | _ ->
     ()
 
@@ -259,12 +267,13 @@ let handle_response ~cli ({ Response.body; _ } as response) =
         print_string ~cli channel s
       | _ ->
         let open Lwt.Syntax in
-        let stream, _or_error = Body.to_stream body in
+        let stream, or_error = Body.to_stream body in
         let total_len = Body.length body in
         Lwt.catch
           (fun () ->
             let* { Piaf.IOVec.buffer; off; len } = Lwt_stream.next stream in
-            report_progess ~cli len total_len;
+            let running_total = Int64.of_int len in
+            report_progess ~first:true ~cli running_total total_len;
             let chunk = Bigstringaf.substring buffer ~off ~len in
             let open Lwt_result.Syntax in
             let* () = print_string ~cli channel chunk in
@@ -272,16 +281,17 @@ let handle_response ~cli ({ Response.body; _ } as response) =
               Body.fold_s
                 (fun { Piaf.IOVec.buffer; off; len } running_total ->
                   let open Lwt.Syntax in
-                  let new_total = len + running_total in
+                  let new_total = Int64.(add (of_int len) running_total) in
                   report_progess ~cli new_total total_len;
                   let body_fragment = Bigstringaf.substring buffer ~off ~len in
                   let+ _ = print_string ~cli channel body_fragment in
                   new_total)
                 body
-                len
+                running_total
             in
-            return_ok)
-          (fun _empty -> return_ok)
+            or_error)
+          (function
+            | Lwt_stream.Empty -> return_ok | exn -> Lwt.return_error (`Exn exn))
   in
   let+ () =
     match cli.output with
