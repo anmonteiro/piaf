@@ -192,7 +192,7 @@ let handle_response ~cli ({ Response.body; _ } as response) =
   let { head; compressed; include_; _ } = cli in
   let* channel =
     match cli.output with
-    | Stdout ->
+    | Stdout | Channel "-" ->
       Lwt.return Lwt_io.stdout
     | Channel filename ->
       Lwt_io.open_file
@@ -204,7 +204,7 @@ let handle_response ~cli ({ Response.body; _ } as response) =
     if head || include_ then
       let* () =
         match cli.output with
-        | Stdout ->
+        | Stdout | Channel "-" ->
           Format.printf "%a%!" pp_response_headers response;
           Lwt.return_unit
         | Channel _ ->
@@ -255,7 +255,7 @@ let handle_response ~cli ({ Response.body; _ } as response) =
   in
   let+ () =
     match cli.output with
-    | Stdout ->
+    | Stdout | Channel "-" ->
       Lwt.return_unit
     | Channel _ ->
       Lwt_io.close channel
@@ -578,7 +578,7 @@ module CLI = struct
   let output =
     let output_conv =
       let parse s =
-        let output = match s with "-" -> Stdout | file -> Channel file in
+        let output = Channel s in
         Ok output
       in
       let print formatter output =
