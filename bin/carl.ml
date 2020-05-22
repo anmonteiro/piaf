@@ -94,7 +94,6 @@ type cli =
   ; compressed : bool
   ; user : string option
   ; oauth2_bearer : string option
-  ; is_tty : bool
   ; output : output
   }
 
@@ -143,7 +142,8 @@ let return_ok = Lwt.return ok
 
 let print_string ~cli channel s =
   let open Lwt.Syntax in
-  if cli.is_tty && String.contains s '\000' then (
+  if Unix.isatty Unix.stdout && cli.output = Stdout && String.contains s '\000'
+  then (
     let msg =
       "Binary output can mess up your terminal. Use \"--output -\" to tell \
        carl to output it to your terminal anyway, or consider \"--output \
@@ -190,26 +190,39 @@ let inflate response_body =
 let handle_response ~cli ({ Response.body; _ } as response) =
   let open Lwt.Syntax in
   let { head; compressed; include_; _ } = cli in
-  if head || include_ then
-    Logs.app (fun m -> m "%a" pp_response_headers response);
-  if head then (
-    Lwt.async (fun () ->
-        let open Lwt.Syntax in
-        let+ _ = Body.drain body in
-        ());
-    return_ok)
-  else
-    let* channel =
-      match cli.output with
-      | Stdout ->
-        Lwt.return Lwt_io.stdout
-      | Channel filename ->
-        Lwt_io.open_file
-          ~mode:Output
-          ~flags:Unix.[ O_NONBLOCK; O_WRONLY; O_TRUNC; O_CREAT ]
-          filename
-    in
-    let* result =
+  let* channel =
+    match cli.output with
+    | Stdout ->
+      Lwt.return Lwt_io.stdout
+    | Channel filename ->
+      Lwt_io.open_file
+        ~mode:Output
+        ~flags:Unix.[ O_NONBLOCK; O_WRONLY; O_TRUNC; O_CREAT ]
+        filename
+  in
+  let* () =
+    if head || include_ then
+      let* () =
+        match cli.output with
+        | Stdout ->
+          Format.printf "%a%!" pp_response_headers response;
+          Lwt.return_unit
+        | Channel _ ->
+          let s = Format.asprintf "%a" pp_response_headers response in
+          Lwt_io.write channel s
+      in
+      Lwt_io.flush channel
+    else
+      Lwt.return_unit
+  in
+  let* result =
+    if head then (
+      Lwt.async (fun () ->
+          let open Lwt.Syntax in
+          let+ _ = Body.drain body in
+          ());
+      return_ok)
+    else
       let open Lwt_result.Syntax in
       match compressed, Headers.get response.headers "content-encoding" with
       | true, Some encoding when String.lowercase_ascii encoding = "gzip" ->
@@ -239,15 +252,15 @@ let handle_response ~cli ({ Response.body; _ } as response) =
                 ignore (print_string ~cli channel body_fragment))
               body)
           (fun _empty -> Lwt_result.ok Lwt.return_unit)
-    in
-    let+ () =
-      match cli.output with
-      | Stdout ->
-        Lwt.return_unit
-      | Channel _ ->
-        Lwt_io.close channel
-    in
-    result
+  in
+  let+ () =
+    match cli.output with
+    | Stdout ->
+      Lwt.return_unit
+    | Channel _ ->
+      Lwt_io.close channel
+  in
+  result
 
 let build_headers
     ~cli:{ headers; user_agent; referer; compressed; oauth2_bearer; user; _ }
@@ -677,7 +690,6 @@ module CLI = struct
     ; referer
     ; user
     ; oauth2_bearer
-    ; is_tty = Unix.isatty Unix.stdout
     ; output
     }
 
