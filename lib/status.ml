@@ -1,5 +1,5 @@
 (*----------------------------------------------------------------------------
- * Copyright (c) 2019-2020, António Nuno Monteiro
+ * Copyright (c) 2020, António Nuno Monteiro
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
