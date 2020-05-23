@@ -136,14 +136,26 @@ let rec uri_of_string ~scheme s =
   | Some _, Some _ ->
     maybe_uri
 
+module Ansi = struct
+  let clear_line = "\u{1B}[2K"
+
+  let line_up = "\u{1B}[A"
+
+  let dumb =
+    try match Sys.getenv "TERM" with "dumb" | "" -> true | _ -> false with
+    | Not_found ->
+      true
+
+  let isatty = try Unix.(isatty stdout) with Unix.Unix_error _ -> false
+end
+
 let ok = Ok ()
 
 let return_ok = Lwt.return ok
 
-let print_string ~cli channel s =
+let print_string ~cli formatter s =
   let open Lwt.Syntax in
-  if Unix.isatty Unix.stdout && cli.output = Stdout && String.contains s '\000'
-  then (
+  if Ansi.isatty && cli.output = Stdout && String.contains s '\000' then (
     let msg =
       "Binary output can mess up your terminal. Use \"--output -\" to tell \
        carl to output it to your terminal anyway, or consider \"--output \
@@ -152,15 +164,9 @@ let print_string ~cli channel s =
     Logs.warn (fun m -> m "%s" msg);
     Lwt_result.fail (`Msg msg))
   else
-    let* () = Lwt_io.write channel s in
-    let* () = Lwt_io.flush channel in
+    let* () = Lwt_fmt.fprintf formatter "%s" s in
+    let* () = Lwt_fmt.flush formatter in
     return_ok
-
-module Ansi = struct
-  let clear_line = "\u{1B}[2K"
-
-  let line_up = "\u{1B}[A"
-end
 
 module Size = struct
   let gb = int_of_float (1024. ** 3.)
@@ -244,30 +250,30 @@ let inflate response_body =
   Buffer.contents result_buf
 
 let handle_response ~cli ({ Response.body; _ } as response) =
-  let open Lwt.Syntax in
+  let open Lwt_result.Syntax in
   let { head; compressed; include_; _ } = cli in
-  let* channel =
+  let* channel, formatter =
     match cli.output with
     | Stdout | Channel "-" ->
-      Lwt.return Lwt_io.stdout
+      Lwt_result.return (Lwt_io.stdout, Lwt_fmt.stdout)
     | Channel filename ->
-      Lwt_io.open_file
-        ~mode:Output
-        ~flags:Unix.[ O_NONBLOCK; O_WRONLY; O_TRUNC; O_CREAT ]
-        filename
+      Lwt.catch
+        (fun () ->
+          let open Lwt.Syntax in
+          let+ channel =
+            Lwt_io.open_file
+              ~mode:Output
+              ~flags:Unix.[ O_NONBLOCK; O_WRONLY; O_TRUNC; O_CREAT ]
+              filename
+          in
+          Ok (channel, Lwt_fmt.of_channel channel))
+        (fun exn -> Lwt_result.fail (`Exn exn))
   in
+  let open Lwt.Syntax in
   let* () =
     if head || include_ then
-      let* () =
-        match cli.output with
-        | Stdout | Channel "-" ->
-          Format.printf "%a%!" pp_response_headers response;
-          Lwt.return_unit
-        | Channel _ ->
-          let s = Format.asprintf "%a" pp_response_headers response in
-          Lwt_io.write channel s
-      in
-      Lwt_io.flush channel
+      let* () = Lwt_fmt.fprintf formatter "%a" pp_response_headers response in
+      Lwt_fmt.flush formatter
     else
       Lwt.return_unit
   in
@@ -287,14 +293,14 @@ let handle_response ~cli ({ Response.body; _ } as response) =
         let* response_body_str = Body.to_string body in
         (match Ezgzip.decompress response_body_str with
         | Ok body_str ->
-          print_string ~cli channel body_str
+          print_string ~cli formatter body_str
         | Error _ ->
           assert false)
       | true, Some encoding when String.lowercase_ascii encoding = "deflate" ->
         (* We requested a compressed response, and we got a compressed response
          * back. *)
         let* s = inflate body in
-        print_string ~cli channel s
+        print_string ~cli formatter s
       | _ ->
         let open Lwt.Syntax in
         let stream, or_error = Body.to_stream body in
@@ -306,7 +312,7 @@ let handle_response ~cli ({ Response.body; _ } as response) =
             report_progess ~first:true ~cli running_total total_len;
             let chunk = Bigstringaf.substring buffer ~off ~len in
             let open Lwt_result.Syntax in
-            let* () = print_string ~cli channel chunk in
+            let* () = print_string ~cli formatter chunk in
             let* _ =
               Body.fold_s
                 (fun { Piaf.IOVec.buffer; off; len } running_total ->
@@ -314,7 +320,7 @@ let handle_response ~cli ({ Response.body; _ } as response) =
                   let new_total = Int64.(add (of_int len) running_total) in
                   report_progess ~cli new_total total_len;
                   let body_fragment = Bigstringaf.substring buffer ~off ~len in
-                  let+ _ = print_string ~cli channel body_fragment in
+                  let+ _ = print_string ~cli formatter body_fragment in
                   new_total)
                 body
                 running_total
@@ -455,6 +461,8 @@ let piaf_config_of_cli
 
 let main ({ log_level; urls; _ } as cli) =
   setup_log log_level;
+  if (not Ansi.dumb) && Ansi.isatty then
+    Fmt.set_style_renderer Lwt_fmt.(get_formatter stdout) `Ansi_tty;
   match piaf_config_of_cli cli with
   | Error msg ->
     `Error (false, msg)
