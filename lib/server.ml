@@ -127,6 +127,15 @@ let default_error_handler _client_addr ?request:_ ~respond _err =
   respond ~headers:(Headers.of_list [ "connection", "close" ]) Body.empty;
   Lwt.return_unit
 
+let report_exn reqd exn =
+  Log.err (fun m ->
+      let backtrace = Printexc.get_backtrace () in
+      m
+        "Exception while handling request: %s.@]@;%s"
+        (Printexc.to_string exn)
+        backtrace);
+  Reqd.report_exn reqd exn
+
 let request_handler handler client_addr reqd =
   let { Gluten.reqd; upgrade } = reqd in
   let request = Reqd.request reqd in
@@ -138,6 +147,9 @@ let request_handler handler client_addr reqd =
       (Reqd.request_body reqd)
   in
   let request = Request.of_http1 ~body:request_body request in
+  (* Set the async exception hook for threads that raise exceptions within the
+   * one we start below. *)
+  Lwt.async_exception_hook := report_exn reqd;
   Lwt.async (fun () ->
       let open Lwt.Syntax in
       Lwt.catch
@@ -169,15 +181,7 @@ let request_handler handler client_addr reqd =
               Reqd.respond_with_streaming reqd http1_response
             in
             stream_response_body response_body stream)
-        (fun exn ->
-          Log.err (fun m ->
-              let backtrace = Printexc.get_backtrace () in
-              m
-                "Exception while handling request: %s.@]@;%s"
-                (Printexc.to_string exn)
-                backtrace);
-          Reqd.report_exn reqd exn;
-          Lwt.return_unit))
+        (Lwt.wrap2 report_exn reqd))
 
 let create ?config ?(error_handler = default_error_handler) handler =
   Httpaf_lwt_unix.Server.create_connection_handler
