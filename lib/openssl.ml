@@ -130,8 +130,7 @@ let configure_verify_locations ctx cacert capath =
           else
             Error (`Connect_error "Failed to set default verify paths")
       in
-      Lwt.wakeup_later resolver result;
-      Lwt.return_unit);
+      Lwt.wrap2 Lwt.wakeup_later resolver result);
   promise
 
 let version_of_ssl = function

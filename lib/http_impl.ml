@@ -138,16 +138,13 @@ let send_request
   Lwt.async (fun () ->
       match body.contents with
       | `Empty _ ->
-        Bodyw.close_writer request_body;
-        Lwt.return_unit
+        Lwt.wrap1 Bodyw.close_writer request_body
       | `String s ->
         Bodyw.write_string request_body s;
-        flush_and_close (module Http.Body) request_body;
-        Lwt.return_unit
+        Lwt.wrap2 flush_and_close (module Http.Body) request_body
       | `Bigstring { IOVec.buffer; off; len } ->
         Bodyw.schedule_bigstring request_body ~off ~len buffer;
-        flush_and_close (module Http.Body) request_body;
-        Lwt.return_unit
+        Lwt.wrap2 flush_and_close (module Http.Body) request_body
       | `Stream stream ->
         Lwt.on_success (Lwt_stream.closed stream) (fun () ->
             flush_and_close (module Http.Body) request_body);
