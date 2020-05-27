@@ -12,7 +12,9 @@ jobs:
         ocamlVersion: [4_08, 4_09, 4_10]
     steps:
     - uses: actions/checkout@v2
-    - uses: cachix/install-nix-action@v8
+    - uses: cachix/install-nix-action@v9
+      with:
+        skip_adding_nixpkgs_channel: true
     - uses: cachix/cachix-action@v6
       with:
         name: anmonteiro
