@@ -70,25 +70,6 @@ module Error_response = struct
   type t = unit
 end
 
-let flush_and_close response_body =
-  Httpaf.Body.flush response_body (fun () ->
-      Httpaf.Body.close_writer response_body)
-
-let stream_response_body response_body stream =
-  Lwt.on_success (Lwt_stream.closed stream) (fun () ->
-      flush_and_close response_body);
-  Lwt.async (fun () ->
-      Lwt_stream.iter
-        (fun { IOVec.buffer; off; len } ->
-          (* If the peer left abruptly the connection will be shutdown. Avoid
-           * crashing the server with exceptions related to the writer being
-           * closed. *)
-          if not (Httpaf.Body.is_closed response_body) then (
-            Httpaf.Body.schedule_bigstring response_body ~off ~len buffer;
-            Httpaf.Body.flush response_body (fun () ->
-                Log.debug (fun m -> m "Flushed output chunk of length %d" len))))
-        stream)
-
 let make_error_handler error_handler client_addr ?request error start_response =
   let respond ~headers body =
     let headers =
@@ -105,7 +86,7 @@ let make_error_handler error_handler client_addr ?request error start_response =
       Httpaf.Body.write_bigstring response_body ~off ~len buffer;
       Httpaf.Body.close_writer response_body
     | `Stream stream ->
-      stream_response_body response_body stream
+      Body.stream_write_body (module Http1.Body) response_body stream
   in
   let request = Option.map Request.of_http1 request in
   Lwt.async (fun () -> error_handler client_addr ?request ~respond error)
@@ -172,7 +153,7 @@ let request_handler handler client_addr reqd =
             let response_body =
               Reqd.respond_with_streaming reqd http1_response
             in
-            stream_response_body response_body stream)
+            Body.stream_write_body (module Http1.Body) response_body stream)
         (Lwt.wrap2 report_exn reqd))
 
 let create ?config ?(error_handler = default_error_handler) handler =

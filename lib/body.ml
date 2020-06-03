@@ -32,6 +32,10 @@
 open Monads
 module IOVec = H2.IOVec
 
+let src = Logs.Src.create "piaf.body" ~doc:"Piaf Body module"
+
+module Log = (val Logs.src_log src : Logs.LOG)
+
 module Optional_handler : sig
   type t
 
@@ -295,6 +299,42 @@ let of_prim_body
     lazy (of_stream ~length:body_length (Lwt_stream.from (read_fn t)))
   in
   Lazy.force t
+
+let flush_and_close
+    : type a. (module BODY with type Write.t = a) -> a -> (unit -> unit) -> unit
+  =
+ fun (module B) body f ->
+  let module Body = B.Write in
+  Body.close_writer body;
+  Body.flush body f
+
+let stream_write_body
+    : type a.
+      (module BODY with type Write.t = a)
+      -> a
+      -> Bigstringaf.t IOVec.t Lwt_stream.t
+      -> unit
+  =
+ fun (module B) body stream ->
+  let module Body = B.Write in
+  Lwt.on_success (Lwt_stream.closed stream) (fun () ->
+      flush_and_close (module B) body ignore);
+  Lwt.async (fun () ->
+      Lwt_stream.iter_s
+        (fun { IOVec.buffer; off; len } ->
+          (* If the peer left abruptly the connection will be shutdown. Avoid
+           * crashing the server with exceptions related to the writer being
+           * closed. *)
+          if not (Body.is_closed body) then (
+            Body.schedule_bigstring body ~off ~len buffer;
+            let waiter, wakener = Lwt.wait () in
+            Body.flush body (fun () ->
+                Lwt.wakeup_later wakener ();
+                Log.debug (fun m -> m "Flushed output chunk of length %d" len));
+            waiter)
+          else
+            Lwt.return_unit)
+        stream)
 
 (* Traversal *)
 let fold f t init =
