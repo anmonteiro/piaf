@@ -76,10 +76,8 @@ let create_connection
 let flush_and_close
     : type a. (module Body.BODY with type Write.t = a) -> a -> unit
   =
- fun (module Http_body) request_body ->
-  let module Bodyw = Http_body.Write in
-  Bodyw.close_writer request_body;
-  Bodyw.flush request_body (fun () ->
+ fun b request_body ->
+  Body.flush_and_close b request_body (fun () ->
       Log.info (fun m ->
           m "Request body has been completely and successfully uploaded"))
 
@@ -148,10 +146,7 @@ let send_request
       | `Stream stream ->
         Lwt.on_success (Lwt_stream.closed stream) (fun () ->
             flush_and_close (module Http.Body) request_body);
-        Lwt_stream.iter
-          (fun { IOVec.buffer; off; len } ->
-            Bodyw.schedule_bigstring request_body ~off ~len buffer)
-          stream);
+        Lwt.wrap3 Body.stream_write_body (module Http.Body) request_body stream);
   handle_response response_received error_received connection_error_received
 
 let can't_upgrade msg =
