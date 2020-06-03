@@ -70,21 +70,6 @@ module Error_response = struct
   type t = unit
 end
 
-let add_length_related_headers headers body =
-  (* TODO: check `Httpaf.Response.body_length` because we may have to issue a
-   * 0-length response body. *)
-  (* Don't step over an explicit `content-length` header. *)
-  match Body.length body with
-  | `Fixed n ->
-    Headers.(
-      add_unless_exists headers Well_known.content_length (Int64.to_string n))
-  | `Chunked ->
-    Headers.(add_unless_exists headers Well_known.transfer_encoding "chunked")
-  | `Close_delimited ->
-    Headers.(add_unless_exists headers Well_known.connection "close")
-  | `Error _ | `Unknown ->
-    headers
-
 let flush_and_close response_body =
   Httpaf.Body.flush response_body (fun () ->
       Httpaf.Body.close_writer response_body)
@@ -106,7 +91,9 @@ let stream_response_body response_body stream =
 
 let make_error_handler error_handler client_addr ?request error start_response =
   let respond ~headers body =
-    let headers = add_length_related_headers headers body in
+    let headers =
+      Headers.add_length_related_headers ~body_length:(Body.length body) headers
+    in
     let response_body = start_response (Headers.to_http1 headers) in
     match Body.contents body with
     | `Empty _ ->
@@ -158,7 +145,12 @@ let request_handler handler client_addr reqd =
             handler { ctx = client_addr; request }
           in
           let response =
-            { response with headers = add_length_related_headers headers body }
+            { response with
+              headers =
+                Headers.add_length_related_headers
+                  ~body_length:(Body.length body)
+                  headers
+            }
           in
           let http1_response = Response.to_http1 response in
           match Body.contents body with

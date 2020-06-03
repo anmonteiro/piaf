@@ -480,6 +480,8 @@ let patch t ?headers ?body target =
 let delete t ?headers ?body target = call t ?headers ?body ~meth:`DELETE target
 
 module Oneshot = struct
+  (* TODO(anmonteiro): if this is oneshot, why aren't we sending a
+   * `Connection: * close` header? *)
   let call
       ?(config = Config.default) ?(headers = []) ?(body = Body.empty) ~meth uri
     =

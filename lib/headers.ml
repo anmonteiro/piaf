@@ -44,12 +44,28 @@ module Well_known = struct
 
   let content_length = "content-length"
 
+  let content_type = "content-type"
+
   let location = "location"
 
   let upgrade = "upgrade"
 
   let transfer_encoding = "transfer-encoding"
 end
+
+let add_length_related_headers ~body_length headers =
+  (* TODO: check `Httpaf.Response.body_length` because we may have to issue a
+   * 0-length response body. *)
+  (* Don't step over an explicit `content-length` header. *)
+  match body_length with
+  | `Fixed n ->
+    add_unless_exists headers Well_known.content_length (Int64.to_string n)
+  | `Chunked ->
+    add_unless_exists headers Well_known.transfer_encoding "chunked"
+  | `Close_delimited ->
+    add_unless_exists headers Well_known.connection "close"
+  | `Error _ | `Unknown ->
+    headers
 
 (* TODO: Add user-agent if not defined *)
 let canonicalize_headers ~body_length ~host ~version headers =
@@ -66,11 +82,7 @@ let canonicalize_headers ~body_length ~host ~version headers =
     | _ ->
       failwith "unsupported version"
   in
-  match body_length with
-  | `Fixed n ->
-    add_unless_exists headers "content-length" (Int64.to_string n)
-  | _ ->
-    headers
+  add_length_related_headers ~body_length headers
 
 let host t ~version =
   match version with

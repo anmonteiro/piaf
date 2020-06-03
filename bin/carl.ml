@@ -68,13 +68,17 @@ type output =
   | Stdout
   | Channel of string
 
+type data =
+  | File of string
+  | Data of string
+
 type cli =
   { follow_redirects : bool
   ; max_redirects : int
   ; meth : Method.t
   ; log_level : Logs.level option
   ; urls : string list
-  ; data : string option
+  ; data : data option
   ; default_proto : string
   ; head : bool
   ; headers : (string * string) list
@@ -368,9 +372,9 @@ let build_headers
   | None, None ->
     headers
 
-let request ~cli ~config uri =
+let request ~cli ~config ~iobuf uri =
+  let open Lwt.Syntax in
   let module Client = Client.Oneshot in
-  let open Lwt_result.Syntax in
   let { meth; data; _ } = cli in
   let uri_user = Uri.userinfo uri in
   let cli =
@@ -382,14 +386,67 @@ let request ~cli ~config uri =
       cli
   in
   let headers = build_headers ~cli in
-  let body =
-    match data with Some s -> Some (Body.of_string s) | None -> None
+  let* body =
+    match data with
+    | Some (Data s) ->
+      Lwt.return_some (Body.of_string s)
+    | Some (File filename) ->
+      let* channel =
+        Lwt_io.open_file
+          ~buffer:iobuf
+          ~flags:[ O_RDONLY ]
+          ~mode:Lwt_io.input
+          filename
+      in
+      let* length = Lwt_io.length channel in
+      let remaining = ref (Int64.to_int length) in
+      let stream =
+        Lwt_stream.from (fun () ->
+            if !remaining = 0 then
+              Lwt.return_none
+            else
+              let* payload =
+                Lwt_io.read
+                  ~count:(min config.Config.body_buffer_size !remaining)
+                  channel
+              in
+              let read = String.length payload in
+              remaining := !remaining - read;
+              Lwt.return_some payload)
+      in
+      Lwt.on_success (Lwt_stream.closed stream) (fun () ->
+          Lwt.ignore_result (Lwt_io.close channel));
+      let body_length =
+        match
+          List.find_opt
+            (fun (nm, _) -> String.lowercase_ascii nm = "transfer-encoding")
+            headers
+        with
+        | Some (_, "chunked") ->
+          `Chunked
+        | _ ->
+          `Fixed length
+      in
+      Lwt.return_some (Body.of_string_stream ~length:body_length stream)
+    | None ->
+      Lwt.return_none
   in
+  let open Lwt_result.Syntax in
   let* response = Client.request ~config ~meth ~headers ?body uri in
   handle_response ~cli response
 
 let rec request_many ~cli ~config urls =
   let open Lwt.Syntax in
+  let iobuf =
+    match cli.data with
+    | Some (File _) ->
+      (* If there's a file to upload, allocate a single buffer for doing
+       * I/O on that file, sized according to the configuration we're running
+       * with. *)
+      Bigstringaf.create config.Config.body_buffer_size
+    | _ ->
+      Bigstringaf.empty
+  in
   let { default_proto; _ } = cli in
   match urls with
   | [] ->
@@ -397,7 +454,7 @@ let rec request_many ~cli ~config urls =
     assert false
   | [ x ] ->
     let uri = uri_of_string ~scheme:default_proto x in
-    let* r = request ~cli ~config uri in
+    let* r = request ~cli ~config ~iobuf uri in
     (match r with
     | Ok () ->
       Lwt.return (`Ok ())
@@ -405,7 +462,7 @@ let rec request_many ~cli ~config urls =
       Lwt.return (`Error (false, Error.to_string e)))
   | x :: xs ->
     let uri = uri_of_string ~scheme:default_proto x in
-    let* _r = request ~cli ~config uri in
+    let* _r = request ~cli ~config ~iobuf uri in
     request_many ~cli ~config xs
 
 let log_level_of_list ~silent = function
@@ -457,6 +514,7 @@ let piaf_config_of_cli
       ; min_tls_version
       ; max_tls_version
       ; connect_timeout
+      ; body_buffer_size = 0x10000
       }
 
 let main ({ log_level; urls; _ } as cli) =
@@ -469,8 +527,7 @@ let main ({ log_level; urls; _ } as cli) =
   | Ok config ->
     Lwt_main.run (request_many ~cli ~config urls)
 
-(* -T, --upload-file <file> Transfer local FILE to destination
- * --resolve <host:port:address[,address]...> Resolve the host+port to this address
+(* --resolve <host:port:address[,address]...> Resolve the host+port to this address
  * --retry <num>   Retry request if transient problems occur
  * --retry-connrefused Retry on connection refused (use with --retry)
  * --retry-delay <seconds> Wait time between retries
@@ -635,6 +692,12 @@ module CLI = struct
     let doc = "Use the TCP_NODELAY option" in
     Arg.(value & flag & info [ "tcp-nodelay" ] ~doc)
 
+  let upload_file =
+    let doc = "Transfer local $(docv) to destination" in
+    let docv = "file" in
+    Arg.(
+      value & opt (some string) None & info [ "T"; "upload-file" ] ~doc ~docv)
+
   let user_agent =
     let doc = "Send User-Agent $(docv) to server" in
     let docv = "name" in
@@ -700,6 +763,7 @@ module CLI = struct
       tlsv1_2
       tlsv1_3
       max_tls_version
+      upload_file
       user_agent
       user
       oauth2_bearer
@@ -710,7 +774,15 @@ module CLI = struct
     =
     { follow_redirects
     ; max_redirects
-    ; data
+    ; data =
+        (match data, upload_file with
+        | None, None ->
+          None
+        | Some data, _ ->
+          (* `-d` takes precedence over `-T` *)
+          Some (Data data)
+        | None, Some filename ->
+          Some (File filename))
     ; meth =
         (match head, request, data with
         | true, None, None ->
@@ -800,6 +872,7 @@ module CLI = struct
       $ tlsv1_2
       $ tlsv1_3
       $ tls_max_version
+      $ upload_file
       $ user_agent
       $ user
       $ oauth2_bearer

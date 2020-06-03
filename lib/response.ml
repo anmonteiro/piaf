@@ -61,24 +61,39 @@ let of_string_stream ?version ?headers ~body status =
 let of_stream ?version ?headers ~body status =
   create ?version ?headers ~body:(Body.of_stream body) status
 
+(* TODO: accept buffer for I/O, so that caller can pool buffers? *)
 let of_file ?version ?(headers = Headers.empty) path =
+  let open Lwt.Syntax in
   let mime = Magic_mime.lookup path in
   let headers =
-    Headers.(
-      add_unless_exists
-        (add_unless_exists headers "content-type" mime)
-        "transfer-encoding"
-        "chunked")
+    Headers.(add_unless_exists headers Well_known.content_type mime)
   in
-  let stream, push = Lwt_stream.create () in
-  Lwt.async (fun () ->
-      Lwt_io.with_file ~flags:[ O_RDONLY ] ~mode:Lwt_io.input path (fun ic ->
-          let open Lwt.Syntax in
-          (* TODO: Read chunks *)
-          let+ contents = Lwt_io.read ic in
-          push (Some contents);
-          push None));
-  create ?version ~headers ~body:(Body.of_string_stream stream) `OK
+  let* channel = Lwt_io.open_file ~flags:[ O_RDONLY ] ~mode:Lwt_io.input path in
+  let+ length = Lwt_io.length channel in
+  let remaining = ref (Int64.to_int length) in
+  let stream =
+    Lwt_stream.from (fun () ->
+        if !remaining = 0 then
+          Lwt.return_none
+        else
+          let* payload =
+            Lwt_io.read
+            (* TODO: read from config buffer size? *)
+            (* ~count:(min config.Config.body_buffer_size !remaining) *)
+              ~count:(min 0x4000 !remaining)
+              channel
+          in
+          let read = String.length payload in
+          remaining := !remaining - read;
+          Lwt.return_some payload)
+  in
+  Lwt.on_success (Lwt_stream.closed stream) (fun () ->
+      Lwt.ignore_result (Lwt_io.close channel));
+  create
+    ?version
+    ~headers
+    ~body:(Body.of_string_stream ~length:`Chunked stream)
+    `OK
 
 let upgrade ?version ?(headers = Headers.empty) upgrade_handler =
   create
