@@ -339,7 +339,11 @@ module Response : sig
     -> ((Gluten.impl -> unit) -> unit)
     -> t
 
-  val of_file : ?version:Versions.HTTP.t -> ?headers:Headers.t -> string -> t
+  val of_file
+    :  ?version:Versions.HTTP.t
+    -> ?headers:Headers.t
+    -> string
+    -> t Lwt.t
 
   val persistent_connection : t -> bool
 
