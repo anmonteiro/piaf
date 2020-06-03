@@ -440,8 +440,9 @@ let rec request_many ~cli ~config urls =
   let iobuf =
     match cli.data with
     | Some (File _) ->
-      (* If there's a file to upload, allocate a single 16MB buffer for doing
-       * I/O on that file. *)
+      (* If there's a file to upload, allocate a single buffer for doing
+       * I/O on that file, sized according to the configuration we're running
+       * with. *)
       Bigstringaf.create config.Config.body_buffer_size
     | _ ->
       Bigstringaf.empty
