@@ -131,13 +131,30 @@ module Config : sig
 end
 
 module Error : sig
-  type t =
+  type common =
     [ `Exn of exn
-    | `Invalid_response_body_length of H2.Status.t * Headers.t
-    | `Malformed_response of string
     | `Protocol_error of H2.Error_code.t * string
-    | `Connect_error of string
     | `Msg of string
+    ]
+
+  type client =
+    [ `Invalid_response_body_length of H2.Status.t * Headers.t
+    | `Malformed_response of string
+    | `Connect_error of string
+    | common
+    ]
+
+  type server =
+    [ `Bad_gateway
+    | `Bad_request
+    | `Internal_server_error
+    | common
+    ]
+
+  type t =
+    [ common
+    | client
+    | server
     ]
 
   val to_string : t -> string
@@ -363,7 +380,7 @@ end
 module Client : sig
   type t
 
-  val create : ?config:Config.t -> Uri.t -> (t, Error.t) Lwt_result.t
+  val create : ?config:Config.t -> Uri.t -> (t, Error.client) Lwt_result.t
   (** [create ?config uri] opens a connection to [uri] (initially) that can be
       used to issue multiple requests to the remote endpoint.
 
@@ -375,41 +392,41 @@ module Client : sig
     :  t
     -> ?headers:(string * string) list
     -> string
-    -> (Response.t, Error.t) Lwt_result.t
+    -> (Response.t, Error.client) Lwt_result.t
 
   val get
     :  t
     -> ?headers:(string * string) list
     -> string
-    -> (Response.t, Error.t) Lwt_result.t
+    -> (Response.t, Error.client) Lwt_result.t
 
   val post
     :  t
     -> ?headers:(string * string) list
     -> ?body:Body.t
     -> string
-    -> (Response.t, Error.t) Lwt_result.t
+    -> (Response.t, Error.client) Lwt_result.t
 
   val put
     :  t
     -> ?headers:(string * string) list
     -> ?body:Body.t
     -> string
-    -> (Response.t, Error.t) Lwt_result.t
+    -> (Response.t, Error.client) Lwt_result.t
 
   val patch
     :  t
     -> ?headers:(string * string) list
     -> ?body:Body.t
     -> string
-    -> (Response.t, Error.t) Lwt_result.t
+    -> (Response.t, Error.client) Lwt_result.t
 
   val delete
     :  t
     -> ?headers:(string * string) list
     -> ?body:Body.t
     -> string
-    -> (Response.t, Error.t) Lwt_result.t
+    -> (Response.t, Error.client) Lwt_result.t
 
   val request
     :  t
@@ -417,7 +434,7 @@ module Client : sig
     -> ?body:Body.t
     -> meth:Method.t
     -> string
-    -> (Response.t, Error.t) Lwt_result.t
+    -> (Response.t, Error.client) Lwt_result.t
 
   val shutdown : t -> unit Lwt.t
   (** [shutdown t] tears down the connection [t] and frees up all the resources
@@ -428,41 +445,41 @@ module Client : sig
       :  ?config:Config.t
       -> ?headers:(string * string) list
       -> Uri.t
-      -> (Response.t, Error.t) Lwt_result.t
+      -> (Response.t, Error.client) Lwt_result.t
 
     val get
       :  ?config:Config.t
       -> ?headers:(string * string) list
       -> Uri.t
-      -> (Response.t, Error.t) Lwt_result.t
+      -> (Response.t, Error.client) Lwt_result.t
 
     val post
       :  ?config:Config.t
       -> ?headers:(string * string) list
       -> ?body:Body.t
       -> Uri.t
-      -> (Response.t, Error.t) Lwt_result.t
+      -> (Response.t, Error.client) Lwt_result.t
 
     val put
       :  ?config:Config.t
       -> ?headers:(string * string) list
       -> ?body:Body.t
       -> Uri.t
-      -> (Response.t, Error.t) Lwt_result.t
+      -> (Response.t, Error.client) Lwt_result.t
 
     val patch
       :  ?config:Config.t
       -> ?headers:(string * string) list
       -> ?body:Body.t
       -> Uri.t
-      -> (Response.t, Error.t) Lwt_result.t
+      -> (Response.t, Error.client) Lwt_result.t
 
     val delete
       :  ?config:Config.t
       -> ?headers:(string * string) list
       -> ?body:Body.t
       -> Uri.t
-      -> (Response.t, Error.t) Lwt_result.t
+      -> (Response.t, Error.client) Lwt_result.t
 
     val request
       :  ?config:Config.t
@@ -470,7 +487,7 @@ module Client : sig
       -> ?body:Body.t
       -> meth:Method.t
       -> Uri.t
-      -> (Response.t, Error.t) Lwt_result.t
+      -> (Response.t, Error.client) Lwt_result.t
     (** Use another request method. *)
   end
 end

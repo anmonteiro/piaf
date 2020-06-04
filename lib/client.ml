@@ -318,7 +318,11 @@ let rec return_response
       Log.debug (fun m -> m "Received 101, server accepted HTTP/2 upgrade");
       let (module Http2) = (module Http2.HTTP : Http_intf.HTTP2) in
       let open Lwt_result.Syntax in
-      let* () = Body.drain body in
+      let* () =
+        Lwt_result.map_err
+          (function #Error.client as e -> e | _ -> assert false)
+          (Body.drain body)
+      in
       let* h2_conn, response =
         Http_impl.create_h2c_connection ~config ~http_request:request runtime
       in
