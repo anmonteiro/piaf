@@ -432,7 +432,10 @@ let request ~cli ~config ~iobuf uri =
       Lwt.return_none
   in
   let open Lwt_result.Syntax in
-  let* response = Client.request ~config ~meth ~headers ?body uri in
+  let* response =
+    (Client.request ~config ~meth ~headers ?body uri
+      :> (Response.t, Error.t) Lwt_result.t)
+  in
   handle_response ~cli response
 
 let rec request_many ~cli ~config urls =
