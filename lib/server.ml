@@ -98,27 +98,11 @@ let default_error_handler _client_addr ?request:_ ~respond _err =
 let report_exn reqd exn =
   Log.err (fun m ->
       let raw_backtrace = Printexc.get_raw_backtrace () in
-      let backtrace_slots =
-        Option.map
-          (fun slots ->
-            Array.to_list slots
-            |> List.mapi (fun i slot -> Printexc.Slot.format i slot))
-          (Printexc.backtrace_slots raw_backtrace)
-      in
-      let format_backtrace_slot formatter slot =
-        match slot with
-        | Some slot ->
-          Format.fprintf formatter "@[<h 0>%s@]" slot
-        | None ->
-          ()
-      in
       m
         "Exception while handling request: %s.@]@;<0 2>@[<v 0>%a@]"
         (Printexc.to_string exn)
-        (Format.pp_print_list
-           ~pp_sep:(fun f () -> Format.fprintf f "@;")
-           format_backtrace_slot)
-        (Option.value ~default:[] backtrace_slots));
+        Util.Backtrace.pp_hum
+        raw_backtrace);
   Reqd.report_exn reqd exn
 
 let request_handler handler client_addr reqd =
