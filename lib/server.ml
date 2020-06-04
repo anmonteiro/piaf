@@ -112,6 +112,14 @@ let request_handler handler client_addr reqd =
     Body.of_prim_body
       (module Http1.Body : Body.BODY with type Read.t = [ `read ] Httpaf.Body.t)
       ~body_length:(body_length :> Body.length)
+      ~on_eof:(fun body ->
+        match Reqd.error_code reqd with
+        | Some _error ->
+          Body.embed_error_received
+            body
+            (Lwt.return (`Msg "TODO: support server error types"))
+        | None ->
+          ())
       (Reqd.request_body reqd)
   in
   let request = Request.of_http1 ~body:request_body request in
@@ -125,35 +133,44 @@ let request_handler handler client_addr reqd =
           let+ ({ Response.headers; body; _ } as response) =
             handler { ctx = client_addr; request }
           in
-          let response =
-            { response with
-              headers =
-                Headers.add_length_related_headers
-                  ~body_length:(Body.length body)
-                  headers
-            }
-          in
-          let http1_response = Response.to_http1 response in
-          match Body.contents body with
-          | `Empty upgrade_handler ->
-            if Body.Optional_handler.is_none upgrade_handler then
-              (* No upgrade *)
-              Reqd.respond_with_bigstring reqd http1_response Bigstringaf.empty
-            else (
-              (* we created it ourselves *)
-              assert (response.status = `Switching_protocols);
-              Reqd.respond_with_upgrade reqd http1_response.headers (fun () ->
-                  Body.Optional_handler.call_if_some upgrade_handler upgrade))
-          | `String s ->
-            Reqd.respond_with_string reqd http1_response s
-          | `Bigstring { IOVec.buffer; off; len } ->
-            let bstr = Bigstringaf.sub ~off ~len buffer in
-            Reqd.respond_with_bigstring reqd http1_response bstr
-          | `Stream stream ->
-            let response_body =
-              Reqd.respond_with_streaming reqd http1_response
+          match Reqd.error_code reqd with
+          | Some _ ->
+            (* Already handling an error, don't bother sending the response.
+             * `error_handler` will be called. *)
+            ()
+          | None ->
+            let response =
+              { response with
+                headers =
+                  Headers.add_length_related_headers
+                    ~body_length:(Body.length body)
+                    headers
+              }
             in
-            Body.stream_write_body (module Http1.Body) response_body stream)
+            let http1_response = Response.to_http1 response in
+            (match Body.contents body with
+            | `Empty upgrade_handler ->
+              if Body.Optional_handler.is_none upgrade_handler then
+                (* No upgrade *)
+                Reqd.respond_with_bigstring
+                  reqd
+                  http1_response
+                  Bigstringaf.empty
+              else (
+                (* we created it ourselves *)
+                assert (response.status = `Switching_protocols);
+                Reqd.respond_with_upgrade reqd http1_response.headers (fun () ->
+                    Body.Optional_handler.call_if_some upgrade_handler upgrade))
+            | `String s ->
+              Reqd.respond_with_string reqd http1_response s
+            | `Bigstring { IOVec.buffer; off; len } ->
+              let bstr = Bigstringaf.sub ~off ~len buffer in
+              Reqd.respond_with_bigstring reqd http1_response bstr
+            | `Stream stream ->
+              let response_body =
+                Reqd.respond_with_streaming reqd http1_response
+              in
+              Body.stream_write_body (module Http1.Body) response_body stream))
         (Lwt.wrap2 report_exn reqd))
 
 let create ?config ?(error_handler = default_error_handler) handler =

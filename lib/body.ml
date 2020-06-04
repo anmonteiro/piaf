@@ -265,17 +265,23 @@ end
 let embed_error_received t error_received = t.error_received <- error_received
 
 let of_prim_body
-    : type a. (module BODY with type Read.t = a) -> body_length:length -> a -> t
+    : type a.
+      (module BODY with type Read.t = a)
+      -> ?on_eof:(t -> unit)
+      -> body_length:length
+      -> a
+      -> t
   =
- fun (module Http_body) ~body_length body ->
+ fun (module Http_body) ?on_eof ~body_length body ->
   let module Body = Http_body.Read in
   let read_fn t () =
-    let body_chunk_p, notify = Lwt.wait () in
+    let waiter, wakener = Lwt.wait () in
     Body.schedule_read
       body
       ~on_eof:(fun () ->
+        Option.iter (fun f -> f (Lazy.force t)) on_eof;
         Body.close_reader body;
-        Lwt.wakeup_later notify None)
+        Lwt.wakeup_later wakener None)
       ~on_read:(fun fragment ~off ~len ->
         (* TODO: delete this. This is fixed in the http/af version we use. *)
         (* Note: we always need to make a copy here for now. See the following
@@ -284,10 +290,10 @@ let of_prim_body
          *)
         let fragment_copy = Bigstringaf.copy ~off ~len fragment in
         let iovec = { IOVec.buffer = fragment_copy; off = 0; len } in
-        Lwt.wakeup_later notify (Some iovec));
+        Lwt.wakeup_later wakener (Some iovec));
     let t = Lazy.force t in
     Lwt.choose
-      [ body_chunk_p
+      [ waiter
       ; Lwt.bind t.error_received (fun _ ->
             (* `None` closes the stream. The promise `t.error_received` remains
              * fulfilled, which signals that the stream hasn't closed cleanly.
