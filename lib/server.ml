@@ -163,7 +163,7 @@ let request_handler handler client_addr reqd =
             Log.info (fun m ->
                 m
                   "Response returned by handler will not be written, currently \
-                   handling error");
+                   handling error")
           | None ->
             let response =
               { response with
