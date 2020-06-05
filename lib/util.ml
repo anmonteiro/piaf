@@ -51,3 +51,26 @@ module Uri = struct
     in
     Uri.canonicalize new_uri
 end
+
+module Backtrace = struct
+  let pp_hum formatter raw_backtrace =
+    let backtrace_slots =
+      Option.map
+        (fun slots ->
+          Array.to_list slots
+          |> List.mapi (fun i slot -> Printexc.Slot.format i slot))
+        (Printexc.backtrace_slots raw_backtrace)
+    in
+    let format_backtrace_slot formatter slot =
+      match slot with
+      | Some slot ->
+        Format.fprintf formatter "@[<h 0>%s@]" slot
+      | None ->
+        ()
+    in
+    (Format.pp_print_list
+       ~pp_sep:(fun f () -> Format.fprintf f "@;")
+       format_backtrace_slot)
+      formatter
+      (Option.value ~default:[] backtrace_slots)
+end

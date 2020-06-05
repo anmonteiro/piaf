@@ -97,11 +97,12 @@ let default_error_handler _client_addr ?request:_ ~respond _err =
 
 let report_exn reqd exn =
   Log.err (fun m ->
-      let backtrace = Printexc.get_backtrace () in
+      let raw_backtrace = Printexc.get_raw_backtrace () in
       m
-        "Exception while handling request: %s.@]@;%s"
+        "Exception while handling request: %s.@]@;<0 2>@[<v 0>%a@]"
         (Printexc.to_string exn)
-        backtrace);
+        Util.Backtrace.pp_hum
+        raw_backtrace);
   Reqd.report_exn reqd exn
 
 let request_handler handler client_addr reqd =
@@ -133,11 +134,20 @@ let request_handler handler client_addr reqd =
           let+ ({ Response.headers; body; _ } as response) =
             handler { ctx = client_addr; request }
           in
+          (* XXX(anmonteiro): It's a little weird that, given an actual
+           * response returned from the handler, we decide to completely ignore
+           * it. There's a good justification here, which is that the error
+           * handler will be called. The alternative would be to have the
+           * request handler return a result type, but then we'd be ignoring
+           * the error instead. *)
           match Reqd.error_code reqd with
           | Some _ ->
             (* Already handling an error, don't bother sending the response.
              * `error_handler` will be called. *)
-            ()
+            Log.info (fun m ->
+                m
+                  "Response returned by handler will not be written, currently \
+                   handling error")
           | None ->
             let response =
               { response with
