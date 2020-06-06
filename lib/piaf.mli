@@ -380,7 +380,7 @@ end
 module Client : sig
   type t
 
-  val create : ?config:Config.t -> Uri.t -> (t, Error.client) Lwt_result.t
+  val create : ?config:Config.t -> Uri.t -> (t, Error.t) Lwt_result.t
   (** [create ?config uri] opens a connection to [uri] (initially) that can be
       used to issue multiple requests to the remote endpoint.
 
@@ -392,41 +392,41 @@ module Client : sig
     :  t
     -> ?headers:(string * string) list
     -> string
-    -> (Response.t, Error.client) Lwt_result.t
+    -> (Response.t, Error.t) Lwt_result.t
 
   val get
     :  t
     -> ?headers:(string * string) list
     -> string
-    -> (Response.t, Error.client) Lwt_result.t
+    -> (Response.t, Error.t) Lwt_result.t
 
   val post
     :  t
     -> ?headers:(string * string) list
     -> ?body:Body.t
     -> string
-    -> (Response.t, Error.client) Lwt_result.t
+    -> (Response.t, Error.t) Lwt_result.t
 
   val put
     :  t
     -> ?headers:(string * string) list
     -> ?body:Body.t
     -> string
-    -> (Response.t, Error.client) Lwt_result.t
+    -> (Response.t, Error.t) Lwt_result.t
 
   val patch
     :  t
     -> ?headers:(string * string) list
     -> ?body:Body.t
     -> string
-    -> (Response.t, Error.client) Lwt_result.t
+    -> (Response.t, Error.t) Lwt_result.t
 
   val delete
     :  t
     -> ?headers:(string * string) list
     -> ?body:Body.t
     -> string
-    -> (Response.t, Error.client) Lwt_result.t
+    -> (Response.t, Error.t) Lwt_result.t
 
   val request
     :  t
@@ -434,7 +434,7 @@ module Client : sig
     -> ?body:Body.t
     -> meth:Method.t
     -> string
-    -> (Response.t, Error.client) Lwt_result.t
+    -> (Response.t, Error.t) Lwt_result.t
 
   val shutdown : t -> unit Lwt.t
   (** [shutdown t] tears down the connection [t] and frees up all the resources
@@ -445,41 +445,41 @@ module Client : sig
       :  ?config:Config.t
       -> ?headers:(string * string) list
       -> Uri.t
-      -> (Response.t, Error.client) Lwt_result.t
+      -> (Response.t, Error.t) Lwt_result.t
 
     val get
       :  ?config:Config.t
       -> ?headers:(string * string) list
       -> Uri.t
-      -> (Response.t, Error.client) Lwt_result.t
+      -> (Response.t, Error.t) Lwt_result.t
 
     val post
       :  ?config:Config.t
       -> ?headers:(string * string) list
       -> ?body:Body.t
       -> Uri.t
-      -> (Response.t, Error.client) Lwt_result.t
+      -> (Response.t, Error.t) Lwt_result.t
 
     val put
       :  ?config:Config.t
       -> ?headers:(string * string) list
       -> ?body:Body.t
       -> Uri.t
-      -> (Response.t, Error.client) Lwt_result.t
+      -> (Response.t, Error.t) Lwt_result.t
 
     val patch
       :  ?config:Config.t
       -> ?headers:(string * string) list
       -> ?body:Body.t
       -> Uri.t
-      -> (Response.t, Error.client) Lwt_result.t
+      -> (Response.t, Error.t) Lwt_result.t
 
     val delete
       :  ?config:Config.t
       -> ?headers:(string * string) list
       -> ?body:Body.t
       -> Uri.t
-      -> (Response.t, Error.client) Lwt_result.t
+      -> (Response.t, Error.t) Lwt_result.t
 
     val request
       :  ?config:Config.t
@@ -487,7 +487,7 @@ module Client : sig
       -> ?body:Body.t
       -> meth:Method.t
       -> Uri.t
-      -> (Response.t, Error.client) Lwt_result.t
+      -> (Response.t, Error.t) Lwt_result.t
     (** Use another request method. *)
   end
 end
