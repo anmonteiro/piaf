@@ -110,7 +110,7 @@ module MakeHTTP1
         response_handler (Response.of_http1 ~body response)
       in
       let error_handler error =
-        let error : Error.t =
+        let error : Error.client =
           match error with
           | `Invalid_response_body_length { Httpaf.Response.status; headers; _ }
             ->

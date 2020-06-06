@@ -32,7 +32,7 @@
 open Monads
 
 let make_error_handler real_handler type_ error =
-  let error : Error.t =
+  let error : Error.client =
     match error with
     | `Invalid_response_body_length { H2.Response.status; headers; _ } ->
       `Invalid_response_body_length (status, headers)

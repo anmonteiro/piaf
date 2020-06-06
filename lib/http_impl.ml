@@ -50,7 +50,7 @@ let create_connection
       -> config:Config.t
       -> version:Versions.HTTP.t
       -> a
-      -> (Connection.t, Error.t) result Lwt.t
+      -> (Connection.t, Error.client) result Lwt.t
   =
  fun (module Http_impl) ~config ~version socket ->
   let open Lwt.Syntax in
@@ -82,8 +82,8 @@ let flush_and_close
           m "Request body has been completely and successfully uploaded"))
 
 let handle_response
-    :  Response.t Lwt.t -> Error.t Lwt.t -> Error.t Lwt.t
-    -> (Response.t, Error.t) result Lwt.t
+    :  Response.t Lwt.t -> Error.client Lwt.t -> Error.client Lwt.t
+    -> (Response.t, Error.client) result Lwt.t
   =
  fun response_p response_error_p connection_error_p ->
   let open Lwt.Syntax in
@@ -106,7 +106,7 @@ let handle_response
           response);
     Body.embed_error_received
       response.body
-      (Lwt.choose [ connection_error_p; response_error_p ]);
+      (Lwt.choose [ connection_error_p; response_error_p ] :> Error.t Lwt.t);
     Ok response
   | Error _ as error ->
     (* TODO: Close the connection if we receive a connection error *)
@@ -154,7 +154,7 @@ let can't_upgrade msg =
 
 let create_h2c_connection
     :  config:Config.t -> http_request:Request.t -> Scheme.Runtime.t
-    -> (Connection.t * Response.t, Error.t) result Lwt.t
+    -> (Connection.t * Response.t, Error.client) result Lwt.t
   =
  fun ~config ~http_request runtime ->
   match runtime with

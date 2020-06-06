@@ -320,7 +320,8 @@ let rec return_response
       let open Lwt_result.Syntax in
       let* () = Body.drain body in
       let* h2_conn, response =
-        Http_impl.create_h2c_connection ~config ~http_request:request runtime
+        (Http_impl.create_h2c_connection ~config ~http_request:request runtime
+          :> (Connection.t * Response.t, Error.t) Lwt_result.t)
       in
       t.conn <- h2_conn;
       return_response t request_info response
@@ -390,7 +391,10 @@ let rec send_request_and_handle_response
     ({ remaining_redirects; request; headers; meth; _ } as request_info)
   =
   let open Lwt_result.Syntax in
-  let* response = Http_impl.send_request conn ~body request in
+  let* response =
+    (Http_impl.send_request conn ~body request
+      :> (Response.t, Error.t) Lwt_result.t)
+  in
   if t.persistent then
     t.persistent <- Response.persistent_connection response;
   (* TODO: 201 created can also return a Location header. Should we follow
@@ -411,7 +415,9 @@ let rec send_request_and_handle_response
   | true, true, _, Some location ->
     let { Connection_info.scheme; _ } = conn_info in
     let new_uri = Uri.parse_with_base_uri ~scheme ~uri location in
-    let* did_reuse = reuse_or_set_up_new_connection t new_uri in
+    let* did_reuse =
+      (reuse_or_set_up_new_connection t new_uri :> (bool, Error.t) Lwt_result.t)
+    in
     (* If we reused the connection, and this is a persistent connection (we
      * only reuse if persistent), throw away the response body, because we're
      * not going to expose it to consumers.
@@ -444,7 +450,9 @@ let rec send_request_and_handle_response
 let create ?(config = Config.default) uri =
   let open Lwt_result.Syntax in
   let* conn_info = Connection_info.of_uri uri in
-  let+ conn = open_connection ~config conn_info in
+  let+ conn =
+    (open_connection ~config conn_info :> (Connection.t, Error.t) Lwt_result.t)
+  in
   { conn; conn_info; persistent = true; uri; config }
 
 let call t ~meth ?(headers = []) ?(body = Body.empty) target =
@@ -456,7 +464,7 @@ let call t ~meth ?(headers = []) ?(body = Body.empty) target =
   let* _did_reuse =
     if t.config.follow_redirects || Http_impl.is_closed (module Http) handle
     then
-      reuse_or_set_up_new_connection t t.uri
+      (reuse_or_set_up_new_connection t t.uri :> (bool, Error.t) Lwt_result.t)
     else
       Lwt_result.return true
   in

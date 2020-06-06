@@ -115,10 +115,8 @@ let request_handler handler client_addr reqd =
       ~body_length:(body_length :> Body.length)
       ~on_eof:(fun body ->
         match Reqd.error_code reqd with
-        | Some _error ->
-          Body.embed_error_received
-            body
-            (Lwt.return (`Msg "TODO: support server error types"))
+        | Some error ->
+          Body.embed_error_received body (Lwt.return (error :> Error.t))
         | None ->
           ())
       (Reqd.request_body reqd)

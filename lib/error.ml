@@ -3,13 +3,30 @@ type kind =
   | `Stream
   ]
 
-type t =
+type common =
   [ `Exn of exn
-  | `Invalid_response_body_length of H2.Status.t * Headers.t
-  | `Malformed_response of string
   | `Protocol_error of H2.Error_code.t * string
-  | `Connect_error of string
   | `Msg of string
+  ]
+
+type client =
+  [ `Invalid_response_body_length of H2.Status.t * Headers.t
+  | `Malformed_response of string
+  | `Connect_error of string
+  | common
+  ]
+
+type server =
+  [ `Bad_gateway
+  | `Bad_request
+  | `Internal_server_error
+  | common
+  ]
+
+type t =
+  [ common
+  | client
+  | server
   ]
 
 let to_string = function
@@ -33,6 +50,12 @@ let to_string = function
       msg
   | `Connect_error msg ->
     Format.asprintf "Connect Error: %s" msg
+  | `Bad_gateway ->
+    "Bad Gateway"
+  | `Bad_request ->
+    "Bad Request"
+  | `Internal_server_error ->
+    "Internal Server Error"
   | `Msg string ->
     string
 

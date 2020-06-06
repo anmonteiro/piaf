@@ -131,13 +131,30 @@ module Config : sig
 end
 
 module Error : sig
-  type t =
+  type common =
     [ `Exn of exn
-    | `Invalid_response_body_length of H2.Status.t * Headers.t
-    | `Malformed_response of string
     | `Protocol_error of H2.Error_code.t * string
-    | `Connect_error of string
     | `Msg of string
+    ]
+
+  type client =
+    [ `Invalid_response_body_length of H2.Status.t * Headers.t
+    | `Malformed_response of string
+    | `Connect_error of string
+    | common
+    ]
+
+  type server =
+    [ `Bad_gateway
+    | `Bad_request
+    | `Internal_server_error
+    | common
+    ]
+
+  type t =
+    [ common
+    | client
+    | server
     ]
 
   val to_string : t -> string

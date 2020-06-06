@@ -141,7 +141,7 @@ type t =
               and type Body.Read.t = 'b)
       ; handle : 'a
       ; runtime : Scheme.Runtime.t
-      ; connection_error_received : Error.t Lwt.t
+      ; connection_error_received : Error.client Lwt.t
       ; version : Version.t  (** HTTP version that this connection speaks *)
       }
       -> t
