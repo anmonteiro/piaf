@@ -12,7 +12,7 @@ let request host =
     (Uri.of_string host)
   >|= function
   | Ok _response ->
-  ()
+    ()
   | Error e ->
     failwith (Piaf.Error.to_string e)
 
