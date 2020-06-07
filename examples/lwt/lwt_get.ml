@@ -12,9 +12,9 @@ let request host =
     (Uri.of_string host)
   >|= function
   | Ok _response ->
-    ()
+  ()
   | Error e ->
-    failwith e
+    failwith (Piaf.Error.to_string e)
 
 let () =
   setup_log (Some Logs.Debug);
