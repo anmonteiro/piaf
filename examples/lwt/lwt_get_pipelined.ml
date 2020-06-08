@@ -32,21 +32,11 @@ let request host =
       (Uri.of_string host)
   in
   let* response = Client.get client "/" in
-  let open Lwt_syntax.Async in
   let* () =
-    Lwt_stream.iter_s
-      (fun chunk -> Lwt_io.printf "%s" chunk)
-      (Body.to_string_stream response.body)
+    Body.iter_string_s (fun chunk -> Lwt_io.printf "%s" chunk) response.body
   in
-  let open Lwt_syntax.Result in
   let* response = Client.get client "/blog" in
-  let open Lwt_syntax.Async in
-  let+ () =
-    Lwt_stream.iter_s
-      (fun chunk -> Lwt_io.printf "%s" chunk)
-      (Body.to_string_stream response.body)
-  in
-  Ok ()
+  Body.iter_string_s (fun chunk -> Lwt_io.printf "%s" chunk) response.body
 
 let () =
   let open Lwt.Infix in
@@ -67,5 +57,5 @@ let () =
     (request host >|= function
      | Ok () ->
        ()
-     | Error msg ->
-       Format.eprintf "%s@." msg)
+     | Error e ->
+       failwith (Piaf.Error.to_string e))
