@@ -14,6 +14,12 @@ file](./piaf.opam).
 
 [esy]: https://esy.sh
 
+[reason-native-web](https://github.com/reason-native-web) has published an NPM package that can easily be consumed with esy, although note that this is strictly not supported and might be severely out-of-date:
+
+```
+esy add @reason-native-web/piaf
+```
+
 # Usage & Examples
 
 TODO, read the [mli](./lib/piaf.mli) file for now.
