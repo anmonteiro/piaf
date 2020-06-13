@@ -33,7 +33,7 @@ Assuming [`nix` has been installed](https://nix.dev/tutorials/install-nix.html) 
 
 ### Option 2) Setting up opam
 
-For this approach you'll need to [install `opam`](https://opam.ocaml.org/doc/Install.html)  and set it up with a switch using `ocaml` >= 4.06. Once that's done, run `opam pin . --deps-only` to install the dependencies.
+For this approach you'll need to [install `opam`](https://opam.ocaml.org/doc/Install.html)  and set it up with a switch using `ocaml` >= 4.08. Once that's done, run `opam pin . --deps-only` to install the dependencies.
 
 Note that this installs the dependencies globally, and that the development environment is dependent on the switch used.
 
