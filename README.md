@@ -39,17 +39,16 @@ Note that this installs the dependencies globally, and that the development envi
 
 ### Building
 
-Run `dune build` to build, `dune build --watch` to run a watcher dameon that will build incremenetally.
+Run `dune build` to build, `dune build --watch` to run a watcher dameon that will build incrementally.
 
 ### Running examples
 
 Run `dune exec examples/docs/readme.exe` to run the simple example above.
 
-Run `dune exec bin/carl.exe` to run the `carl`, the `curl`-like example.
+Run `dune exec bin/carl.exe` to run `carl`, the `curl`-like example.
 
 ## License & Copyright
 
 Copyright (c) 2019 António Nuno Monteiro
 
 piaf is distributed under the 3-Clause BSD License, see [LICENSE](./LICENSE).
-
