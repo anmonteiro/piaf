@@ -20,8 +20,34 @@ TODO, read the [mli](./lib/piaf.mli) file for now.
 
 ### Examples
 
-There's an example of using Piaf's API in [bin/carl.ml](./bin/carl.ml), an
-implementation of a subset of curl, in caml.
+```ml
+open Piaf
+
+let get_sync url =
+  let open Lwt_result.Syntax in
+  
+  Lwt_main.run begin
+    print_endline("Sencing request...");
+    
+    let* response = Client.Oneshot.get (Uri.of_string url) in
+    
+    if (Status.is_successful response.status) then
+      Body.to_string response.body
+    else
+      let message = Status.to_string response.status in
+      Lwt.return (Error (`Msg message))
+  end
+
+let () =
+  match get_sync "https://example.com" with
+  | Ok body -> print_endline body
+  | Error error ->
+    let message = Error.to_string error in
+    prerr_endline ("Error: " ^ message)
+```
+
+There's a more substantive example of using Piaf's API in
+[bin/carl.ml](./bin/carl.ml), an implementation of a subset of curl, in caml.
 
 ## License & Copyright
 
