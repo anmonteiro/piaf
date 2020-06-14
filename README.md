@@ -49,9 +49,32 @@ let () =
 There's a more substantive example of using Piaf's API in
 [bin/carl.ml](./bin/carl.ml), an implementation of a subset of curl, in caml.
 
+## Development
+
+There's two ways to get a development environemnt up and running. If you have (or don't mind getting) [`nix`](https://nixos.org/nix/manual/) installed, the repository includes scripts to set up a sandbox. Otherwise you can use [`opam`](https://opam.ocaml.org/) to install the necessary dependencies globally.
+
+### Option 1) Setting up the sandbox
+
+Assuming [`nix` has been installed](https://nix.dev/tutorials/install-nix.html) and set up, run `nix-shell --pure` in the repository root. Once it's done building, you should have the development environment set up!
+
+### Option 2) Setting up opam
+
+For this approach you'll need to [install `opam`](https://opam.ocaml.org/doc/Install.html)  and set it up with a switch using `ocaml` >= 4.08. Once that's done, run `opam pin . --deps-only` to install the dependencies.
+
+Note that this installs the dependencies globally, and that the development environment is dependent on the switch used.
+
+### Building
+
+Run `dune build` to build, `dune build --watch` to run a watcher daemon that will build incrementally.
+
+### Running examples
+
+Run `dune exec examples/docs/readme.exe` to run the simple example above.
+
+Run `dune exec bin/carl.exe` to run `carl`, the `curl`-like example.
+
 ## License & Copyright
 
 Copyright (c) 2019 António Nuno Monteiro
 
 piaf is distributed under the 3-Clause BSD License, see [LICENSE](./LICENSE).
-
