@@ -39,7 +39,7 @@ Note that this installs the dependencies globally, and that the development envi
 
 ### Building
 
-Run `dune build` to build, `dune build --watch` to run a watcher dameon that will build incrementally.
+Run `dune build` to build, `dune build --watch` to run a watcher daemon that will build incrementally.
 
 ### Running examples
 
