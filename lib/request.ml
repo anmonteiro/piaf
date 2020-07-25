@@ -72,7 +72,7 @@ let pp_hum formatter { meth; target; version; headers; _ } =
   in
   Format.fprintf
     formatter
-    "@[%a %s %a@]@\n@[%a@]"
+    "@[%a %s %a@]@;<0 2>@[<v 0>%a@]"
     H2.Method.pp_hum
     meth
     target
