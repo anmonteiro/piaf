@@ -38,6 +38,7 @@ module Log = (val Logs.src_log src : Logs.LOG)
  * - Timeouts?
  * - Retries
  *   - 8.1.4 in https://www.w3.org/Protocols/rfc2616/rfc2616-sec8.html
+ * - set max content length on the server config
  *)
 
 type t =

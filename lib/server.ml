@@ -89,9 +89,20 @@ let make_error_handler error_handler client_addr ?request error start_response =
       Body.stream_write_body (module Http1.Body) response_body stream
   in
   let request = Option.map Request.of_http1 request in
-  Lwt.async (fun () -> error_handler client_addr ?request ~respond error)
+  Lwt.async (fun () ->
+      Log.err (fun m ->
+          m
+            "Error handler called with error: %a%a"
+            Error.pp_hum
+            error
+            (Format.pp_print_option (fun fmt request ->
+                 Format.fprintf fmt "; Request: @?%a" Request.pp_hum request))
+            request);
+      error_handler client_addr ?request ~respond error)
 
-let default_error_handler _client_addr ?request:_ ~respond _err =
+let default_error_handler
+    _client_addr ?request:_ ~respond (_error : Httpaf.Server_connection.error)
+  =
   respond ~headers:(Headers.of_list [ "connection", "close" ]) Body.empty;
   Lwt.return_unit
 
