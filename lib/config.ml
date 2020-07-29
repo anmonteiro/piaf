@@ -121,6 +121,9 @@ let to_http2_config
   ; request_body_buffer_size = body_buffer_size
   ; response_body_buffer_size = body_buffer_size
   ; enable_server_push = enable_http2_server_push
+  ; (* Default to a flow control window of 1 MB.
+     * XXX(anmonteiro): This could probably be the default in h2? *)
+    initial_window_size = 1 lsl 20
   }
 
 let to_http2_settings t = H2.Config.to_settings (to_http2_config t)

@@ -282,14 +282,8 @@ let of_prim_body
         Option.iter (fun f -> f (Lazy.force t)) on_eof;
         Body.close_reader body;
         Lwt.wakeup_later wakener None)
-      ~on_read:(fun fragment ~off ~len ->
-        (* TODO: delete this. This is fixed in the http/af version we use. *)
-        (* Note: we always need to make a copy here for now. See the following
-         * comment for an explanation why:
-         * https://github.com/inhabitedtype/httpaf/issues/140#issuecomment-517072327
-         *)
-        let fragment_copy = Bigstringaf.copy ~off ~len fragment in
-        let iovec = { IOVec.buffer = fragment_copy; off = 0; len } in
+      ~on_read:(fun buffer ~off ~len ->
+        let iovec = { IOVec.buffer; off; len } in
         Lwt.wakeup_later wakener (Some iovec));
     let t = Lazy.force t in
     Lwt.choose
