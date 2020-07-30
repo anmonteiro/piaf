@@ -35,7 +35,6 @@ let src = Logs.Src.create "piaf.server" ~doc:"Piaf Server module"
 
 module Log = (val Logs.src_log src : Logs.LOG)
 
-module IOVec = H2.IOVec
 module Reqd = Httpaf.Reqd
 
 module Service = struct

@@ -33,7 +33,6 @@
  * and their respective insecure / secure versions. *)
 
 open Monads
-module IOVec = H2.IOVec
 
 let src = Logs.Src.create "piaf.http" ~doc:"Piaf HTTP module"
 

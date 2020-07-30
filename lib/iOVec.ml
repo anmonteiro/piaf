@@ -1,5 +1,5 @@
 (*----------------------------------------------------------------------------
- * Copyright (c) 2019-2020, António Nuno Monteiro
+ * Copyright (c) 2020, António Nuno Monteiro
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -29,17 +29,6 @@
  * POSSIBILITY OF SUCH DAMAGE.
  *---------------------------------------------------------------------------*)
 
-module Body = Body
-module Config = Config
-module Client = Client
-module Error = Error
-module Headers = Headers
-module IOVec = IOVec
-module Method = Method
-module Request = Request
-module Response = Response
-module Scheme = Scheme
-module Status = Status
-module Versions = Versions
-module Server = Server
-module Cookies = Cookies
+include H2.IOVec
+
+let make buffer ~off ~len = { buffer; off; len }
