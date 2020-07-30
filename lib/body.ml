@@ -275,7 +275,7 @@ let of_prim_body
  fun (module Http_body) ?on_eof ~body_length body ->
   let module Body = Http_body.Read in
   let read_fn t () =
-    let waiter, wakener = Lwt.wait () in
+    let waiter, wakener = Lwt.task () in
     Body.schedule_read
       body
       ~on_eof:(fun () ->
@@ -295,6 +295,7 @@ let of_prim_body
     Lwt.choose
       [ waiter
       ; Lwt.bind t.error_received (fun _ ->
+            Lwt.cancel waiter;
             (* `None` closes the stream. The promise `t.error_received` remains
              * fulfilled, which signals that the stream hasn't closed cleanly.
              *)

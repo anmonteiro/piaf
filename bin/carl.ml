@@ -331,7 +331,7 @@ let handle_response ~cli ({ Response.body; _ } as response) =
             in
             or_error)
           (function
-            | Lwt_stream.Empty -> return_ok | exn -> Lwt.return_error (`Exn exn))
+            | Lwt_stream.Empty -> or_error | exn -> Lwt.return_error (`Exn exn))
   in
   let+ () =
     match cli.output with
