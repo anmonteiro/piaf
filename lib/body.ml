@@ -30,7 +30,6 @@
  *---------------------------------------------------------------------------*)
 
 open Monads
-module IOVec = H2.IOVec
 
 let src = Logs.Src.create "piaf.body" ~doc:"Piaf Body module"
 
@@ -108,7 +107,7 @@ let of_string_stream ?(length = `Chunked) stream =
     Lwt_stream.map
       (fun s ->
         let len = String.length s in
-        { IOVec.buffer = Bigstringaf.of_string ~off:0 ~len s; off = 0; len })
+        IOVec.make (Bigstringaf.of_string ~off:0 ~len s) ~off:0 ~len)
       stream
   in
   create ~length (`Stream stream)
@@ -122,7 +121,7 @@ let of_bigstring ?(off = 0) ?len bstr =
     match len with Some len -> len | None -> Bigstringaf.length bstr
   in
   let length = `Fixed (Int64.of_int len) in
-  create ~length (`Bigstring { IOVec.buffer = bstr; off; len })
+  create ~length (`Bigstring (IOVec.make bstr ~off ~len))
 
 let or_error t ~stream v =
   let open Lwt.Syntax in
@@ -141,7 +140,7 @@ let to_stream ({ contents; _ } as t) =
     | `String s ->
       let len = String.length s in
       Lwt_stream.of_list
-        [ { IOVec.buffer = Bigstringaf.of_string ~off:0 ~len s; off = 0; len } ]
+        [ IOVec.make (Bigstringaf.of_string ~off:0 ~len s) ~off:0 ~len ]
     | `Bigstring iovec ->
       Lwt_stream.of_list [ iovec ]
     | `Stream stream ->
@@ -283,8 +282,7 @@ let of_prim_body
         Body.close_reader body;
         Lwt.wakeup_later wakener None)
       ~on_read:(fun buffer ~off ~len ->
-        let iovec = { IOVec.buffer; off; len } in
-        Lwt.wakeup_later wakener (Some iovec));
+        Lwt.wakeup_later wakener (Some (IOVec.make buffer ~off ~len)));
     let t = Lazy.force t in
     Lwt.choose
       [ waiter
