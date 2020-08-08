@@ -7,7 +7,11 @@ rec {
     pname = "piaf";
     version = "0.0.1-dev";
 
-    src = lib.gitignoreSource ./..;
+    src = lib.filterGitSource {
+      src = ./..;
+      dirs = [ "lib" "lib_test" ];
+      files = [ "dune-project" "piaf.opam" ];
+    };
 
     useDune2 = true;
 
@@ -38,7 +42,11 @@ rec {
     name = "carl";
     version = "0.0.1-dev";
 
-    src = lib.gitignoreSource ./..;
+    src = lib.filterGitSource {
+      src = ./..;
+      dirs = [ "bin" ];
+      files = [ "dune-project" ];
+    };
 
     nativeBuildInputs = [dune_2 ocaml findlib];
 
