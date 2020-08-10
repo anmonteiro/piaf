@@ -28,6 +28,7 @@ rec {
       uri
 
       alcotest
+      alcotest-lwt
     ];
 
     inherit doCheck;

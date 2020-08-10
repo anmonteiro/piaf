@@ -1,3 +1,9 @@
 (test
  (name test_cookies)
+ (modules test_cookies)
  (libraries alcotest piaf))
+
+(tests
+ (names test_client)
+ (libraries alcotest alcotest-lwt piaf)
+ (modules helper_server test_client))

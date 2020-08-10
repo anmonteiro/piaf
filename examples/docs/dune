@@ -1,4 +1,3 @@
 (executable
  (name readme)
- (preprocess future_syntax)
  (libraries piaf lwt))
