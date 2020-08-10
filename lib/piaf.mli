@@ -51,7 +51,156 @@ end
 
 module Method : module type of Method
 
-module Headers : module type of Headers
+module Headers : sig
+  (** The type of a group of header fields. *)
+  type t
+
+  (** The type of a lowercase header name. *)
+  type name = string
+
+  (** The type of a header value. *)
+  type value = string
+
+  (** {3 Constructor} *)
+
+  val empty : t
+  (** [empty] is the empty collection of header fields. *)
+
+  val of_list : (name * value) list -> t
+  (** [of_list assoc] is a collection of header fields defined by the
+      association list [assoc]. [of_list] assumes the order of header fields in
+      [assoc] is the intended transmission order. The following equations should
+      hold:
+
+      - [to_list (of_list lst) = lst]
+      - [get (of_list \[("k", "v1"); ("k", "v2")\]) "k" = Some "v2"]. *)
+
+  val of_rev_list : (name * value) list -> t
+  (** [of_list assoc] is a collection of header fields defined by the
+      association list [assoc]. [of_list] assumes the order of header fields in
+      [assoc] is the {i reverse} of the intended trasmission order. The
+      following equations should hold:
+
+      - [to_list (of_rev_list lst) = List.rev lst]
+      - [get (of_rev_list \[("k", "v1"); ("k", "v2")\]) "k" = Some "v1"]. *)
+
+  val to_list : t -> (name * value) list
+  (** [to_list t] is the association list of header fields contained in [t] in
+      transmission order. *)
+
+  val to_rev_list : t -> (name * value) list
+  (** [to_rev_list t] is the association list of header fields contained in [t]
+      in {i reverse} transmission order. *)
+
+  val add : t -> ?sensitive:bool -> name -> value -> t
+  (** [add t ?sensitive name value] is a collection of header fields that is the
+      same as [t] except with [(name, value)] added at the end of the
+      trasmission order. Additionally, [sensitive] specifies whether this header
+      field should not be compressed by HPACK and instead encoded as a
+      never-indexed literal (see
+      {{:https://tools.ietf.org/html/rfc7541#section-7.1.3} RFC7541§7.1.3} for
+      more details).
+
+      The following equations should hold:
+
+      - [get (add t name value) name = Some value] *)
+
+  val add_unless_exists : t -> ?sensitive:bool -> name -> value -> t
+  (** [add_unless_exists t ?sensitive name value] is a collection of header
+      fields that is the same as [t] if [t] already inclues [name], and
+      otherwise is equivalent to [add t ?sensitive name value]. *)
+
+  val add_list : t -> (name * value) list -> t
+  (** [add_list t assoc] is a collection of header fields that is the same as
+      [t] except with all the header fields in [assoc] added to the end of the
+      transmission order, in reverse order. *)
+
+  val add_multi : t -> (name * value list) list -> t
+  (** [add_multi t assoc] is the same as
+
+      {[
+        add_list
+          t
+          (List.concat_map assoc ~f:(fun (name, values) ->
+               List.map values ~f:(fun value -> name, value)))
+      ]}
+
+      but is implemented more efficiently. For example,
+
+      {[
+        add_multi t [ "name1", [ "x", "y" ]; "name2", [ "p", "q" ] ]
+        = add_list [ "name1", "x"; "name1", "y"; "name2", "p"; "name2", "q" ]
+      ]} *)
+
+  val remove : t -> name -> t
+  (** [remove t name] is a collection of header fields that contains all the
+      header fields of [t] except those that have a header-field name that are
+      equal to [name]. If [t] contains multiple header fields whose name is
+      [name], they will all be removed. *)
+
+  val replace : t -> ?sensitive:bool -> name -> value -> t
+  (** [replace t ?sensitive name value] is a collection of header fields that is
+      the same as [t] except with all header fields with a name equal to [name]
+      removed and replaced with a single header field whose name is [name] and
+      whose value is [value]. This new header field will appear in the
+      transmission order where the first occurrence of a header field with a
+      name matching [name] was found.
+
+      If no header field with a name equal to [name] is present in [t], then the
+      result is simply [t], unchanged. *)
+
+  (** {3 Destructors} *)
+
+  val mem : t -> name -> bool
+  (** [mem t name] is [true] iff [t] includes a header field with a name that is
+      equal to [name]. *)
+
+  val get : t -> name -> value option
+  (** [get t name] returns the last header from [t] with name [name], or [None]
+      if no such header is present. *)
+
+  val get_exn : t -> name -> value
+  (** [get t name] returns the last header from [t] with name [name], or raises
+      if no such header is present. *)
+
+  val get_multi : t -> name -> value list
+  (** [get_multi t name] is the list of header values in [t] whose names are
+      equal to [name]. The returned list is in transmission order. *)
+
+  (** {3 Iteration} *)
+
+  val iter : f:(name -> value -> unit) -> t -> unit
+
+  val fold : f:(name -> value -> 'a -> 'a) -> init:'a -> t -> 'a
+
+  (** {3 Utilities} *)
+
+  val to_string : t -> string
+
+  val pp_hum : Format.formatter -> t -> unit
+
+  module Well_known : sig
+    module HTTP1 : sig
+      val host : string
+    end
+
+    module HTTP2 : sig
+      val host : string
+    end
+
+    val connection : string
+
+    val content_length : string
+
+    val content_type : string
+
+    val location : string
+
+    val upgrade : string
+
+    val transfer_encoding : string
+  end
+end
 
 module Scheme : sig
   type t =
