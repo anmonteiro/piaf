@@ -33,4 +33,4 @@ let test_set_cookie () =
 
 let suite = [ "set cookie", `Quick, test_set_cookie ]
 
-let () = Alcotest.run "piaf unit tests" [ "cookies", suite ]
+let () = Alcotest.run "cookie unit tests" [ "cookies", suite ]
