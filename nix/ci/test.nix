@@ -14,7 +14,10 @@ let
   in
   stdenv.mkDerivation {
     name = "piaf-tests";
-    src = ./../..;
+    src = lib.filterGitSource {
+      src = ./../..;
+      files = [ ".ocamlformat" ];
+    };
     dontBuild = true;
     installPhase = ''
       touch $out

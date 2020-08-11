@@ -29,7 +29,6 @@
  * POSSIBILITY OF SUCH DAMAGE.
  *---------------------------------------------------------------------------*)
 
-open Async
 open Cmdliner
 open Piaf
 
