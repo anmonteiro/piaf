@@ -5,8 +5,14 @@
     inherit doCheck;
   };
 
-  musl64 = pkgs.pkgsCross.musl64.pkgsStatic.callPackage ./generic.nix {
-    static = true;
-    inherit doCheck;
-  };
+  musl64 =
+    let
+      pkgsCross = pkgs.pkgsCross.musl64.pkgsStatic;
+
+    in
+    pkgsCross.callPackage ./generic.nix {
+      static = true;
+      inherit doCheck;
+      ocamlPackages = pkgsCross.ocamlPackages;
+    };
 }

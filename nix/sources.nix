@@ -3,7 +3,7 @@
 let
   overlays =
     builtins.fetchTarball
-      https://github.com/anmonteiro/nix-overlays/archive/a7d2d27.tar.gz;
+      https://github.com/anmonteiro/nix-overlays/archive/4f06171.tar.gz;
 
 in
 
@@ -11,16 +11,11 @@ in
     overlays = [
       (import overlays)
       (self: super: {
-        ocamlPackages = super.ocaml-ng."ocamlPackages_${ocamlVersion}".overrideScope'
-            (super.callPackage "${overlays}/ocaml" {});
+        ocamlPackages = super.ocaml-ng."ocamlPackages_${ocamlVersion}";
 
-        pkgsCross.musl64.pkgsStatic =
-          super.pkgsCross.musl64.pkgsStatic.appendOverlays
-            (import "${overlays}/static/overlays.nix" {
-              inherit ocamlVersion;
-              lib = super.lib;
-              pkgsNative = self;
-            });
+        pkgsCross.musl64.pkgsStatic = super.pkgsCross.musl64.pkgsStatic.appendOverlays [(self: super: {
+          ocamlPackages = super.ocaml-ng."ocamlPackages_${ocamlVersion}";
+        })];
       })
     ];
   }
