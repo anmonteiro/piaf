@@ -12,4 +12,4 @@
  (action
   (chdir
    ../
-   (run %{test} --verbose))))
+   (run %{test}))))

@@ -249,5 +249,4 @@ let () =
     Logs.set_reporter format_reporter
   in
   setup_log Debug;
-  (* Lwt_main.run (test_https 2 ()) *)
   Lwt_main.run (Alcotest_lwt.run "Piaf client tests" suite)
