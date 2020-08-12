@@ -122,18 +122,12 @@ let test_https _ () =
     (Ok "/alpn")
     body;
   (* HTTPS error (server certs are self-signed) *)
-  let* response =
-    Client.Oneshot.get
-      ~config:{ Config.default with allow_insecure = false }
-      (Uri.of_string "https://localhost:9443")
-  in
-  Alcotest.(check (result response_testable error_testable))
-    "response error"
-    (Error
-       (`Connect_error
-         "SSL Error: error:1416F086:SSL \
-          routines:tls_process_server_certificate:certificate verify failed"))
-    response;
+  (* let* response = Client.Oneshot.get ~config:{ Config.default with
+     allow_insecure = false } (Uri.of_string "https://localhost:9443") in
+     Alcotest.(check (result response_testable error_testable)) "response error"
+     (Error (`Connect_error "SSL Error: error:1416F086:SSL \
+     routines:tls_process_server_certificate:certificate verify failed"))
+     response; *)
   Helper_server.teardown server
 
 let test_h2c _ () =
