@@ -114,14 +114,11 @@ module ALPN = struct
           Lwt.return_unit
         | Some ssl_socket ->
           (match Ssl.get_negotiated_alpn_protocol ssl_socket with
-          | None ->
-            (* Unable to negotiate a protocol *)
-            assert false
           | Some "http/1.1" ->
             http1s_handler client_addr ssl_server
           | Some "h2" ->
             h2s_handler client_addr ssl_server
-          | Some _ ->
+          | None (* Unable to negotiate a protocol *) | Some _ ->
             (* Can't really happen - would mean that TLS negotiated a
              * protocol that we didn't specify. *)
             assert false))
