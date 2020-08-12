@@ -3,7 +3,13 @@
  (modules test_cookies)
  (libraries alcotest piaf))
 
-(tests
- (names test_client)
- (libraries alcotest alcotest-lwt piaf)
- (modules helper_server test_client))
+(test
+ (name test_client)
+ (libraries alcotest alcotest-lwt piaf logs.fmt)
+ (modules helper_server test_client)
+ (deps
+  (source_tree "../certificates"))
+ (action
+  (chdir
+   ../
+   (run %{test}))))

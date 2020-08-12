@@ -249,6 +249,10 @@ let reuse_or_set_up_new_connection
       (* No way to avoid establishing a new connection if the previous one
        * wasn't persistent or the connection is closed. *)
       Lwt.ignore_result (shutdown t);
+      let* new_addresses =
+        Connection.resolve_host ~port:new_conn_info.port new_conn_info.host
+      in
+      let new_conn_info = { new_conn_info with addresses = new_addresses } in
       let+ () = change_connection t new_conn_info in
       false)
     else if Connection_info.equal_without_resolving conn_info new_conn_info then (

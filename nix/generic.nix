@@ -9,7 +9,7 @@ rec {
 
     src = lib.filterGitSource {
       src = ./..;
-      dirs = [ "lib" "lib_test" ];
+      dirs = [ "lib" "lib_test" "certificates" ];
       files = [ "dune-project" "piaf.opam" ];
     };
 
