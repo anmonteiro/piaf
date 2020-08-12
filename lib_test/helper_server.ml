@@ -117,7 +117,6 @@ module ALPN = struct
           | None ->
             (* Unable to negotiate a protocol *)
             assert false
-            (* Lwt.return_unit *)
           | Some "http/1.1" ->
             http1s_handler client_addr ssl_server
           | Some "h2" ->
@@ -125,7 +124,6 @@ module ALPN = struct
           | Some _ ->
             (* Can't really happen - would mean that TLS negotiated a
              * protocol that we didn't specify. *)
-            (* Lwt.return_unit *)
             assert false))
 end
 
