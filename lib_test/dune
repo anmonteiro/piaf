@@ -3,7 +3,7 @@
  (modules test_cookies)
  (libraries alcotest piaf))
 
-(tests
- (names test_client)
- (libraries alcotest alcotest-lwt piaf)
+(test
+ (name test_client)
+ (libraries alcotest alcotest-lwt piaf logs.fmt)
  (modules helper_server test_client))
