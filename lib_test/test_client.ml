@@ -122,12 +122,21 @@ let test_https _ () =
     (Ok "/alpn")
     body;
   (* HTTPS error (server certs are self-signed) *)
-  (* let* response = Client.Oneshot.get ~config:{ Config.default with
-     allow_insecure = false } (Uri.of_string "https://localhost:9443") in
-     Alcotest.(check (result response_testable error_testable)) "response error"
-     (Error (`Connect_error "SSL Error: error:1416F086:SSL \
-     routines:tls_process_server_certificate:certificate verify failed"))
-     response; *)
+  let* response =
+    Lwt.catch
+      (fun () ->
+        Client.Oneshot.get
+          ~config:{ Config.default with allow_insecure = false }
+          (Uri.of_string "https://localhost:9443"))
+      (fun exn -> Lwt.return_error (`Exn exn))
+  in
+  Alcotest.(check (result response_testable error_testable))
+    "response error"
+    (Error
+       (`Connect_error
+         "SSL Error: error:1416F086:SSL \
+          routines:tls_process_server_certificate:certificate verify failed"))
+    response;
   Helper_server.teardown server
 
 let test_h2c _ () =
@@ -208,7 +217,37 @@ let suite =
   ]
 
 let () =
-  Logs.set_level ~all:true (Some Debug);
-  Logs.set_reporter (Logs_fmt.reporter ());
+  let setup_log ?style_renderer level =
+    let pp_header src ppf (l, h) =
+      if l = Logs.App then
+        Format.fprintf ppf "%a" Logs_fmt.pp_header (l, h)
+      else
+        let x =
+          match Array.length Sys.argv with
+          | 0 ->
+            Filename.basename Sys.executable_name
+          | _n ->
+            Filename.basename Sys.argv.(0)
+        in
+        let x =
+          if Logs.Src.equal src Logs.default then
+            x
+          else
+            Logs.Src.name src
+        in
+        Format.fprintf ppf "%s: %a " x Logs_fmt.pp_header (l, h)
+    in
+    let format_reporter =
+      let report src =
+        let { Logs.report } = Logs_fmt.reporter ~pp_header:(pp_header src) () in
+        report src
+      in
+      { Logs.report }
+    in
+    Fmt_tty.setup_std_outputs ?style_renderer ();
+    Logs.set_level ~all:true (Some level);
+    Logs.set_reporter format_reporter
+  in
+  setup_log Debug;
   (* Lwt_main.run (test_https 2 ()) *)
   Lwt_main.run (Alcotest_lwt.run "Piaf client tests" suite)
