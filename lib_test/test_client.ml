@@ -121,9 +121,61 @@ let test_https _ () =
     "expected body"
     (Ok "/alpn")
     body;
+  (* HTTPS error (server certs are self-signed) *)
+  let* response =
+    Client.Oneshot.get
+      ~config:{ Config.default with allow_insecure = false }
+      (Uri.of_string "https://localhost:9443")
+  in
+  Alcotest.(check (result response_testable error_testable))
+    "response error"
+    (Error
+       (`Connect_error
+         "SSL Error: error:1416F086:SSL \
+          routines:tls_process_server_certificate:certificate verify failed"))
+    response;
   Helper_server.teardown server
 
-(* Helper_server.teardown server *)
+let test_h2c _ () =
+  let* server = Helper_server.H2c.listen 9000 in
+  (* Not configured to follow the h2c upgrade *)
+  let* response =
+    Client.Oneshot.get
+      ~config:{ Config.default with h2c_upgrade = false }
+      (Uri.of_string "http://localhost:9000/h2c")
+  in
+  let response = Result.get_ok response in
+  Alcotest.check
+    response_testable
+    "expected response"
+    (Response.create
+       ~headers:
+         Headers.(
+           of_list
+             Well_known.
+               [ connection, "Upgrade"; upgrade, "h2c"; content_length, "0" ])
+       `Switching_protocols)
+    response;
+  let* body = Body.to_string response.body in
+  Alcotest.(check (result string error_testable)) "expected body" (Ok "") body;
+  (* Configured to follow the h2c upgrade *)
+  let* response =
+    Client.Oneshot.get
+      ~config:{ Config.default with h2c_upgrade = true }
+      (Uri.of_string "http://localhost:9000/h2c")
+  in
+  let response = Result.get_ok response in
+  Alcotest.check
+    response_testable
+    "expected response"
+    (Response.create ~version:Versions.HTTP.v2_0 `OK)
+    response;
+  let* body = Body.to_string response.body in
+  Alcotest.(check (result string error_testable))
+    "expected body"
+    (Ok "/h2c")
+    body;
+  Helper_server.H2c.teardown server
 
 let suite =
   [ ( "client"
@@ -132,6 +184,7 @@ let suite =
         [ "simple get request", `Quick, test_simple_get
         ; "redirections", `Quick, test_redirection
         ; "https", `Quick, test_https
+        ; "h2c", `Quick, test_h2c
         ] )
   ]
 

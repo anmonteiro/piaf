@@ -134,3 +134,51 @@ let listen ?(http_port = 8080) ?(https_port = 9443) () =
 
 let teardown (http, https) =
   Lwt.join [ Lwt_io.shutdown_server http; Lwt_io.shutdown_server https ]
+
+module H2c = struct
+  type t = Lwt_io.server
+
+  let h2c_connection_handler
+      :  Unix.sockaddr -> Httpaf.Request.t -> Bigstringaf.t H2.IOVec.t list
+      -> (H2.Server_connection.t, string) result
+    =
+   fun client_addr http_request request_body ->
+    H2.Server_connection.create_h2c
+      ?config:None
+      ~http_request
+      ~request_body
+      ~error_handler:(ALPN.H2_handler.error_handler client_addr)
+      (ALPN.H2_handler.request_handler client_addr)
+
+  let connection_handler =
+    let upgrade_handler client_addr (request : Request.t) upgrade =
+      let request =
+        Httpaf.Request.create
+          ~headers:
+            (Httpaf.Headers.of_rev_list (Headers.to_rev_list request.headers))
+          request.meth
+          request.target
+      in
+      let connection =
+        Stdlib.Result.get_ok (h2c_connection_handler client_addr request [])
+      in
+      upgrade (Gluten.make (module H2.Server_connection) connection)
+    in
+    let request_handler { Server.request; ctx = client_addr } =
+      let headers =
+        Headers.(
+          of_list
+            [ Well_known.connection, "Upgrade"; Well_known.upgrade, "h2c" ])
+      in
+      Lwt.wrap1
+        (Response.upgrade ~headers)
+        (upgrade_handler client_addr request)
+    in
+    Server.create request_handler
+
+  let listen port =
+    let listen_address = Unix.(ADDR_INET (inet_addr_loopback, port)) in
+    Lwt_io.establish_server_with_client_socket listen_address connection_handler
+
+  let teardown = Lwt_io.shutdown_server
+end
