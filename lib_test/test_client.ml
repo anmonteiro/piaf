@@ -121,9 +121,89 @@ let test_https _ () =
     "expected body"
     (Ok "/alpn")
     body;
+  (* HTTPS error (server certs are self-signed) *)
+  let* response =
+    Lwt.catch
+      (fun () ->
+        Client.Oneshot.get
+          ~config:{ Config.default with allow_insecure = false }
+          (Uri.of_string "https://localhost:9443"))
+      (fun exn -> Lwt.return_error (`Exn exn))
+  in
+  Alcotest.(check (result response_testable error_testable))
+    "response error"
+    (Error
+       (`Connect_error
+         "SSL Error: error:1416F086:SSL \
+          routines:tls_process_server_certificate:certificate verify failed"))
+    response;
   Helper_server.teardown server
 
-(* Helper_server.teardown server *)
+let test_h2c _ () =
+  let* server = Helper_server.H2c.listen 9000 in
+  (* Not configured to follow the h2c upgrade *)
+  let* response =
+    Client.Oneshot.get
+      ~config:{ Config.default with h2c_upgrade = false }
+      (Uri.of_string "http://localhost:9000/h2c")
+  in
+  let response = Result.get_ok response in
+  Alcotest.check
+    response_testable
+    "expected response"
+    (Response.create
+       ~headers:
+         Headers.(
+           of_list
+             Well_known.
+               [ connection, "Upgrade"; upgrade, "h2c"; content_length, "0" ])
+       `Switching_protocols)
+    response;
+  let* body = Body.to_string response.body in
+  Alcotest.(check (result string error_testable)) "expected body" (Ok "") body;
+  (* Configured to follow the h2c upgrade *)
+  let* response =
+    Client.Oneshot.get
+      ~config:{ Config.default with h2c_upgrade = true }
+      (Uri.of_string "http://localhost:9000/h2c")
+  in
+  let response = Result.get_ok response in
+  Alcotest.check
+    response_testable
+    "expected response"
+    (Response.create ~version:Versions.HTTP.v2_0 `OK)
+    response;
+  let* body = Body.to_string response.body in
+  Alcotest.(check (result string error_testable))
+    "expected body"
+    (Ok "/h2c")
+    body;
+  (* Not configured to allow HTTP/2 connections *)
+  let* response =
+    Client.Oneshot.get
+      ~config:
+        { Config.default with
+          h2c_upgrade = true
+        ; (* But no HTTP/2 enabled *)
+          max_http_version = Versions.HTTP.v1_1
+        }
+      (Uri.of_string "http://localhost:9000/h2c")
+  in
+  let response = Result.get_ok response in
+  Alcotest.check
+    response_testable
+    "expected response"
+    (Response.create
+       ~headers:
+         Headers.(
+           of_list
+             Well_known.
+               [ connection, "Upgrade"; upgrade, "h2c"; content_length, "0" ])
+       `Switching_protocols)
+    response;
+  let* body = Body.to_string response.body in
+  Alcotest.(check (result string error_testable)) "expected body" (Ok "") body;
+  Helper_server.H2c.teardown server
 
 let suite =
   [ ( "client"
@@ -132,11 +212,41 @@ let suite =
         [ "simple get request", `Quick, test_simple_get
         ; "redirections", `Quick, test_redirection
         ; "https", `Quick, test_https
+        ; "h2c", `Quick, test_h2c
         ] )
   ]
 
 let () =
-  Logs.set_level ~all:true (Some Debug);
-  Logs.set_reporter (Logs_fmt.reporter ());
-  (* Lwt_main.run (test_https 2 ()) *)
+  let setup_log ?style_renderer level =
+    let pp_header src ppf (l, h) =
+      if l = Logs.App then
+        Format.fprintf ppf "%a" Logs_fmt.pp_header (l, h)
+      else
+        let x =
+          match Array.length Sys.argv with
+          | 0 ->
+            Filename.basename Sys.executable_name
+          | _n ->
+            Filename.basename Sys.argv.(0)
+        in
+        let x =
+          if Logs.Src.equal src Logs.default then
+            x
+          else
+            Logs.Src.name src
+        in
+        Format.fprintf ppf "%s: %a " x Logs_fmt.pp_header (l, h)
+    in
+    let format_reporter =
+      let report src =
+        let { Logs.report } = Logs_fmt.reporter ~pp_header:(pp_header src) () in
+        report src
+      in
+      { Logs.report }
+    in
+    Fmt_tty.setup_std_outputs ?style_renderer ();
+    Logs.set_level ~all:true (Some level);
+    Logs.set_reporter format_reporter
+  in
+  setup_log Debug;
   Lwt_main.run (Alcotest_lwt.run "Piaf client tests" suite)
