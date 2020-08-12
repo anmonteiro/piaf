@@ -175,6 +175,31 @@ let test_h2c _ () =
     "expected body"
     (Ok "/h2c")
     body;
+  (* Not configured to allow HTTP/2 connections *)
+  let* response =
+    Client.Oneshot.get
+      ~config:
+        { Config.default with
+          h2c_upgrade = true
+        ; (* But no HTTP/2 enabled *)
+          max_http_version = Versions.HTTP.v1_1
+        }
+      (Uri.of_string "http://localhost:9000/h2c")
+  in
+  let response = Result.get_ok response in
+  Alcotest.check
+    response_testable
+    "expected response"
+    (Response.create
+       ~headers:
+         Headers.(
+           of_list
+             Well_known.
+               [ connection, "Upgrade"; upgrade, "h2c"; content_length, "0" ])
+       `Switching_protocols)
+    response;
+  let* body = Body.to_string response.body in
+  Alcotest.(check (result string error_testable)) "expected body" (Ok "") body;
   Helper_server.H2c.teardown server
 
 let suite =
