@@ -8,8 +8,4 @@
  (libraries alcotest alcotest-lwt piaf logs.fmt)
  (modules helper_server test_client)
  (deps
-  (source_tree "../certificates"))
- (action
-  (chdir
-   ../
-   (run %{test}))))
+  (source_tree "./certificates")))
