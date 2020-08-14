@@ -1,9 +1,12 @@
 open Piaf
 
 let request_handler { Server.request; _ } =
+  let response_body =
+    Format.asprintf "%a %s" Method.pp_hum request.meth request.target
+  in
   match Astring.String.cuts ~empty:false ~sep:"/" request.target with
   | [] ->
-    Lwt.wrap1 (Response.of_string ~body:request.target) `OK
+    Lwt.wrap1 (Response.of_string ~body:response_body) `OK
   | [ "redirect" ] ->
     Lwt.wrap1
       (Response.create ~headers:Headers.(of_list [ Well_known.location, "/" ]))
@@ -134,7 +137,6 @@ type t = Lwt_io.server * Lwt_io.server
 let listen ?(http_port = 8080) ?(https_port = 9443) () =
   let http_server = HTTP.listen http_port in
   let https_server = ALPN.https_server https_port in
-  Format.eprintf "DUDE@.";
   Lwt.both http_server https_server
 
 let teardown (http, https) =

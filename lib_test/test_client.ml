@@ -19,11 +19,14 @@ let test_simple_get _ () =
     response_testable
     "expected response"
     (Response.create
-       ~headers:Headers.(of_list [ Well_known.content_length, "1" ])
+       ~headers:Headers.(of_list [ Well_known.content_length, "5" ])
        `OK)
     response;
   let* body = Body.to_string response.body in
-  Alcotest.(check (result string error_testable)) "expected body" (Ok "/") body;
+  Alcotest.(check (result string error_testable))
+    "expected body"
+    (Ok "GET /")
+    body;
   Helper_server.teardown server
 
 let test_redirection _ () =
@@ -64,11 +67,37 @@ let test_redirection _ () =
     response_testable
     "Expected response"
     (Response.create
-       ~headers:Headers.(of_list [ Well_known.content_length, "1" ])
+       ~headers:Headers.(of_list [ Well_known.content_length, "5" ])
        `OK)
     response;
   let* body = Body.to_string response.body in
-  Alcotest.(check (result string error_testable)) "expected body" (Ok "/") body;
+  Alcotest.(check (result string error_testable))
+    "expected body"
+    (Ok "GET /")
+    body;
+  Helper_server.teardown server
+
+let test_redirection_post _ () =
+  let* server = Helper_server.listen ~http_port:8080 () in
+  (* Request issues `GET` to the actual redirect target *)
+  let* response =
+    Client.Oneshot.post
+      ~config:{ Config.default with follow_redirects = true; max_redirects = 1 }
+      (Uri.of_string "http://localhost:8080/redirect")
+  in
+  let response = Result.get_ok response in
+  Alcotest.check
+    response_testable
+    "Expected response"
+    (Response.create
+       ~headers:Headers.(of_list [ Well_known.content_length, "5" ])
+       `OK)
+    response;
+  let* body = Body.to_string response.body in
+  Alcotest.(check (result string error_testable))
+    "expected body"
+    (Ok "GET /")
+    body;
   Helper_server.teardown server
 
 let test_https _ () =
@@ -211,6 +240,9 @@ let suite =
         (fun (desc, ty, f) -> Alcotest_lwt.test_case desc ty f)
         [ "simple get request", `Quick, test_simple_get
         ; "redirections", `Quick, test_redirection
+        ; ( "redirect POST, request target with GET"
+          , `Quick
+          , test_redirection_post )
         ; "https", `Quick, test_https
         ; "h2c", `Quick, test_h2c
         ] )

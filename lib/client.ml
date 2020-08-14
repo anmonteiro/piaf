@@ -437,11 +437,33 @@ let rec send_request_and_handle_response
       drain_available_body_bytes_and_shutdown ~conn_info conn response.body;
     if Status.is_permanent_redirection response.status then t.uri <- new_uri;
     let target = Uri.path_and_query new_uri in
+    (* From RFC7231§6.4:
+     *   Note: In HTTP/1.0, the status codes 301 (Moved Permanently) and 302
+     *   (Found) were defined for the first type of redirect ([RFC1945],
+     *   Section 9.3).  Early user agents split on whether the method applied
+     *   to the redirect target would be the same as the original request or
+     *   would be rewritten as GET.  Although HTTP originally defined the former
+     *   semantics for 301 and 302 (to match its original implementation at
+     *   CERN), and defined 303 (See Other) to match the latter semantics,
+     *   prevailing practice gradually converged on the latter semantics for
+     *   301 and 302 as well.  The first revision of HTTP/1.1 added 307
+     *   (Temporary Redirect) to indicate the former semantics without being
+     *   impacted by divergent practice.  Over 10 years later, most user agents
+     *   still do method rewriting for 301 and 302; therefore, this
+     *   specification makes that behavior conformant when the original request
+     *   is POST. *)
+    let meth' =
+      match meth, response.status with
+      | `POST, (`Found | `Moved_permanently) ->
+        `GET
+      | _ ->
+        meth
+    in
     let request_info' =
       make_request_info
         t
         ~remaining_redirects:(remaining_redirects - 1)
-        ~meth
+        ~meth:meth'
         ~headers
         ~body
         target
