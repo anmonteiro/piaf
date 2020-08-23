@@ -21,6 +21,8 @@ let request_handler { Server.request; _ } =
                ; Well_known.connection, "close"
                ]))
       `Moved_permanently
+  | [ "echo_headers" ] ->
+    Lwt.wrap1 (Response.create ~headers:request.headers) `OK
   | _ ->
     assert false
 

@@ -188,6 +188,8 @@ module Headers : sig
       val host : string
     end
 
+    val authorization : string
+
     val connection : string
 
     val content_length : string
@@ -293,6 +295,8 @@ module Config : sig
     ; body_buffer_size : int
           (** Buffer size used for request and response bodies. *)
     ; enable_http2_server_push : bool
+    ; default_headers : (Headers.name * Headers.value) list
+          (** Set default headers (on the client) to be sent on every request. *)
     }
 
   val default : t

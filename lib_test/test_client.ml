@@ -234,6 +234,46 @@ let test_h2c _ () =
   Alcotest.(check (result string error_testable)) "expected body" (Ok "") body;
   Helper_server.H2c.teardown server
 
+let test_default_headers _ () =
+  let* server = Helper_server.listen ~http_port:8080 () in
+  let default_headers = Headers.[ Well_known.authorization, "Bearer token" ] in
+  let expected_response =
+    Response.create
+      ~headers:
+        Headers.(
+          of_list
+            (default_headers
+            @ [ "Host", "localhost"; Well_known.content_length, "0" ]))
+      `OK
+  in
+  let* client =
+    Client.create
+      ~config:{ Config.default with default_headers }
+      (Uri.of_string "http://localhost:8080")
+  in
+  let client = Result.get_ok client in
+  let* response = Client.get client "/echo_headers" in
+  let response = Result.get_ok response in
+  Alcotest.check
+    response_testable
+    "Expected response"
+    expected_response
+    response;
+  let* () = Client.shutdown client in
+  (* Oneshot *)
+  let* response =
+    Client.Oneshot.get
+      ~config:{ Config.default with default_headers }
+      (Uri.of_string "http://localhost:8080/echo_headers")
+  in
+  let response = Result.get_ok response in
+  Alcotest.check
+    response_testable
+    "Expected response"
+    expected_response
+    response;
+  Helper_server.teardown server
+
 let suite =
   [ ( "client"
     , List.map
@@ -245,6 +285,7 @@ let suite =
           , test_redirection_post )
         ; "https", `Quick, test_https
         ; "h2c", `Quick, test_h2c
+        ; "default headers", `Quick, test_default_headers
         ] )
   ]
 

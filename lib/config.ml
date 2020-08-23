@@ -69,9 +69,11 @@ type t =
   ; body_buffer_size : int
         (** Buffer size used for request and response bodies. *)
   ; enable_http2_server_push : bool
+        (* ; max_concurrent_streams : int ; initial_window_size : int *)
         (** TODO(anmonteiro): these are HTTP/2 specific and we're probably OK
             with the defaults *)
-        (* ; max_concurrent_streams : int ; initial_window_size : int *)
+  ; default_headers : (Headers.name * Headers.value) list
+        (** Set default headers (on the client) to be sent on every request. *)
   }
 
 let default =
@@ -91,6 +93,7 @@ let default =
   ; body_buffer_size = 0x1000
   ; (* TODO: we don't really support push yet. *)
     enable_http2_server_push = false
+  ; default_headers = []
   }
 
 let to_http1_config { body_buffer_size; buffer_size; _ } =

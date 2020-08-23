@@ -40,6 +40,8 @@ module Well_known = struct
     let host = ":authority"
   end
 
+  let authorization = "authorization"
+
   let connection = "connection"
 
   let content_length = "content-length"
