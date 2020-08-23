@@ -487,13 +487,14 @@ let call t ~meth ?(headers = []) ?(body = Body.empty) target =
    * enabled, because the connection manager could have tried to follow a
    * temporary redirect. We remember permanent redirects. *)
   let (Connection.Conn { impl = (module Http); handle; _ }) = t.conn in
-  let* _did_reuse =
+  let* (_did_reuse : bool) =
     if t.config.follow_redirects || Http_impl.is_closed (module Http) handle
     then
       (reuse_or_set_up_new_connection t t.uri :> (bool, Error.t) Lwt_result.t)
     else
       Lwt_result.return true
   in
+  let headers = t.config.default_headers @ headers in
   let request_info = make_request_info t ~meth ~headers ~body target in
   t.persistent <- Request.persistent_connection request_info.request;
   send_request_and_handle_response t ~body request_info
@@ -522,6 +523,7 @@ module Oneshot = struct
     let open Lwt_result.Syntax in
     let* t = create ~config uri in
     let target = Uri.path_and_query t.uri in
+    let headers = t.config.default_headers @ headers in
     let request_info = make_request_info t ~meth ~headers ~body target in
     t.persistent <- Request.persistent_connection request_info.request;
     let response_result =
