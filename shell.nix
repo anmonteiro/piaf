@@ -19,7 +19,7 @@ in
 
   (mkShell {
     inputsFrom = lib.attrValues piafDrvs;
-    buildInputs = with ocamlPackages; [ merlin ocamlformat utop ];
+    buildInputs = with ocamlPackages; [ pkgs.getconf merlin ocamlformat utop ];
   }).overrideAttrs (o : {
     propagatedBuildInputs = filterDrvs o.propagatedBuildInputs;
     buildInputs = filterDrvs o.buildInputs;

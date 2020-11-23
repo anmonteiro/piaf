@@ -1,4 +1,3 @@
-open Lwt.Infix
 open Piaf
 
 let setup_log ?style_renderer level =
@@ -76,17 +75,6 @@ let request_handler ({ request; _ } : Unix.sockaddr Server.ctx) =
   | _ ->
     assert false
 
-let main port =
-  let listen_address = Unix.(ADDR_INET (inet_addr_loopback, port)) in
-  Lwt.async (fun () ->
-      Lwt_io.establish_server_with_client_socket
-        listen_address
-        (Server.create ?config:None ~error_handler request_handler)
-      >|= fun _server ->
-      Printf.printf "Listening on port %i and echoing POST requests.\n%!" port);
-  let forever, _ = Lwt.wait () in
-  Lwt_main.run forever
-
 let () =
   setup_log Debug;
   Sys.(
@@ -98,4 +86,4 @@ let () =
     [ "-p", Arg.Set_int port, " Listening port number (8080 by default)" ]
     ignore
     "Echoes POST requests. Runs forever.";
-  main !port
+  Server_io.listen ~request_handler ~error_handler !port
