@@ -698,6 +698,16 @@ module Server : sig
 
   type 'ctx t = 'ctx Handler.t
 
+  module Multipart : sig
+    type t = private
+      { filename : string
+      ; content_type : string
+      ; body : Body.t
+      }
+
+    val body : ?max_chunk_size:int -> Request.t -> (t, Error.t) Lwt_result.t
+  end
+
   val create
     :  ?config:Config.t
     -> ?error_handler:

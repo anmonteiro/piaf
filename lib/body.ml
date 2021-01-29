@@ -30,6 +30,7 @@
  *---------------------------------------------------------------------------*)
 
 open Monads
+open Lwt.Syntax
 
 let src = Logs.Src.create "piaf.body" ~doc:"Piaf Body module"
 
@@ -124,7 +125,6 @@ let of_bigstring ?(off = 0) ?len bstr =
   create ~length (`Bigstring (IOVec.make bstr ~off ~len))
 
 let or_error t ~stream v =
-  let open Lwt.Syntax in
   let+ () = Lwt_stream.closed stream in
   match Lwt.state t.error_received with
   | Lwt.Return error ->
@@ -157,7 +157,6 @@ let to_string ({ contents; length; _ } as t) =
   | `Bigstring { IOVec.buffer; off; len } ->
     Lwt_result.return (Bigstringaf.substring ~off ~len buffer)
   | `Stream stream ->
-    let open Lwt.Syntax in
     let len =
       match length with
       | `Fixed n ->
@@ -195,7 +194,6 @@ let to_string_stream ({ contents; _ } as t) =
   stream, or_error ~stream t ()
 
 let drain ({ contents; _ } as t) =
-  let open Lwt.Syntax in
   match contents with
   | `Empty _ | `String _ | `Bigstring _ ->
     Lwt_result.return ()
@@ -316,94 +314,84 @@ let stream_write_body
   =
  fun (module B) body stream ->
   let module Body = B.Write in
-  Lwt.on_success (Lwt_stream.closed stream) (fun () ->
-      flush_and_close (module B) body ignore);
   Lwt.async (fun () ->
-      Lwt_stream.iter_s
-        (fun { IOVec.buffer; off; len } ->
-          (* If the peer left abruptly the connection will be shutdown. Avoid
-           * crashing the server with exceptions related to the writer being
-           * closed. *)
-          if not (Body.is_closed body) then (
-            Body.schedule_bigstring body ~off ~len buffer;
-            let waiter, wakener = Lwt.wait () in
-            Body.flush body (fun () ->
-                Lwt.wakeup_later wakener ();
-                Log.debug (fun m -> m "Flushed output chunk of length %d" len));
-            waiter)
-          else
-            Lwt.return_unit)
-        stream)
+      let+ () =
+        Lwt_stream.iter_s
+          (fun { IOVec.buffer; off; len } ->
+            (* If the peer left abruptly the connection will be shutdown. Avoid
+             * crashing the server with exceptions related to the writer being
+             * closed. *)
+            if not (Body.is_closed body) then (
+              Body.schedule_bigstring body ~off ~len buffer;
+              let waiter, wakener = Lwt.wait () in
+              Body.flush body (fun () ->
+                  Lwt.wakeup_later wakener ();
+                  Log.debug (fun m -> m "Flushed output chunk of length %d" len));
+              waiter)
+            else
+              Lwt.return_unit)
+          stream
+      in
+      Lwt.on_success (Lwt_stream.closed stream) (fun () ->
+          flush_and_close (module B) body ignore))
 
 (* Traversal *)
 let fold f t init =
-  let open Lwt.Syntax in
   let stream, _ = to_stream t in
   let* ret = Lwt_stream.fold f stream init in
   or_error t ~stream ret
 
 let fold_string f t init =
-  let open Lwt.Syntax in
   let stream, _ = to_string_stream t in
   let* ret = Lwt_stream.fold f stream init in
   or_error t ~stream ret
 
 let fold_s f t init =
-  let open Lwt.Syntax in
   let stream, _ = to_stream t in
   let* ret = Lwt_stream.fold_s f stream init in
   or_error t ~stream ret
 
 let fold_string_s f t init =
-  let open Lwt.Syntax in
   let stream, _ = to_string_stream t in
   let* ret = Lwt_stream.fold_s f stream init in
   or_error t ~stream ret
 
 let iter f t =
-  let open Lwt.Syntax in
   let stream, or_error = to_stream t in
   let* () = Lwt_stream.iter f stream in
   or_error
 
 let iter_string f t =
-  let open Lwt.Syntax in
   let stream, or_error = to_string_stream t in
   let* () = Lwt_stream.iter f stream in
   or_error
 
 let iter_p f t =
-  let open Lwt.Syntax in
   let stream, or_error = to_stream t in
   let* () = Lwt_stream.iter_p f stream in
   or_error
 
 let iter_string_p f t =
-  let open Lwt.Syntax in
   let stream, or_error = to_string_stream t in
   let* () = Lwt_stream.iter_p f stream in
   or_error
 
 let iter_s f t =
-  let open Lwt.Syntax in
   let stream, or_error = to_stream t in
   let* () = Lwt_stream.iter_s f stream in
   or_error
 
 let iter_string_s f t =
-  let open Lwt.Syntax in
   let stream, or_error = to_string_stream t in
   let* () = Lwt_stream.iter_s f stream in
   or_error
 
 let iter_n ?max_concurrency f t =
-  let open Lwt.Syntax in
   let stream, or_error = to_stream t in
   let* () = Lwt_stream.iter_n ?max_concurrency f stream in
   or_error
 
 let iter_string_n ?max_concurrency f t =
-  let open Lwt.Syntax in
   let stream, or_error = to_string_stream t in
   let* () = Lwt_stream.iter_n ?max_concurrency f stream in
   or_error
