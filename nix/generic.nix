@@ -9,7 +9,7 @@ rec {
 
     src = lib.filterGitSource {
       src = ./..;
-      dirs = [ "lib" "lib_test" ];
+      dirs = [ "lib" "lib_test" "multipart" "multipart_test" ];
       files = [ "dune-project" "piaf.opam" ];
     };
 
@@ -24,6 +24,7 @@ rec {
       logs
       lwt_ssl
       magic-mime
+      multipart_form
       ssl
       uri
 
