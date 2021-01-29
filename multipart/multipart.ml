@@ -169,7 +169,7 @@ let result_headers (* : t -> (string * (string * string) list) list *) t =
     | [] ->
       acc
     | _xs ->
-      match name_of_header header with
+      (match name_of_header header with
       | Some name ->
         let headers =
           List.filter_map
@@ -224,7 +224,7 @@ let result_headers (* : t -> (string * (string * string) list) list *) t =
         in
         (name, headers) :: acc
       | None ->
-        acc
+        acc)
   in
   match t with
   | Multipart atoms ->
@@ -310,7 +310,7 @@ let extract_parts ~emit ~max_chunk_size content_type stream =
       (* Stream ended. Still need to check `error`. *)
       Lwt.return (on_eof state)
     | Some { Faraday.buffer; off; len } ->
-      match state with
+      (match state with
       | Partial { continue; committed } ->
         Qe.N.unsafe_shift ke committed;
         if committed = 0 then Qe.compress ke;
@@ -337,7 +337,7 @@ let extract_parts ~emit ~max_chunk_size content_type stream =
              msg
              (String.concat "; " marks))
       | Done (_, v) ->
-        Lwt.return_ok v
+        Lwt.return_ok v)
   in
   parse state >|= function
   | Ok t ->

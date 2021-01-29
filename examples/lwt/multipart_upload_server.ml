@@ -39,7 +39,7 @@ let error_handler _client_addr ?request:_ ~respond _err =
   Lwt.return error_handler
 
 let upload_handler (request : Request.t) =
-  let* multipart_body = Server.Multipart.body request in
+  let* multipart_body = Multipart.body request in
   match multipart_body with
   | Ok { body; _ } ->
     let response =

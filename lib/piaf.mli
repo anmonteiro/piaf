@@ -539,6 +539,16 @@ module Response : sig
   val pp_hum : Format.formatter -> t -> unit [@@ocaml.toplevel_printer]
 end
 
+module Multipart : sig
+  type t = private
+    { filename : string
+    ; content_type : string
+    ; body : Body.t
+    }
+
+  val body : ?max_chunk_size:int -> Request.t -> (t, Error.t) Lwt_result.t
+end
+
 (** {2 Client -- Issuing requests} *)
 
 (** There are two options for issuing requests with Piaf:
@@ -697,16 +707,6 @@ module Server : sig
     }
 
   type 'ctx t = 'ctx Handler.t
-
-  module Multipart : sig
-    type t = private
-      { filename : string
-      ; content_type : string
-      ; body : Body.t
-      }
-
-    val body : ?max_chunk_size:int -> Request.t -> (t, Error.t) Lwt_result.t
-  end
 
   val create
     :  ?config:Config.t
