@@ -41,11 +41,23 @@ let error_handler _client_addr ?request:_ ~respond _err =
 let upload_handler (request : Request.t) =
   let* multipart_body = Multipart.body request in
   match multipart_body with
-  | Ok { body; _ } ->
+  | Ok stream ->
+    let uploaded_content = ref "" in
+    let* () =
+      Lwt_stream.iter_s
+        (fun { Multipart.filename; body; _ } ->
+          match filename with
+          | Some _ ->
+            let+ s = Body.to_string body in
+            uploaded_content := Result.get_ok s
+          | None ->
+            Lwt.return_unit)
+        stream
+    in
     let response =
       Response.create
         ~headers:(Headers.of_list [ "content-type", "text/html" ])
-        ~body
+        ~body:Body.(of_string !uploaded_content)
         `OK
     in
     Lwt.return response
@@ -65,6 +77,7 @@ let request_handler ({ request; _ } : Unix.sockaddr Server.ctx) =
   </head>
   <body>
     <form action="/upload" method="POST" enctype="multipart/form-data">
+      <input type="text" name="name">
       <input type="file" name="fileToUpload" id="fileToUpload">
       <button type="submit">
         Submit

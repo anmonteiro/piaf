@@ -58,7 +58,7 @@ val parse_content_type
   :  string
   -> (Multipart_form.Content_type.t, [> `Msg of string ]) result
 
-val result_headers : t -> (string * (string * string) list) list
+val result_headers : t -> (string * string) list
 
 val result_fields : t -> (string * Multipart_form.Header.t) list
 
@@ -72,5 +72,6 @@ val parse_multipart_form
   :  content_type:string
   -> max_chunk_size:int
   -> emit:(string option -> Bigstringaf.t Faraday.iovec Lwt_stream.t -> unit)
+  -> ?finish:(unit -> unit)
   -> Bigstringaf.t Faraday.iovec Lwt_stream.t
   -> (t, [> `Msg of string ]) result Lwt.t
