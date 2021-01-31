@@ -30,7 +30,8 @@
  *---------------------------------------------------------------------------*)
 
 type t =
-  { filename : string option
+  { name : string
+  ; filename : string option
   ; content_type : string
   ; body : Body.t
   }
@@ -74,7 +75,8 @@ let body ?(max_chunk_size = 0x100000) (request : Request.t) =
           Multipart_form.Content_disposition.filename content_disposition
         in
         Lwt.return
-          { filename =
+          { name
+          ; filename =
               (* From RFC2183§2.3:
                *
                *   The receiving MUA SHOULD NOT respect any directory path
@@ -88,3 +90,12 @@ let body ?(max_chunk_size = 0x100000) (request : Request.t) =
       kvs
   | None ->
     Lwt.return_error (`Msg "Missing `content-type` header for multipart upload")
+
+let body_kv ?max_chunk_size (request : Request.t) =
+  let open Lwt_result.Syntax in
+  let* field_stream = body ?max_chunk_size request in
+  let open Lwt.Syntax in
+  let+ result =
+    Lwt_stream.fold (fun t acc -> (t.name, t) :: acc) field_stream []
+  in
+  Ok result

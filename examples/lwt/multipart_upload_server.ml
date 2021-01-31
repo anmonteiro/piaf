@@ -39,25 +39,26 @@ let error_handler _client_addr ?request:_ ~respond _err =
   Lwt.return error_handler
 
 let upload_handler (request : Request.t) =
-  let* multipart_body = Multipart.body request in
+  let* multipart_body = Multipart.body_kv request in
   match multipart_body with
-  | Ok stream ->
-    let uploaded_content = ref "" in
-    let* () =
-      Lwt_stream.iter_s
-        (fun { Multipart.filename; body; _ } ->
-          match filename with
-          | Some _ ->
-            let+ s = Body.to_string body in
-            uploaded_content := Result.get_ok s
-          | None ->
-            Lwt.return_unit)
-        stream
+  | Ok form ->
+    let file =
+      List.find_opt
+        (fun (_, { Multipart.filename; _ }) -> Option.is_some filename)
+        form
+    in
+    let* body =
+      match file with
+      | Some (_name, { Multipart.body; _ }) ->
+        let+ s = Body.to_string body in
+        Result.get_ok s
+      | None ->
+        Lwt.return ""
     in
     let response =
       Response.create
         ~headers:(Headers.of_list [ "content-type", "text/html" ])
-        ~body:Body.(of_string !uploaded_content)
+        ~body:Body.(of_string body)
         `OK
     in
     Lwt.return response

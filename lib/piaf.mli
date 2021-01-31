@@ -541,7 +541,8 @@ end
 
 module Multipart : sig
   type t = private
-    { filename : string option
+    { name : string
+    ; filename : string option
     ; content_type : string
     ; body : Body.t
     }
@@ -550,6 +551,11 @@ module Multipart : sig
     :  ?max_chunk_size:int
     -> Request.t
     -> (t Lwt_stream.t, Error.t) Lwt_result.t
+
+  val body_kv
+    :  ?max_chunk_size:int
+    -> Request.t
+    -> ((string * t) list, Error.t) Lwt_result.t
 end
 
 (** {2 Client -- Issuing requests} *)
