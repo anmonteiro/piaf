@@ -3,10 +3,10 @@
  (public_name piaf)
  (libraries
   piaf.multipart
-  h2
-  h2-lwt-unix
-  httpaf
-  httpaf-lwt-unix
+  piaf.h2
+  piaf.h2-lwt-unix
+  piaf.httpaf
+  piaf.httpaf-lwt-unix
   logs
   logs.lwt
   lwt
