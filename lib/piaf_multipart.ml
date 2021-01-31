@@ -42,7 +42,6 @@ let stream ?(max_chunk_size = 0x100000) (request : Request.t) =
   let content_type = Headers.get request.headers "content-type" in
   match content_type with
   | Some content_type ->
-    (* TODO(anmonteiro): might wanna check `or_error` too. *)
     let stream, _or_error = Body.to_stream request.body in
     let kvs, push_to_kvs = Lwt_stream.create () in
     let emit name stream = push_to_kvs (Some (name, stream)) in
@@ -95,7 +94,9 @@ let assoc ?max_chunk_size (request : Request.t) =
   let open Lwt_result.Syntax in
   let* field_stream = stream ?max_chunk_size request in
   let open Lwt.Syntax in
-  let+ result =
+  let* result =
     Lwt_stream.fold (fun t acc -> (t.name, t) :: acc) field_stream []
   in
-  Ok result
+  let _stream, or_error = Body.to_stream request.body in
+  let+ or_error_result = or_error in
+  Result.map (fun () -> result) or_error_result
