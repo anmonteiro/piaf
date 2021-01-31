@@ -237,7 +237,7 @@ let suite =
     , List.map
         (fun (desc, ty, f) -> Alcotest_lwt.test_case desc ty f)
         [ "simple boundary", `Quick, test_simple_boundary
-        ; "unaliged boundary", `Quick, test_unaligned_boundary
+        ; "unaligned boundary", `Quick, test_unaligned_boundary
         ; "no boundary", `Quick, test_no_boundary
         ; "no boundary, unaligned", `Quick, test_no_boundary_unaligned
         ; ( "no boundary but boundary expected"

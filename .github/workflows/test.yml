@@ -12,6 +12,8 @@ jobs:
         ocamlVersion: [4_08, 4_10, 4_11, 4_12]
     steps:
     - uses: actions/checkout@v2
+      with:
+        submodules: 'recursive'
     - uses: cachix/install-nix-action@v12
       with:
         skip_adding_nixpkgs_channel: true
