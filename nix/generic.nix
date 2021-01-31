@@ -16,16 +16,19 @@ rec {
     useDune2 = true;
 
     propagatedBuildInputs = [
-      bigstringaf
-      httpaf
-      httpaf-lwt-unix
-      h2
-      h2-lwt-unix
       logs
       lwt_ssl
       magic-mime
       ssl
       uri
+
+      # (vendored) httpaf dependencies
+      angstrom
+      faraday
+      gluten-lwt-unix
+
+      # (vendored) h2 dependencies
+      psq
 
       # (vendored) multipart_form dependencies
       pecu

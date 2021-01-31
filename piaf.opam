@@ -10,28 +10,27 @@ build: [
   ["dune" "build" "-p" name "-j" jobs]
 ]
 depends: [
-  "ocaml" {>= "4.06"}
-  "dune" {>= "1.8"}
-  "ocaml-syntax-shims"
+  "ocaml" {>= "4.08"}
+  "dune" {>= "2.5"}
+  "angstrom"
+  "faraday"
   "bigstringaf" {>= "0.5.0"}
-  "httpaf"
-  "httpaf-lwt-unix"
-  "h2" {>= "0.5.0"}
-  "h2-lwt-unix" {>= "0.5.0"}
   "logs"
   "lwt"
   "conf-libssl"
   "ssl"
   "lwt_ssl"
+  "mrmime"
+  "peqcu"
+  "psq"
   "uri"
   "magic-mime"
   "gluten-lwt-unix"
+  "alcotest" {with-test}
+  "alcotest-lwt" {with-test}
 ]
 pin-depends: [
-  [ "httpaf.dev" "git+https://github.com/anmonteiro/httpaf.git#fork" ]
-  [ "httpaf-lwt.dev" "git+https://github.com/anmonteiro/httpaf.git#fork" ]
-  [ "httpaf-lwt-unix.dev" "git+https://github.com/anmonteiro/httpaf.git#fork" ]
   [ "ssl.dev" "git+https://github.com/savonet/ocaml-ssl.git" ]
 ]
 synopsis:
-  "A client library for the HTTP/1.X and HTTP/2 protocols written entirely in OCaml"
+  "An HTTP library with HTTP/2 support written entirely in OCaml"
