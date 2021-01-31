@@ -36,7 +36,7 @@ type t =
   ; body : Body.t
   }
 
-let body ?(max_chunk_size = 0x100000) (request : Request.t) =
+let stream ?(max_chunk_size = 0x100000) (request : Request.t) =
   let open Lwt_result.Syntax in
   (* TODO(anmonteiro): validate max content-length from a config, etc. *)
   let content_type = Headers.get request.headers "content-type" in
@@ -91,9 +91,9 @@ let body ?(max_chunk_size = 0x100000) (request : Request.t) =
   | None ->
     Lwt.return_error (`Msg "Missing `content-type` header for multipart upload")
 
-let body_kv ?max_chunk_size (request : Request.t) =
+let assoc ?max_chunk_size (request : Request.t) =
   let open Lwt_result.Syntax in
-  let* field_stream = body ?max_chunk_size request in
+  let* field_stream = stream ?max_chunk_size request in
   let open Lwt.Syntax in
   let+ result =
     Lwt_stream.fold (fun t acc -> (t.name, t) :: acc) field_stream []

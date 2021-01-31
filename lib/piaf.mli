@@ -547,12 +547,12 @@ module Multipart : sig
     ; body : Body.t
     }
 
-  val body
+  val stream
     :  ?max_chunk_size:int
     -> Request.t
     -> (t Lwt_stream.t, Error.t) Lwt_result.t
 
-  val body_kv
+  val assoc
     :  ?max_chunk_size:int
     -> Request.t
     -> ((string * t) list, Error.t) Lwt_result.t

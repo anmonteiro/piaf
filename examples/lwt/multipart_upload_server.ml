@@ -39,7 +39,7 @@ let error_handler _client_addr ?request:_ ~respond _err =
   Lwt.return error_handler
 
 let upload_handler (request : Request.t) =
-  let* multipart_body = Multipart.body_kv request in
+  let* multipart_body = Multipart.assoc request in
   match multipart_body with
   | Ok form ->
     let file =
