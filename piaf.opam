@@ -21,7 +21,7 @@ depends: [
   "ssl"
   "lwt_ssl"
   "mrmime"
-  "peqcu"
+  "pecu"
   "psq"
   "uri"
   "magic-mime"
