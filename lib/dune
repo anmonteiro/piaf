@@ -1,5 +1,16 @@
 (library
  (name piaf)
  (public_name piaf)
- (libraries h2-lwt-unix uri httpaf h2 logs logs.lwt lwt lwt_ssl magic-mime
-   ssl httpaf-lwt-unix))
+ (libraries
+  piaf.multipart
+  h2
+  h2-lwt-unix
+  httpaf
+  httpaf-lwt-unix
+  logs
+  logs.lwt
+  lwt
+  lwt_ssl
+  magic-mime
+  ssl
+  uri))
