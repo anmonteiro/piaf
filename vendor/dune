@@ -1,0 +1,24 @@
+(data_only_dirs *)
+
+(subdir
+ multipart_form/lib
+ (library
+  (name multipart_form)
+  (public_name piaf.multipart_form)
+  (libraries
+   bigarray-compat
+   bigstringaf
+   faraday
+   ke
+   stdlib-shims
+   unstrctrd
+   unstrctrd.parser
+   base64
+   base64.rfc2045
+   mrmime.prettym
+   pecu
+   result
+   rresult
+   uutf
+   fmt
+   angstrom)))
