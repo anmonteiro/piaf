@@ -9,8 +9,8 @@ rec {
 
     src = lib.filterGitSource {
       src = ./..;
-      dirs = [ "lib" "lib_test" "multipart" "multipart_test" ];
-      files = [ "dune-project" "piaf.opam" ];
+      dirs = [ "lib" "lib_test" "multipart" "multipart_test" "vendor" ];
+      files = [ "dune" "dune-project" "piaf.opam" ];
     };
 
     useDune2 = true;
@@ -24,14 +24,12 @@ rec {
       logs
       lwt_ssl
       magic-mime
-      multipart_form
       ssl
       uri
 
       # (vendored) multipart_form dependencies
       pecu
       mrmime
-      unstrctrd
 
       alcotest
       alcotest-lwt
@@ -77,7 +75,7 @@ rec {
     inherit doCheck;
 
     meta = {
-      description = "Client library for HTTP/1.X / HTTP/2 written entirely in OCaml.";
+      description = "`curl` clone implmented using Piaf.";
       license = stdenv.lib.licenses.bsd3;
     };
   };
