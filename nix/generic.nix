@@ -27,6 +27,11 @@ rec {
       ssl
       uri
 
+      # (vendored) multipart_form dependencies
+      pecu
+      mrmime
+      unstrctrd
+
       alcotest
       alcotest-lwt
     ];
