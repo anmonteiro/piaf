@@ -78,7 +78,7 @@ rec {
     inherit doCheck;
 
     meta = {
-      description = "`curl` clone implmented using Piaf.";
+      description = "`curl` clone implemented using Piaf.";
       license = stdenv.lib.licenses.bsd3;
     };
   };
