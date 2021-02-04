@@ -18,7 +18,7 @@ depends: [
   "logs"
   "lwt"
   "conf-libssl"
-  "ssl"
+  "ssl" {>= "0.5.10"}
   "lwt_ssl"
   "mrmime"
   "pecu"
@@ -28,9 +28,6 @@ depends: [
   "gluten-lwt-unix"
   "alcotest" {with-test}
   "alcotest-lwt" {with-test}
-]
-pin-depends: [
-  [ "ssl.dev" "git+https://github.com/savonet/ocaml-ssl.git" ]
 ]
 synopsis:
   "An HTTP library with HTTP/2 support written entirely in OCaml"

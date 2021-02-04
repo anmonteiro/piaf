@@ -3,7 +3,7 @@
 let
   overlays =
     builtins.fetchTarball
-      https://github.com/anmonteiro/nix-overlays/archive/c3bc827.tar.gz;
+      https://github.com/anmonteiro/nix-overlays/archive/1871871.tar.gz;
 
 in
 
@@ -13,9 +13,9 @@ in
       (self: super: {
         ocamlPackages = super.ocaml-ng."ocamlPackages_${ocamlVersion}";
 
-        pkgsCross.musl64.pkgsStatic = super.pkgsCross.musl64.pkgsStatic.appendOverlays [(self: super: {
-          ocamlPackages = super.ocaml-ng."ocamlPackages_${ocamlVersion}";
-        })];
+        pkgsCross.musl64 = super.pkgsCross.musl64 // {
+          ocamlPackages = super.pkgsCross.musl64.ocaml-ng."ocamlPackages_${ocamlVersion}";
+        };
       })
     ];
   }

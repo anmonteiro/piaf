@@ -1,4 +1,4 @@
-{ pkgs, stdenv, lib, ocamlPackages, static ? false, doCheck }:
+{ stdenv, lib, ocamlPackages, static ? false, doCheck }:
 
 with ocamlPackages;
 
@@ -15,6 +15,7 @@ rec {
 
     useDune2 = true;
 
+    nativeBuildInputs = [ ocaml dune findlib ];
     propagatedBuildInputs = [
       logs
       lwt_ssl
@@ -42,7 +43,7 @@ rec {
 
     meta = {
       description = "Client library for HTTP/1.X / HTTP/2 written entirely in OCaml.";
-      license = stdenv.lib.licenses.bsd3;
+      license = lib.licenses.bsd3;
     };
   };
 
@@ -53,10 +54,10 @@ rec {
     src = lib.filterGitSource {
       src = ./..;
       dirs = [ "bin" ];
-      files = [ "dune-project" ];
+      files = [ "dune" "dune-project" ];
     };
 
-    nativeBuildInputs = [dune_2 ocaml findlib];
+    nativeBuildInputs = [dune ocaml findlib];
 
     buildPhase = ''
       echo "running ${if static then "static" else "release"} build"
@@ -79,7 +80,7 @@ rec {
 
     meta = {
       description = "`curl` clone implemented using Piaf.";
-      license = stdenv.lib.licenses.bsd3;
+      license = lib.licenses.bsd3;
     };
   };
 }

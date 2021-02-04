@@ -7,12 +7,11 @@
 
   musl64 =
     let
-      pkgsCross = pkgs.pkgsCross.musl64.pkgsStatic;
-
+      pkgs' = pkgs.pkgsCross.musl64;
     in
-    pkgsCross.callPackage ./generic.nix {
+    pkgs'.callPackage ./generic.nix {
       static = true;
       inherit doCheck;
-      ocamlPackages = pkgsCross.ocamlPackages;
+      ocamlPackages = pkgs'.ocamlPackages;
     };
 }
