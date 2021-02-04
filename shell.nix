@@ -1,5 +1,6 @@
+{ release-mode ? false }:
 let
-  pkgs = import ./nix/sources.nix {};
+  pkgs = import ./nix/sources.nix { };
   inherit (pkgs) lib;
   piafPkgs = pkgs.recurseIntoAttrs (import ./nix { inherit pkgs; }).native;
   piafDrvs = lib.filterAttrs (_: value: lib.isDerivation value) piafPkgs;
@@ -15,12 +16,20 @@ let
       inputs;
 
 in
-  with pkgs;
+with pkgs;
 
-  (mkShell {
-    inputsFrom = lib.attrValues piafDrvs;
-    buildInputs = with ocamlPackages; [ merlin ocamlformat utop ];
-  }).overrideAttrs (o : {
-    propagatedBuildInputs = filterDrvs o.propagatedBuildInputs;
-    buildInputs = filterDrvs o.buildInputs;
-  })
+(mkShell {
+  inputsFrom = lib.attrValues piafDrvs;
+  buildInputs =
+    (if release-mode then [
+      cacert
+      curl
+      ocamlPackages.dune-release
+      git
+      opam
+    ] else [ ]) ++
+    (with ocamlPackages; [ merlin ocamlformat utop ]);
+}).overrideAttrs (o: {
+  propagatedBuildInputs = filterDrvs o.propagatedBuildInputs;
+  buildInputs = filterDrvs o.buildInputs;
+})

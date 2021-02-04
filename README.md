@@ -5,9 +5,9 @@ in OCaml.
 
 ## Installation
 
-Piaf is currently unreleased.
+Piaf is released to OPAM.
 
-You can depend on it via [esy](esy) resolutions or `opam pin`
+You can depend on it via [esy](esy) or by running `opam install piaf`.
 
 _Note_: make sure to mirror Piaf's own resolutions located in the [opam
 file](./piaf.opam).
@@ -25,12 +25,12 @@ open Piaf
 
 let get_sync url =
   let open Lwt_result.Syntax in
-  
+
   Lwt_main.run begin
     print_endline("Sending request...");
-    
+
     let* response = Client.Oneshot.get (Uri.of_string url) in
-    
+
     if (Status.is_successful response.status) then
       Body.to_string response.body
     else

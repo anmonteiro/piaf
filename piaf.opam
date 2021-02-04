@@ -31,3 +31,5 @@ depends: [
 ]
 synopsis:
   "An HTTP library with HTTP/2 support written entirely in OCaml"
+description:
+  "Piaf is an HTTP library and webserver written entirely in OCaml."
