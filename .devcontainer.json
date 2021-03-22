@@ -1,0 +1,7 @@
+{
+  "image":"ocaml/opam:ubuntu-20.10-ocaml-4.11",
+  "extensions": [
+      "ocamllabs.ocaml-platform"
+  ],
+  "postCreateCommand": "sudo apt install m4 pkg-config libssl-dev zlib1g-dev libgmp-dev -y && opam install . --deps-only --with-test && opam install ocaml-lsp-server"
+}
