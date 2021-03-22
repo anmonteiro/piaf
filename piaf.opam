@@ -7,6 +7,7 @@ bug-reports: "https://github.com/anmonteiro/piaf/issues"
 dev-repo: "git+https://github.com/anmonteiro/piaf.git"
 doc: "https://anmonteiro.github.io/piaf/"
 build: [
+  ["git" "submodule" "update" "--init" "--recursive"]
   ["dune" "build" "-p" name "-j" jobs]
 ]
 depends: [
@@ -15,6 +16,7 @@ depends: [
   "angstrom"
   "faraday"
   "bigstringaf" {>= "0.5.0"}
+  "ezgzip"
   "logs"
   "lwt"
   "conf-libssl"
