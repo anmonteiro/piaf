@@ -2,3 +2,4 @@ _esy
 _build
 .merlin
 *.install
+.devcontainer.json
