@@ -305,17 +305,24 @@ let connect ~hostname ~config ~alpn_protocols fd =
           Ssl.set_verify ctx [ Ssl.Verify_peer ] None;
 
           (* Server certificate verification *)
-          match cacert with 
-          | Empty -> configure_verify_locations ctx None capath
-          | Filepath path -> 
-            let somepath = Some(path) in
-            configure_verify_locations ctx somepath capath
-          | Certpem cert -> Lwt_result.return (load_peer_ca_cert cert ctx)
-
+          let certio = 
+            match cacert with 
+            | Empty -> configure_verify_locations ctx None capath
+            | Filepath path -> 
+              let somepath = Some(path) in
+              configure_verify_locations ctx somepath capath
+            | Certpem cert -> Lwt_result.return (load_peer_ca_cert cert ctx)
+          in
+          
           (* Send client cert if present *)
-          (* match clientcert with
-          | Some cert -> Lwt_result.return (load_client_cert)
-          | None -> Lwt_result.return () *)
+          let clientcertio = match clientcert with
+            | Some certwithkey -> 
+              let cert, privkey = certwithkey in
+              Lwt_result.return (load_client_cert cert privkey ctx)
+            | None -> Lwt_result.return ()
+          in
+          
+          Lwt.bind certio (fun _ -> clientcertio)
         )
         else
           (* Don't bother configuring verify locations if we're not going to be
