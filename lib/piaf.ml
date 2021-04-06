@@ -30,6 +30,7 @@
  *---------------------------------------------------------------------------*)
 
 module Body = Body
+module Cert = Cert
 module Config = Config
 module Client = Client
 module Error = Error
