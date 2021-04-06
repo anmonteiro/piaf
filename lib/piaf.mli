@@ -263,6 +263,13 @@ module Versions : sig
   end
 end
 
+module Cert: sig
+  type t = 
+  | Empty
+  | Filepath of string
+  | Certpem of string
+end
+
 module Config : sig
   type t =
     { follow_redirects : bool  (** whether to follow redirects *)
