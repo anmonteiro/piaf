@@ -57,9 +57,12 @@ type t =
             communicating with "http" URIs, default to HTTP/2.0 when we can't
             agree to an ALPN protocol and communicating with "https" URIs. *)
   ; cacert : Cert.t
-        (** Either the certificates string or path to a file. Both should be in PEM format *)
+        (** Either the certificates string or path to a file with certificates to 
+            verify peer. Both should be in PEM format *)
   ; capath : string option
         (** The path to a directory which contains CA certificates in PEM format *)
+  ; clientcert: (string * string) option
+        (** Client certificate in PEM format *)
   ; min_tls_version : Versions.TLS.t
   ; max_tls_version : Versions.TLS.t
   ; tcp_nodelay : bool
@@ -83,8 +86,9 @@ let default =
   ; max_http_version = Versions.HTTP.v2_0
   ; http2_prior_knowledge = false
   ; h2c_upgrade = false
-  ; cacert = None
+  ; cacert = Empty
   ; capath = None
+  ; clientcert = None
   ; min_tls_version = TLSv1_0
   ; max_tls_version = TLSv1_3
   ; tcp_nodelay = true

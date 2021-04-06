@@ -30,7 +30,7 @@
  *---------------------------------------------------------------------------*)
 
  type t = 
-  [`None
-  |`Filepath of string
-  |`Certpem of string
-  ]
+  | Empty
+  | Filepath of string
+  | Certpem of string
+  

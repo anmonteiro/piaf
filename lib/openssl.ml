@@ -102,6 +102,12 @@ let log_cert_info ~allow_insecure ssl_sock =
         (pp_cert_verify_result ~allow_insecure)
         verify_result)
 
+let load_client_cert cert privkey ctx =
+  Ssl.use_certificate_from_string ctx cert privkey
+
+let load_peer_ca_cert cert ctx =
+  Ssl.add_cert_to_store ctx cert
+
 let load_from_strings cert privkey ctx =
   Ssl.use_certificate_from_string ctx cert privkey
 
@@ -244,6 +250,7 @@ let connect ~hostname ~config ~alpn_protocols fd =
   let { Config.allow_insecure
       ; cacert
       ; capath
+      ; clientcert
       ; min_tls_version
       ; max_tls_version
       ; _
@@ -296,10 +303,23 @@ let connect ~hostname ~config ~alpn_protocols fd =
            * Ssl.get_verify_result.
            * https://www.openssl.org/docs/man1.1.1/man3/SSL_CTX_set_verify.html *)
           Ssl.set_verify ctx [ Ssl.Verify_peer ] None;
-          (* Don't bother configuring verify locations if we're not going to be
-             verifying the peer. *)
-          configure_verify_locations ctx cacert capath)
+
+          (* Server certificate verification *)
+          match cacert with 
+          | Empty -> configure_verify_locations ctx None capath
+          | Filepath path -> 
+            let somepath = Some(path) in
+            configure_verify_locations ctx somepath capath
+          | Certpem cert -> Lwt_result.return (load_peer_ca_cert cert ctx)
+
+          (* Send client cert if present *)
+          (* match clientcert with
+          | Some cert -> Lwt_result.return (load_client_cert)
+          | None -> Lwt_result.return () *)
+        )
         else
+          (* Don't bother configuring verify locations if we're not going to be
+            verifying the peer. *)
           Lwt_result.return ()
       in
       let s = Lwt_ssl.embed_uninitialized_socket fd ctx in
