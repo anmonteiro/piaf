@@ -34,3 +34,7 @@
   | Filepath of string
   | Certpem of string
   
+ let pp_print_cert ppf = function
+  | Empty -> Format.pp_print_string ppf "Empty" 
+  | Filepath s ->  Format.pp_print_string ppf s
+  | Certpem s -> Format.pp_print_string ppf s

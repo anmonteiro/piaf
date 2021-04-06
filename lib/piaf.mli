@@ -268,6 +268,8 @@ module Cert: sig
   | Empty
   | Filepath of string
   | Certpem of string
+
+  val pp_print_cert : Format.formatter -> t -> unit
 end
 
 module Config : sig
