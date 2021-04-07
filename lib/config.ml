@@ -62,7 +62,7 @@ type t =
   ; capath : string option
         (** The path to a directory which contains CA certificates in PEM format *)
   ; clientcert: (string * string) option
-        (** Client certificate in PEM format *)
+        (** Client certificate in PEM format and private key *)
   ; min_tls_version : Versions.TLS.t
   ; max_tls_version : Versions.TLS.t
   ; tcp_nodelay : bool
