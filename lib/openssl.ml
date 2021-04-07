@@ -108,9 +108,6 @@ let load_client_cert cert privkey ctx =
 let load_peer_ca_cert cert ctx =
   Ssl.add_cert_to_store ctx cert
 
-let load_from_strings cert privkey ctx =
-  Ssl.use_certificate_from_string ctx cert privkey
-
 let load_verify_locations ?(cacert = "") ?(capath = "") ctx =
   match Ssl.load_verify_locations ctx cacert capath with
   | () ->
