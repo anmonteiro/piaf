@@ -98,7 +98,7 @@ module ALPN = struct
     | _ :: xs ->
       first_match l1 xs
 
-  let https_server port =
+  let https_server ?(check_client_cert=false) port =
     let open Lwt.Infix in
     let listen_address = Unix.(ADDR_INET (inet_addr_loopback, port)) in
     let cert = "./certificates/server.pem" in
@@ -109,6 +109,7 @@ module ALPN = struct
         let server_ctx = Ssl.create_context Ssl.TLSv1_3 Ssl.Server_context in
         Ssl.disable_protocols server_ctx [ Ssl.SSLv23; Ssl.TLSv1_1 ];
         Ssl.use_certificate server_ctx cert priv_key;
+        if check_client_cert then Ssl.set_verify server_ctx [Ssl.Verify_peer] None;
         let protos = [ "h2"; "http/1.1" ] in
         Ssl.set_context_alpn_protos server_ctx protos;
         Ssl.set_context_alpn_select_callback server_ctx (fun client_protos ->
@@ -136,9 +137,14 @@ end
 
 type t = Lwt_io.server * Lwt_io.server
 
-let listen ?(http_port = 8080) ?(https_port = 9443) () =
+let listen ?(http_port = 8080) ?(https_port = 9443) ?(check_client_cert=false) () =
   let http_server = HTTP.listen http_port in
-  let https_server = ALPN.https_server https_port in
+  let https_server =
+    if check_client_cert then
+      ALPN.https_server https_port ~check_client_cert:true
+    else
+      ALPN.https_server https_port
+  in
   Lwt.both http_server https_server
 
 let teardown (http, https) =

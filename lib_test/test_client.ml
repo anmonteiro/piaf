@@ -168,6 +168,113 @@ let test_https _ () =
     response;
   Helper_server.teardown server
 
+let test_https_server_certs _ () =
+  let* server = Helper_server.listen ~http_port:8080 () in
+  (* Verify server cert from file *)
+  let* response =
+    Client.Oneshot.get
+      ~config:
+        { Config.default with
+          follow_redirects = true
+        ; max_redirects = 1
+        ; allow_insecure = false
+        ; max_http_version = Versions.HTTP.v1_1
+        ; cacert = Cert.Filepath("./certificates/ca.pem")
+        }
+      (Uri.of_string "https://localhost:9443")
+    in
+  let response = Result.get_ok response in
+  Alcotest.check
+    response_testable
+    "expected response"
+    (Response.create 
+      ~version:Versions.HTTP.v1_1 
+      ~headers:Headers.(of_list [ Well_known.content_length, "1" ])
+      `OK)
+    response;
+  (* Verify server cert from cert string *)
+  let inchannel = open_in "./certificates/ca.pem" in
+  let certstring = really_input_string inchannel (in_channel_length inchannel) in
+  close_in inchannel;
+  let* response =
+    Client.Oneshot.get
+      ~config:
+        { Config.default with
+          follow_redirects = true
+        ; max_redirects = 1
+        ; allow_insecure = false
+        ; max_http_version = Versions.HTTP.v1_1
+        ; cacert = Cert.Certpem(certstring)
+        }
+      (Uri.of_string "https://localhost:9443")
+    in
+  let response = Result.get_ok response in
+  Alcotest.check
+    response_testable
+    "expected response"
+    (Response.create 
+      ~version:Versions.HTTP.v1_1 
+      ~headers:Headers.(of_list [ Well_known.content_length, "1" ])
+      `OK)
+    response;
+  Helper_server.teardown server
+
+let test_https_client_certs _ () =
+  (* Client certificate *)
+  let* server = Helper_server.listen ~http_port:8080 ~check_client_cert:true () in
+  let inchannel = open_in "./certificates/client.pem" in
+  let clientcert = really_input_string inchannel (in_channel_length inchannel) in
+  close_in inchannel;
+  let inchannel = open_in "./certificates/client.key" in
+  let clientkey = really_input_string inchannel (in_channel_length inchannel) in
+  close_in inchannel;
+  let* response =
+    Client.Oneshot.get
+      ~config:
+        { Config.default with
+          follow_redirects = true
+        ; max_redirects = 1
+        ; allow_insecure = false
+        ; max_http_version = Versions.HTTP.v1_1
+        ; cacert = Cert.Filepath("./certificates/ca.pem")
+        ; clientcert = Some (clientcert, clientkey)
+        }
+      (Uri.of_string "https://localhost:9443")
+    in
+  let response = Result.get_ok response in
+  Alcotest.check
+    response_testable
+    "expected response"
+    (Response.create 
+      ~version:Versions.HTTP.v1_1 
+      ~headers:Headers.(of_list [ Well_known.content_length, "1" ])
+      `OK)
+    response;
+  (* No client certificate provided *)
+  let* response =
+    Lwt.catch
+      (fun () ->
+        Client.Oneshot.get
+        ~config:
+          { Config.default with
+            follow_redirects = true
+          ; max_redirects = 1
+          ; allow_insecure = false
+          ; max_http_version = Versions.HTTP.v1_1
+          ; cacert = Cert.Filepath("./certificates/ca.pem")
+          }
+        (Uri.of_string "https://localhost:9443"))
+      (fun exn -> Lwt.return_error (`Exn exn))
+  in
+  Alcotest.(check (result response_testable error_testable))
+    "response error"
+    (Error
+       (`Connect_error
+         "SSL Error: error:1416F086:SSL \
+          routines:tls_process_server_certificate:certificate verify failed"))
+    response;
+  Helper_server.teardown server
+
 let test_h2c _ () =
   let* server = Helper_server.H2c.listen 9000 in
   (* Not configured to follow the h2c upgrade *)
@@ -284,6 +391,8 @@ let suite =
           , `Quick
           , test_redirection_post )
         ; "https", `Quick, test_https
+        ; "https server certs", `Quick, test_https_server_certs
+        ; "https client certs", `Quick, test_https_client_certs
         ; "h2c", `Quick, test_h2c
         ; "default headers", `Quick, test_default_headers
         ] )
