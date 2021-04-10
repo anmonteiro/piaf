@@ -551,7 +551,7 @@ module CLI = struct
     in
     let doc = "CA certificate to verify peer against" in
     let docv = "file" in
-    Arg.(value & opt (some cert_conv) None & info [ "cacert" ] ~doc ~docv)
+    Arg.(value & opt (some cert_conv) None & info [ "cacertfile" ] ~doc ~docv)
 
   let cacertpem = 
     let cert_conv =
@@ -560,7 +560,7 @@ module CLI = struct
     in
     let doc = "CA certificate to verify peer against" in
     let docv = "file" in
-    Arg.(value & opt (some cert_conv) None & info [ "cacert" ] ~doc ~docv)
+    Arg.(value & opt (some cert_conv) None & info [ "cacertpem" ] ~doc ~docv)
 
   let capath =
     let doc = "CA directory to verify peer against" in
