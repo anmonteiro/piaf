@@ -141,12 +141,7 @@ type t = Lwt_io.server * Lwt_io.server
 
 let listen ?(http_port = 8080) ?(https_port = 9443) ?(check_client_cert=false) () =
   let http_server = HTTP.listen http_port in
-  let https_server =
-    if check_client_cert then
-      ALPN.https_server https_port ~check_client_cert:true
-    else
-      ALPN.https_server https_port
-  in
+  let https_server = ALPN.https_server https_port ~check_client_cert in
   Lwt.both http_server https_server
 
 let teardown (http, https) =
