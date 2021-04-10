@@ -302,7 +302,7 @@ let connect ~hostname ~config ~alpn_protocols fd =
           Ssl.set_verify ctx [ Ssl.Verify_peer ] None;
 
           (* Server certificate verification *)
-          let* certio = 
+          let* () = 
             match cacert with 
             | Empty -> configure_verify_locations ctx None capath
             | Filepath path -> 
