@@ -101,6 +101,7 @@ module ALPN = struct
   let https_server ?(check_client_cert=false) port =
     let open Lwt.Infix in
     let listen_address = Unix.(ADDR_INET (inet_addr_loopback, port)) in
+    let ca = "./certificates/ca.pem" in
     let cert = "./certificates/server.pem" in
     let priv_key = "./certificates/server.key" in
     Lwt_io.establish_server_with_client_socket
@@ -108,8 +109,9 @@ module ALPN = struct
       (fun client_addr fd ->
         let server_ctx = Ssl.create_context Ssl.TLSv1_3 Ssl.Server_context in
         Ssl.disable_protocols server_ctx [ Ssl.SSLv23; Ssl.TLSv1_1 ];
+        Ssl.load_verify_locations server_ctx ca "";
         Ssl.use_certificate server_ctx cert priv_key;
-        if check_client_cert then Ssl.set_verify server_ctx [Ssl.Verify_peer] None;
+        if check_client_cert then Ssl.set_verify server_ctx [Ssl.Verify_fail_if_no_peer_cert] None;
         let protos = [ "h2"; "http/1.1" ] in
         Ssl.set_context_alpn_protos server_ctx protos;
         Ssl.set_context_alpn_select_callback server_ctx (fun client_protos ->

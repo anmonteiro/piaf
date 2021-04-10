@@ -269,9 +269,7 @@ let test_https_client_certs _ () =
   Alcotest.(check (result response_testable error_testable))
     "response error"
     (Error
-       (`Connect_error
-         "SSL Error: error:1416F086:SSL \
-          routines:tls_process_server_certificate:certificate verify failed"))
+      (`Exn (Ssl.Read_error Error_ssl)))
     response;
   Helper_server.teardown server
 
