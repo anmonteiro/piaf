@@ -308,14 +308,14 @@ let connect ~hostname ~config ~alpn_protocols fd =
             | Filepath path -> 
               let somepath = Some(path) in
               configure_verify_locations ctx somepath capath
-            | Certpem cert -> Lwt_result.return (load_peer_ca_cert cert ctx)
+            | Certpem cert -> Lwt_result.return (load_peer_ca_cert ~certificate:cert ctx)
           in
           
           (* Send client cert if present *)
           match clientcert with
            | Some certwithkey -> 
               let cert, privkey = certwithkey in
-              Lwt_result.return (load_client_cert cert privkey ctx)
+              Lwt_result.return (load_client_cert ~certificate:cert ~private_key:privkey ctx)
             | None -> Lwt_result.return ()
         )
         else
