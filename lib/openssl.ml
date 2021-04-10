@@ -102,11 +102,11 @@ let log_cert_info ~allow_insecure ssl_sock =
         (pp_cert_verify_result ~allow_insecure)
         verify_result)
 
-let load_client_cert cert privkey ctx =
-  Ssl.use_certificate_from_string ctx cert privkey
+let load_client_cert ~certificate ~private_key ctx =
+  Ssl.use_certificate_from_string ctx certificate private_key
 
-let load_peer_ca_cert cert ctx =
-  Ssl.add_cert_to_store ctx cert
+let load_peer_ca_cert ~certificate ctx =
+  Ssl.add_cert_to_store ctx certificate
 
 let load_verify_locations ?(cacert = "") ?(capath = "") ctx =
   match Ssl.load_verify_locations ctx cacert capath with
