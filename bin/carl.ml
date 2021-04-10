@@ -86,7 +86,7 @@ type cli =
   ; h2c_upgrade : bool
   ; http2_prior_knowledge : bool
   ; tcp_nodelay : bool
-  ; cacert : Cert.t
+  ; cacert : Cert.t option
   ; capath : string option
   ; min_tls_version : Versions.TLS.t
   ; max_tls_version : Versions.TLS.t
@@ -547,7 +547,7 @@ module CLI = struct
   let cacertfile =
     let cert_conv =
       let parse s = Ok (Cert.Filepath s) in
-      Arg.conv ~docv:"method" (parse, Cert.pp_print_cert)
+      Arg.conv ~docv:"method" (parse, Cert.pp)
     in
     let doc = "CA certificate to verify peer against" in
     let docv = "file" in
@@ -556,7 +556,7 @@ module CLI = struct
   let cacertpem = 
     let cert_conv =
       let parse s = Ok (Cert.Certpem s) in
-      Arg.conv ~docv:"method" (parse, Cert.pp_print_cert)
+      Arg.conv ~docv:"method" (parse, Cert.pp)
     in
     let doc = "CA certificate to verify peer against" in
     let docv = "file" in
@@ -825,9 +825,9 @@ module CLI = struct
     ; h2c_upgrade = use_http_2
     ; http2_prior_knowledge
     ; cacert = (match cacertpem, cacertfile with
-        | Some cert, _ -> cert
-        | None, Some cert -> cert
-        | _ -> Empty)
+        | Some cert, _ -> Some cert
+        | None, Some cert -> Some cert
+        | _ -> None)
     ; capath
     ; min_tls_version =
         (* select the _maximum_ min version *)

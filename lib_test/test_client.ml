@@ -179,7 +179,7 @@ let test_https_server_certs _ () =
         ; max_redirects = 1
         ; allow_insecure = false
         ; max_http_version = Versions.HTTP.v1_1
-        ; cacert = Cert.Filepath("./certificates/ca.pem")
+        ; cacert = Some(Cert.Filepath("./certificates/ca.pem"))
         }
       (Uri.of_string "https://localhost:9443")
     in
@@ -204,7 +204,7 @@ let test_https_server_certs _ () =
         ; max_redirects = 1
         ; allow_insecure = false
         ; max_http_version = Versions.HTTP.v1_1
-        ; cacert = Cert.Certpem(certstring)
+        ; cacert = Some(Cert.Certpem(certstring))
         }
       (Uri.of_string "https://localhost:9443")
     in
@@ -236,7 +236,7 @@ let test_https_client_certs _ () =
         ; max_redirects = 1
         ; allow_insecure = false
         ; max_http_version = Versions.HTTP.v1_1
-        ; cacert = Cert.Filepath("./certificates/ca.pem")
+        ; cacert = Some(Cert.Filepath("./certificates/ca.pem"))
         ; clientcert = Some (clientcert, clientkey)
         }
       (Uri.of_string "https://localhost:9443")
@@ -261,7 +261,7 @@ let test_https_client_certs _ () =
           ; max_redirects = 1
           ; allow_insecure = false
           ; max_http_version = Versions.HTTP.v1_1
-          ; cacert = Cert.Filepath("./certificates/ca.pem")
+          ; cacert = Some(Cert.Filepath("./certificates/ca.pem"))
           }
         (Uri.of_string "https://localhost:9443"))
       (fun exn -> Lwt.return_error (`Exn exn))

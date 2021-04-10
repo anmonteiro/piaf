@@ -304,11 +304,13 @@ let connect ~hostname ~config ~alpn_protocols fd =
           (* Server certificate verification *)
           let* () = 
             match cacert with 
-            | Empty -> configure_verify_locations ctx None capath
-            | Filepath path -> 
-              let somepath = Some(path) in
-              configure_verify_locations ctx somepath capath
-            | Certpem cert -> Lwt_result.return (load_peer_ca_cert ~certificate:cert ctx)
+            | Some certarg -> 
+              (match certarg with
+              | Filepath path -> 
+                let somepath = Some(path) in
+                configure_verify_locations ctx somepath capath
+              | Certpem cert -> Lwt_result.return (load_peer_ca_cert ~certificate:cert ctx))
+            | None -> configure_verify_locations ctx None capath
           in
           
           (* Send client cert if present *)

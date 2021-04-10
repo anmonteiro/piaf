@@ -56,7 +56,7 @@ type t =
         (** Assume HTTP/2 prior knowledge -- don't use HTTP/1.1 Upgrade when
             communicating with "http" URIs, default to HTTP/2.0 when we can't
             agree to an ALPN protocol and communicating with "https" URIs. *)
-  ; cacert : Cert.t
+  ; cacert : Cert.t option
         (** Either the certificates string or path to a file with certificates to 
             verify peer. Both should be in PEM format *)
   ; capath : string option
@@ -86,7 +86,7 @@ let default =
   ; max_http_version = Versions.HTTP.v2_0
   ; http2_prior_knowledge = false
   ; h2c_upgrade = false
-  ; cacert = Empty
+  ; cacert = None
   ; capath = None
   ; clientcert = None
   ; min_tls_version = TLSv1_0

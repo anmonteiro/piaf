@@ -265,11 +265,10 @@ end
 
 module Cert: sig
   type t = 
-  | Empty
   | Filepath of string
   | Certpem of string
 
-  val pp_print_cert : Format.formatter -> t -> unit
+  val pp : Format.formatter -> t -> unit
 end
 
 module Config : sig
@@ -289,7 +288,7 @@ module Config : sig
           (** Assume HTTP/2 prior knowledge -- don't use HTTP/1.1 Upgrade when
               communicating with "http" URIs, default to HTTP/2.0 when we can't
               agree to an ALPN protocol and communicating with "https" URIs. *)
-    ; cacert : Cert.t
+    ; cacert : Cert.t option
           (** The path to a CA certificates file in PEM format *)
     ; capath : string option
           (** The path to a directory which contains CA certificates in PEM

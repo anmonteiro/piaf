@@ -30,11 +30,9 @@
  *---------------------------------------------------------------------------*)
 
  type t = 
-  | Empty
   | Filepath of string
   | Certpem of string
   
- let pp_print_cert ppf = function
-  | Empty -> Format.pp_print_string ppf "Empty" 
-  | Filepath s ->  Format.pp_print_string ppf s
-  | Certpem s -> Format.pp_print_string ppf s
+ let pp ppf = function
+  | Filepath s ->  Format.pp_print_string ppf (Printf.sprintf "Filepath %s" s)
+  | Certpem s -> Format.pp_print_string ppf (Printf.sprintf "Certpem %s" s)
