@@ -250,6 +250,31 @@ let test_https_client_certs _ () =
       ~headers:Headers.(of_list [ Well_known.content_length, "1" ])
       `OK)
     response;
+    (* Client certificate as file *)
+    let clientcert = "./certificates/client.pem" in
+    let clientkey = "./certificates/client.key" in
+    let* response =
+      Client.Oneshot.get
+        ~config:
+          { Config.default with
+            follow_redirects = true
+          ; max_redirects = 1
+          ; allow_insecure = false
+          ; max_http_version = Versions.HTTP.v1_1
+          ; cacert = Some(Cert.Filepath("./certificates/ca.pem"))
+          ; clientcert = Some (Cert.Filepath(clientcert), Cert.Filepath(clientkey))
+          }
+        (Uri.of_string "https://localhost:9443")
+      in
+    let response = Result.get_ok response in
+    Alcotest.check
+      response_testable
+      "expected response"
+      (Response.create 
+        ~version:Versions.HTTP.v1_1 
+        ~headers:Headers.(of_list [ Well_known.content_length, "1" ])
+        `OK)
+      response;
   (* No client certificate provided *)
   let* response =
     Lwt.catch
