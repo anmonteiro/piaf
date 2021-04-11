@@ -544,23 +544,14 @@ module CLI = struct
     Arg.(
       value & opt (some request_conv) None & info [ "X"; "request" ] ~doc ~docv)
 
-  let cacertfile =
+  let cacert =
     let cert_conv =
       let parse s = Ok (Cert.Filepath s) in
       Arg.conv ~docv:"method" (parse, Cert.pp)
     in
     let doc = "CA certificate to verify peer against" in
     let docv = "file" in
-    Arg.(value & opt (some cert_conv) None & info [ "cacertfile" ] ~doc ~docv)
-
-  let cacertpem = 
-    let cert_conv =
-      let parse s = Ok (Cert.Certpem s) in
-      Arg.conv ~docv:"method" (parse, Cert.pp)
-    in
-    let doc = "CA certificate to verify peer against" in
-    let docv = "file" in
-    Arg.(value & opt (some cert_conv) None & info [ "cacertpem" ] ~doc ~docv)
+    Arg.(value & opt (some cert_conv) None & info [ "cacert" ] ~doc ~docv)
 
   let capath =
     let doc = "CA directory to verify peer against" in
@@ -749,8 +740,7 @@ module CLI = struct
     Arg.(non_empty & pos_all string [] & info [] ~docv)
 
   let parse
-      cacertpem
-      cacertfile
+      cacert
       capath
       compressed
       connect_timeout
@@ -824,10 +814,7 @@ module CLI = struct
           v1_0)
     ; h2c_upgrade = use_http_2
     ; http2_prior_knowledge
-    ; cacert = (match cacertpem, cacertfile with
-        | Some cert, _ -> Some cert
-        | None, Some cert -> Some cert
-        | _ -> None)
+    ; cacert = cacert
     ; capath
     ; min_tls_version =
         (* select the _maximum_ min version *)
@@ -862,8 +849,7 @@ module CLI = struct
   let default_cmd =
     Term.(
       const parse
-      $ cacertpem
-      $ cacertfile
+      $ cacert
       $ capath
       $ compressed
       $ connect_timeout
