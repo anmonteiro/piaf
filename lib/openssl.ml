@@ -102,8 +102,11 @@ let log_cert_info ~allow_insecure ssl_sock =
         (pp_cert_verify_result ~allow_insecure)
         verify_result)
 
-let load_client_cert ~certificate ~private_key ctx =
+let load_client_cert_from_string ~certificate ~private_key ctx =
   Ssl.use_certificate_from_string ctx certificate private_key
+
+let load_client_cert ~certificate ~private_key ctx =
+  Ssl.use_certificate ctx certificate private_key
 
 let load_peer_ca_cert ~certificate ctx =
   Ssl.add_cert_to_store ctx certificate
@@ -316,8 +319,18 @@ let connect ~hostname ~config ~alpn_protocols fd =
           (* Send client cert if present *)
           match clientcert with
            | Some certwithkey -> 
-              let cert, privkey = certwithkey in
-              Lwt_result.return (load_client_cert ~certificate:cert ~private_key:privkey ctx)
+              (match certwithkey with 
+              | Cert.Certpem cert, Cert.Certpem key -> 
+                Lwt_result.return (load_client_cert_from_string ~certificate:cert ~private_key:key ctx)
+              | Cert.Filepath cert, Cert.Filepath key -> 
+                Lwt_result.return (load_client_cert ~certificate:cert ~private_key: key ctx)
+              | _ ->     
+                let msg =
+                Format.asprintf
+                  "Incorrect parameters provided for clientcert, both should be a filepath or pem string"
+                in
+                Log.err (fun m -> m "%s" msg);
+                Lwt_result.fail (`Connect_error msg))
             | None -> Lwt_result.return ()
         )
         else

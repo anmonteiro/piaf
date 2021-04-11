@@ -237,7 +237,7 @@ let test_https_client_certs _ () =
         ; allow_insecure = false
         ; max_http_version = Versions.HTTP.v1_1
         ; cacert = Some(Cert.Filepath("./certificates/ca.pem"))
-        ; clientcert = Some (clientcert, clientkey)
+        ; clientcert = Some (Cert.Certpem(clientcert), Cert.Certpem(clientkey))
         }
       (Uri.of_string "https://localhost:9443")
     in

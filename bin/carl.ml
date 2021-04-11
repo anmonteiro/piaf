@@ -88,6 +88,7 @@ type cli =
   ; tcp_nodelay : bool
   ; cacert : Cert.t option
   ; capath : string option
+  ; clientcert: (Cert.t * Cert.t) option
   ; min_tls_version : Versions.TLS.t
   ; max_tls_version : Versions.TLS.t
   ; insecure : bool
@@ -558,6 +559,11 @@ module CLI = struct
     let docv = "dir" in
     Arg.(value & opt (some string) None & info [ "capath" ] ~doc ~docv)
 
+  let cert =
+    let doc = "Client certificate file path" in
+    let docv = "file" in
+    Arg.(value & opt (some string) None & info [ "cert" ] ~doc ~docv)
+
   let compressed =
     let doc = "Request compressed response" in
     Arg.(value & flag & info [ "compressed" ] ~doc)
@@ -575,6 +581,11 @@ module CLI = struct
   let insecure =
     let doc = "Allow insecure server connections when using SSL" in
     Arg.(value & flag & info [ "k"; "insecure" ] ~doc)
+
+  let key =
+    let doc = "Client certificate private key" in
+    let docv = "file" in
+    Arg.(value & opt (some string) None & info [ "key" ] ~doc ~docv)
 
   let default_proto =
     let doc = "Use $(docv) for any URL missing a scheme (without `://`)" in
@@ -742,6 +753,7 @@ module CLI = struct
   let parse
       cacert
       capath
+      cert
       compressed
       connect_timeout
       data
@@ -750,6 +762,7 @@ module CLI = struct
       headers
       include_
       insecure
+      key
       follow_redirects
       max_redirects
       request
@@ -816,6 +829,10 @@ module CLI = struct
     ; http2_prior_knowledge
     ; cacert = cacert
     ; capath
+    ; clientcert = (
+      match cert, key with
+      | Some cert, Some key -> Some(Cert.Filepath(cert), Cert.Filepath(key))
+      | _ -> None)
     ; min_tls_version =
         (* select the _maximum_ min version *)
         Versions.TLS.(
@@ -851,6 +868,7 @@ module CLI = struct
       const parse
       $ cacert
       $ capath
+      $ cert
       $ compressed
       $ connect_timeout
       $ data
@@ -859,6 +877,7 @@ module CLI = struct
       $ headers
       $ include_
       $ insecure
+      $ key
       $ follow_redirects
       $ max_redirects
       $ request
