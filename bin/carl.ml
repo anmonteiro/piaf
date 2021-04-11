@@ -86,8 +86,9 @@ type cli =
   ; h2c_upgrade : bool
   ; http2_prior_knowledge : bool
   ; tcp_nodelay : bool
-  ; cacert : string option
+  ; cacert : Cert.t option
   ; capath : string option
+  ; clientcert: (Cert.t * Cert.t) option
   ; min_tls_version : Versions.TLS.t
   ; max_tls_version : Versions.TLS.t
   ; insecure : bool
@@ -545,14 +546,23 @@ module CLI = struct
       value & opt (some request_conv) None & info [ "X"; "request" ] ~doc ~docv)
 
   let cacert =
+    let cert_conv =
+      let parse s = Ok (Cert.Filepath s) in
+      Arg.conv ~docv:"method" (parse, Cert.pp)
+    in
     let doc = "CA certificate to verify peer against" in
     let docv = "file" in
-    Arg.(value & opt (some string) None & info [ "cacert" ] ~doc ~docv)
+    Arg.(value & opt (some cert_conv) None & info [ "cacert" ] ~doc ~docv)
 
   let capath =
     let doc = "CA directory to verify peer against" in
     let docv = "dir" in
     Arg.(value & opt (some string) None & info [ "capath" ] ~doc ~docv)
+
+  let cert =
+    let doc = "Client certificate file path" in
+    let docv = "file" in
+    Arg.(value & opt (some string) None & info [ "cert" ] ~doc ~docv)
 
   let compressed =
     let doc = "Request compressed response" in
@@ -571,6 +581,11 @@ module CLI = struct
   let insecure =
     let doc = "Allow insecure server connections when using SSL" in
     Arg.(value & flag & info [ "k"; "insecure" ] ~doc)
+
+  let key =
+    let doc = "Client certificate private key" in
+    let docv = "file" in
+    Arg.(value & opt (some string) None & info [ "key" ] ~doc ~docv)
 
   let default_proto =
     let doc = "Use $(docv) for any URL missing a scheme (without `://`)" in
@@ -738,6 +753,7 @@ module CLI = struct
   let parse
       cacert
       capath
+      cert
       compressed
       connect_timeout
       data
@@ -746,6 +762,7 @@ module CLI = struct
       headers
       include_
       insecure
+      key
       follow_redirects
       max_redirects
       request
@@ -810,8 +827,12 @@ module CLI = struct
           v1_0)
     ; h2c_upgrade = use_http_2
     ; http2_prior_knowledge
-    ; cacert
+    ; cacert = cacert
     ; capath
+    ; clientcert = (
+      match cert, key with
+      | Some cert, Some key -> Some(Cert.Filepath(cert), Cert.Filepath(key))
+      | _ -> None)
     ; min_tls_version =
         (* select the _maximum_ min version *)
         Versions.TLS.(
@@ -847,6 +868,7 @@ module CLI = struct
       const parse
       $ cacert
       $ capath
+      $ cert
       $ compressed
       $ connect_timeout
       $ data
@@ -855,6 +877,7 @@ module CLI = struct
       $ headers
       $ include_
       $ insecure
+      $ key
       $ follow_redirects
       $ max_redirects
       $ request

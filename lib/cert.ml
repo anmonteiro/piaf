@@ -1,5 +1,5 @@
 (*----------------------------------------------------------------------------
- * Copyright (c) 2019-2020, António Nuno Monteiro
+ * Copyright (c) 2021, Ezequiel Lewin
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -29,19 +29,10 @@
  * POSSIBILITY OF SUCH DAMAGE.
  *---------------------------------------------------------------------------*)
 
-module Body = Body
-module Cert = Cert
-module Config = Config
-module Client = Client
-module Error = Error
-module Headers = Headers
-module IOVec = IOVec
-module Method = Method
-module Request = Request
-module Response = Response
-module Form = Form
-module Scheme = Scheme
-module Status = Status
-module Versions = Versions
-module Server = Server
-module Cookies = Cookies
+ type t = 
+  | Filepath of string
+  | Certpem of string
+  
+ let pp ppf = function
+  | Filepath s ->  Format.pp_print_string ppf (Printf.sprintf "Filepath %s" s)
+  | Certpem s -> Format.pp_print_string ppf (Printf.sprintf "Certpem %s" s)
