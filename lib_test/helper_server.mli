@@ -1,6 +1,13 @@
 type t
 
-val listen : ?http_port:int -> ?https_port:int -> ?check_client_cert:bool -> unit -> t Lwt.t
+val cert_path : string
+
+val listen
+  :  ?http_port:int
+  -> ?https_port:int
+  -> ?check_client_cert:bool
+  -> unit
+  -> (t * (unit, Piaf.Error.t) Lwt_result.t) Lwt.t
 
 val teardown : t -> unit Lwt.t
 

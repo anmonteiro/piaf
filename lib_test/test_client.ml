@@ -2,6 +2,8 @@ open Lwt.Syntax
 open Piaf
 module Result = Stdlib.Result
 
+let ( // ) = Filename.concat
+
 (* XXX(anmonteiro): doesn't compare the response body. *)
 let response_testable =
   Alcotest.testable Response.pp_hum (fun r1 r2 ->
@@ -12,7 +14,7 @@ let response_testable =
 let error_testable = Alcotest.of_pp Error.pp_hum
 
 let test_simple_get _ () =
-  let* server = Helper_server.listen ~http_port:8080 () in
+  let* server, _ = Helper_server.listen ~http_port:8080 () in
   let* response = Client.Oneshot.get (Uri.of_string "http://localhost:8080") in
   let response = Result.get_ok response in
   Alcotest.check
@@ -30,7 +32,7 @@ let test_simple_get _ () =
   Helper_server.teardown server
 
 let test_redirection _ () =
-  let* server = Helper_server.listen ~http_port:8080 () in
+  let* server, _ = Helper_server.listen ~http_port:8080 () in
   let* response =
     Client.Oneshot.get
       ~config:{ Config.default with follow_redirects = false }
@@ -78,7 +80,7 @@ let test_redirection _ () =
   Helper_server.teardown server
 
 let test_redirection_post _ () =
-  let* server = Helper_server.listen ~http_port:8080 () in
+  let* server, _ = Helper_server.listen ~http_port:8080 () in
   (* Request issues `GET` to the actual redirect target *)
   let* response =
     Client.Oneshot.post
@@ -101,7 +103,7 @@ let test_redirection_post _ () =
   Helper_server.teardown server
 
 let test_https _ () =
-  let* server = Helper_server.listen ~http_port:8080 () in
+  let* server, _ = Helper_server.listen ~http_port:8080 () in
   (* HTTP/1.1 *)
   let* response =
     Client.Oneshot.get
@@ -169,7 +171,7 @@ let test_https _ () =
   Helper_server.teardown server
 
 let test_https_server_certs _ () =
-  let* server = Helper_server.listen ~http_port:8080 () in
+  let* server, _ = Helper_server.listen ~http_port:8080 () in
   (* Verify server cert from file *)
   let* response =
     Client.Oneshot.get
@@ -179,7 +181,7 @@ let test_https_server_certs _ () =
         ; max_redirects = 1
         ; allow_insecure = false
         ; max_http_version = Versions.HTTP.v1_1
-        ; cacert = Some(Cert.Filepath("./certificates/ca.pem"))
+        ; cacert = Some (Cert.Filepath (Helper_server.cert_path // "ca.pem"))
         }
       (Uri.of_string "https://localhost:9443")
   in
@@ -193,8 +195,10 @@ let test_https_server_certs _ () =
        `OK)
     response;
   (* Verify server cert from cert string *)
-  let inchannel = open_in "./certificates/ca.pem" in
-  let certstring = really_input_string inchannel (in_channel_length inchannel) in
+  let inchannel = open_in (Helper_server.cert_path // "ca.pem") in
+  let certstring =
+    really_input_string inchannel (in_channel_length inchannel)
+  in
   close_in inchannel;
   let* response =
     Client.Oneshot.get
@@ -204,7 +208,7 @@ let test_https_server_certs _ () =
         ; max_redirects = 1
         ; allow_insecure = false
         ; max_http_version = Versions.HTTP.v1_1
-        ; cacert = Some(Cert.Certpem(certstring))
+        ; cacert = Some (Cert.Certpem certstring)
         }
       (Uri.of_string "https://localhost:9443")
   in
@@ -221,11 +225,15 @@ let test_https_server_certs _ () =
 
 let test_https_client_certs _ () =
   (* Client certificate *)
-  let* server = Helper_server.listen ~http_port:8080 ~check_client_cert:true () in
-  let inchannel = open_in "./certificates/client.pem" in
-  let clientcert = really_input_string inchannel (in_channel_length inchannel) in
+  let* server, _ =
+    Helper_server.listen ~http_port:8080 ~check_client_cert:true ()
+  in
+  let inchannel = open_in (Helper_server.cert_path // "client.pem") in
+  let clientcert =
+    really_input_string inchannel (in_channel_length inchannel)
+  in
   close_in inchannel;
-  let inchannel = open_in "./certificates/client.key" in
+  let inchannel = open_in (Helper_server.cert_path // "client.key") in
   let clientkey = really_input_string inchannel (in_channel_length inchannel) in
   close_in inchannel;
   let* response =
@@ -236,24 +244,50 @@ let test_https_client_certs _ () =
         ; max_redirects = 1
         ; allow_insecure = false
         ; max_http_version = Versions.HTTP.v1_1
-        ; cacert = Some(Cert.Filepath("./certificates/ca.pem"))
-        ; clientcert = Some (Cert.Certpem(clientcert), Cert.Certpem(clientkey))
+        ; cacert = Some (Cert.Filepath (Helper_server.cert_path // "ca.pem"))
+        ; clientcert = Some (Cert.Certpem clientcert, Cert.Certpem clientkey)
         }
       (Uri.of_string "https://localhost:9443")
-    in
+  in
   let response = Result.get_ok response in
   Alcotest.check
     response_testable
     "expected response"
-    (Response.create 
-      ~version:Versions.HTTP.v1_1 
-      ~headers:Headers.(of_list [ Well_known.content_length, "1" ])
-      `OK)
+    (Response.create
+       ~version:Versions.HTTP.v1_1
+       ~headers:Headers.(of_list [ Well_known.content_length, "1" ])
+       `OK)
     response;
-    (* Client certificate as file *)
-    let clientcert = "./certificates/client.pem" in
-    let clientkey = "./certificates/client.key" in
-    let* response =
+  (* Client certificate as file *)
+  let clientcert = Helper_server.cert_path // "client.pem" in
+  let clientkey = Helper_server.cert_path // "client.key" in
+  let* response =
+    Client.Oneshot.get
+      ~config:
+        { Config.default with
+          follow_redirects = true
+        ; max_redirects = 1
+        ; allow_insecure = false
+        ; max_http_version = Versions.HTTP.v1_1
+        ; cacert = Some (Cert.Filepath (Helper_server.cert_path // "ca.pem"))
+        ; clientcert = Some (Cert.Filepath clientcert, Cert.Filepath clientkey)
+        }
+      (Uri.of_string "https://localhost:9443")
+  in
+  let response = Result.get_ok response in
+  Alcotest.check
+    response_testable
+    "expected response"
+    (Response.create
+       ~version:Versions.HTTP.v1_1
+       ~headers:Headers.(of_list [ Well_known.content_length, "1" ])
+       `OK)
+    response;
+  let* () = Helper_server.teardown server in
+  (* No client certificate provided *)
+  let* server, error_p = Helper_server.listen ~check_client_cert:true () in
+  let response =
+    let+ _ =
       Client.Oneshot.get
         ~config:
           { Config.default with
@@ -261,41 +295,17 @@ let test_https_client_certs _ () =
           ; max_redirects = 1
           ; allow_insecure = false
           ; max_http_version = Versions.HTTP.v1_1
-          ; cacert = Some(Cert.Filepath("./certificates/ca.pem"))
-          ; clientcert = Some (Cert.Filepath(clientcert), Cert.Filepath(clientkey))
+          ; cacert = Some (Cert.Filepath (Helper_server.cert_path // "ca.pem"))
           }
         (Uri.of_string "https://localhost:9443")
-      in
-    let response = Result.get_ok response in
-    Alcotest.check
-      response_testable
-      "expected response"
-      (Response.create 
-        ~version:Versions.HTTP.v1_1 
-        ~headers:Headers.(of_list [ Well_known.content_length, "1" ])
-        `OK)
-      response;
-  (* No client certificate provided *)
-  let* response =
-    Lwt.catch
-      (fun () ->
-        Client.Oneshot.get
-        ~config:
-          { Config.default with
-            follow_redirects = true
-          ; max_redirects = 1
-          ; allow_insecure = false
-          ; max_http_version = Versions.HTTP.v1_1
-          ; cacert = Some(Cert.Filepath("./certificates/ca.pem"))
-          }
-        (Uri.of_string "https://localhost:9443"))
-      (fun exn -> Lwt.return_error (`Exn exn))
+    in
+    Ok ()
   in
-  Alcotest.(check (result response_testable error_testable))
+  let* ret = Lwt.choose [ response; error_p ] in
+  Alcotest.(check (result unit error_testable))
     "response error"
-    (Error
-      (`Exn (Ssl.Read_error Error_ssl)))
-    response;
+    (Error (`Exn (Ssl.Accept_error Error_ssl)))
+    ret;
   Helper_server.teardown server
 
 let test_h2c _ () =
@@ -365,7 +375,7 @@ let test_h2c _ () =
   Helper_server.H2c.teardown server
 
 let test_default_headers _ () =
-  let* server = Helper_server.listen ~http_port:8080 () in
+  let* server, _ = Helper_server.listen ~http_port:8080 () in
   let default_headers = Headers.[ Well_known.authorization, "Bearer token" ] in
   let expected_response =
     Response.create

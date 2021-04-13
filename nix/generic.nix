@@ -37,6 +37,7 @@ rec {
 
       alcotest
       alcotest-lwt
+      dune-site
     ];
 
     inherit doCheck;

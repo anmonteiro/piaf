@@ -1,4 +1,9 @@
+open Lwt.Infix
 open Piaf
+
+let ( // ) = Filename.concat
+
+let cert_path = Option.get Cert_sites.sourceroot // "lib_test" // "certificates"
 
 let request_handler { Server.request; _ } =
   let response_body =
@@ -98,51 +103,63 @@ module ALPN = struct
     | _ :: xs ->
       first_match l1 xs
 
-  let https_server ?(check_client_cert=false) port =
-    let open Lwt.Infix in
+  let https_server ?(check_client_cert = false) port =
     let listen_address = Unix.(ADDR_INET (inet_addr_loopback, port)) in
-    let ca = "./certificates/ca.pem" in
-    let cert = "./certificates/server.pem" in
-    let priv_key = "./certificates/server.key" in
-    Lwt_io.establish_server_with_client_socket
-      listen_address
-      (fun client_addr fd ->
-        let server_ctx = Ssl.create_context Ssl.TLSv1_3 Ssl.Server_context in
-        Ssl.disable_protocols server_ctx [ Ssl.SSLv23; Ssl.TLSv1_1 ];
-        Ssl.load_verify_locations server_ctx ca "";
-        Ssl.use_certificate server_ctx cert priv_key;
-        if check_client_cert then Ssl.set_verify server_ctx [Ssl.Verify_fail_if_no_peer_cert] None;
-        let protos = [ "h2"; "http/1.1" ] in
-        Ssl.set_context_alpn_protos server_ctx protos;
-        Ssl.set_context_alpn_select_callback server_ctx (fun client_protos ->
-            first_match client_protos protos);
-        Lwt.catch
-          (fun () ->
-            Lwt_ssl.ssl_accept fd server_ctx >>= fun ssl_server ->
-            match Lwt_ssl.ssl_socket ssl_server with
-            | None ->
-              Lwt.return_unit
-            | Some ssl_socket ->
-              (match Ssl.get_negotiated_alpn_protocol ssl_socket with
-              | Some "http/1.1" ->
-                http1s_handler client_addr ssl_server
-              | Some "h2" ->
-                h2s_handler client_addr ssl_server
-              | None (* Unable to negotiate a protocol *) | Some _ ->
-                (* Can't really happen - would mean that TLS negotiated a
-                 * protocol that we didn't specify. *)
-                assert false))
-          (fun exn ->
-            Format.eprintf "EXN: %s@." (Printexc.to_string exn);
-            Lwt.return_unit))
+    let ca = cert_path // "ca.pem" in
+    let cert = cert_path // "server.pem" in
+    let priv_key = cert_path // "server.key" in
+    let error_p, wakeup_error = Lwt.task () in
+    let server =
+      Lwt_io.establish_server_with_client_socket
+        listen_address
+        (fun client_addr fd ->
+          let server_ctx = Ssl.create_context Ssl.TLSv1_3 Ssl.Server_context in
+          Ssl.disable_protocols server_ctx [ Ssl.SSLv23; Ssl.TLSv1_1 ];
+          Ssl.load_verify_locations server_ctx ca "";
+          Ssl.use_certificate server_ctx cert priv_key;
+          if check_client_cert then
+            Ssl.set_verify server_ctx [ Ssl.Verify_fail_if_no_peer_cert ] None;
+          let protos = [ "h2"; "http/1.1" ] in
+          Ssl.set_context_alpn_protos server_ctx protos;
+          Ssl.set_context_alpn_select_callback server_ctx (fun client_protos ->
+              first_match client_protos protos);
+          Lwt.catch
+            (fun () ->
+              Lwt_ssl.ssl_accept fd server_ctx >>= fun ssl_server ->
+              let ret =
+                match Lwt_ssl.ssl_socket ssl_server with
+                | None ->
+                  Lwt.return_unit
+                | Some ssl_socket ->
+                  (match Ssl.get_negotiated_alpn_protocol ssl_socket with
+                  | Some "http/1.1" ->
+                    http1s_handler client_addr ssl_server
+                  | Some "h2" ->
+                    h2s_handler client_addr ssl_server
+                  | None (* Unable to negotiate a protocol *) | Some _ ->
+                    (* Can't really happen - would mean that TLS negotiated a
+                     * protocol that we didn't specify. *)
+                    assert false)
+              in
+              if Lwt.is_sleeping error_p then
+                Lwt.wakeup_later wakeup_error (Ok ());
+              ret)
+            (fun exn ->
+              Format.eprintf "EXN: %s@." (Printexc.to_string exn);
+              Lwt.wakeup_later wakeup_error (Error (`Exn exn));
+              Lwt.return_unit))
+    in
+    server, error_p
 end
 
 type t = Lwt_io.server * Lwt_io.server
 
-let listen ?(http_port = 8080) ?(https_port = 9443) ?(check_client_cert=false) () =
+let listen
+    ?(http_port = 8080) ?(https_port = 9443) ?(check_client_cert = false) ()
+  =
   let http_server = HTTP.listen http_port in
-  let https_server = ALPN.https_server https_port ~check_client_cert in
-  Lwt.both http_server https_server
+  let https_server, error_p = ALPN.https_server https_port ~check_client_cert in
+  Lwt.both http_server https_server >|= fun p -> p, error_p
 
 let teardown (http, https) =
   Lwt.join [ Lwt_io.shutdown_server http; Lwt_io.shutdown_server https ]

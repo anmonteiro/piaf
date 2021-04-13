@@ -5,7 +5,11 @@
 
 (test
  (name test_client)
- (libraries alcotest alcotest-lwt piaf logs.fmt)
- (modules helper_server test_client)
+ (libraries alcotest alcotest-lwt piaf logs.fmt dune-site)
+ (modules helper_server test_client cert_sites)
  (deps
   (source_tree "./certificates")))
+
+(generate_sites_module
+ (module cert_sites)
+ (sourceroot))
