@@ -17,7 +17,7 @@ let
       src = lib.filterGitSource {
         src = ./../..;
         dirs = [ "lib" "lib_test" "examples" ];
-        files = [ ".ocamlformat" "piaf.opam" ];
+        files = [ ".ocamlformat" "piaf.opam" "dune-project" "dune" ];
       };
       dontBuild = true;
       installPhase = ''
