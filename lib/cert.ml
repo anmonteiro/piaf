@@ -29,10 +29,12 @@
  * POSSIBILITY OF SUCH DAMAGE.
  *---------------------------------------------------------------------------*)
 
- type t = 
+type t =
   | Filepath of string
   | Certpem of string
-  
- let pp ppf = function
-  | Filepath s ->  Format.pp_print_string ppf (Printf.sprintf "Filepath %s" s)
-  | Certpem s -> Format.pp_print_string ppf (Printf.sprintf "Certpem %s" s)
+
+let pp ppf = function
+  | Filepath s ->
+    Format.pp_print_string ppf (Printf.sprintf "Filepath %s" s)
+  | Certpem s ->
+    Format.pp_print_string ppf (Printf.sprintf "Certpem %s" s)

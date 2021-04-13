@@ -182,15 +182,15 @@ let test_https_server_certs _ () =
         ; cacert = Some(Cert.Filepath("./certificates/ca.pem"))
         }
       (Uri.of_string "https://localhost:9443")
-    in
+  in
   let response = Result.get_ok response in
   Alcotest.check
     response_testable
     "expected response"
-    (Response.create 
-      ~version:Versions.HTTP.v1_1 
-      ~headers:Headers.(of_list [ Well_known.content_length, "1" ])
-      `OK)
+    (Response.create
+       ~version:Versions.HTTP.v1_1
+       ~headers:Headers.(of_list [ Well_known.content_length, "1" ])
+       `OK)
     response;
   (* Verify server cert from cert string *)
   let inchannel = open_in "./certificates/ca.pem" in
@@ -207,15 +207,15 @@ let test_https_server_certs _ () =
         ; cacert = Some(Cert.Certpem(certstring))
         }
       (Uri.of_string "https://localhost:9443")
-    in
+  in
   let response = Result.get_ok response in
   Alcotest.check
     response_testable
     "expected response"
-    (Response.create 
-      ~version:Versions.HTTP.v1_1 
-      ~headers:Headers.(of_list [ Well_known.content_length, "1" ])
-      `OK)
+    (Response.create
+       ~version:Versions.HTTP.v1_1
+       ~headers:Headers.(of_list [ Well_known.content_length, "1" ])
+       `OK)
     response;
   Helper_server.teardown server
 

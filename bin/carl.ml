@@ -88,7 +88,7 @@ type cli =
   ; tcp_nodelay : bool
   ; cacert : Cert.t option
   ; capath : string option
-  ; clientcert: (Cert.t * Cert.t) option
+  ; clientcert : (Cert.t * Cert.t) option
   ; min_tls_version : Versions.TLS.t
   ; max_tls_version : Versions.TLS.t
   ; insecure : bool
@@ -827,12 +827,14 @@ module CLI = struct
           v1_0)
     ; h2c_upgrade = use_http_2
     ; http2_prior_knowledge
-    ; cacert = cacert
+    ; cacert
     ; capath
-    ; clientcert = (
-      match cert, key with
-      | Some cert, Some key -> Some(Cert.Filepath(cert), Cert.Filepath(key))
-      | _ -> None)
+    ; clientcert =
+        (match cert, key with
+        | Some cert, Some key ->
+          Some (Cert.Filepath cert, Cert.Filepath key)
+        | _ ->
+          None)
     ; min_tls_version =
         (* select the _maximum_ min version *)
         Versions.TLS.(
