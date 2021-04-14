@@ -37,6 +37,7 @@ rec {
 
       alcotest
       alcotest-lwt
+      dune-site
     ];
 
     inherit doCheck;
@@ -57,7 +58,7 @@ rec {
       files = [ "dune" "dune-project" ];
     };
 
-    nativeBuildInputs = [dune ocaml findlib];
+    nativeBuildInputs = [ dune ocaml findlib ];
 
     buildPhase = ''
       echo "running ${if static then "static" else "release"} build"
@@ -84,4 +85,3 @@ rec {
     };
   };
 }
-

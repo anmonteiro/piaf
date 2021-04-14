@@ -108,8 +108,7 @@ let load_client_cert_from_string ~certificate ~private_key ctx =
 let load_client_cert ~certificate ~private_key ctx =
   Ssl.use_certificate ctx certificate private_key
 
-let load_peer_ca_cert ~certificate ctx =
-  Ssl.add_cert_to_store ctx certificate
+let load_peer_ca_cert ~certificate ctx = Ssl.add_cert_to_store ctx certificate
 
 let load_verify_locations ?(cacert = "") ?(capath = "") ctx =
   match Ssl.load_verify_locations ctx cacert capath with
@@ -303,39 +302,45 @@ let connect ~hostname ~config ~alpn_protocols fd =
            * Ssl.get_verify_result.
            * https://www.openssl.org/docs/man1.1.1/man3/SSL_CTX_set_verify.html *)
           Ssl.set_verify ctx [ Ssl.Verify_peer ] None;
-
           (* Server certificate verification *)
-          let* () = 
-            match cacert with 
-            | Some certarg -> 
+          let* () =
+            match cacert with
+            | Some certarg ->
               (match certarg with
-              | Filepath path -> 
-                let somepath = Some(path) in
+              | Filepath path ->
+                let somepath = Some path in
                 configure_verify_locations ctx somepath capath
-              | Certpem cert -> Lwt_result.return (load_peer_ca_cert ~certificate:cert ctx))
-            | None -> configure_verify_locations ctx None capath
+              | Certpem cert ->
+                Lwt_result.return (load_peer_ca_cert ~certificate:cert ctx))
+            | None ->
+              configure_verify_locations ctx None capath
           in
-          
           (* Send client cert if present *)
           match clientcert with
-           | Some certwithkey -> 
-              (match certwithkey with 
-              | Cert.Certpem cert, Cert.Certpem key -> 
-                Lwt_result.return (load_client_cert_from_string ~certificate:cert ~private_key:key ctx)
-              | Cert.Filepath cert, Cert.Filepath key -> 
-                Lwt_result.return (load_client_cert ~certificate:cert ~private_key: key ctx)
-              | _ ->     
-                let msg =
+          | Some certwithkey ->
+            (match certwithkey with
+            | Cert.Certpem cert, Cert.Certpem key ->
+              Lwt_result.return
+                (load_client_cert_from_string
+                   ~certificate:cert
+                   ~private_key:key
+                   ctx)
+            | Cert.Filepath cert, Cert.Filepath key ->
+              Lwt_result.return
+                (load_client_cert ~certificate:cert ~private_key:key ctx)
+            | _ ->
+              let msg =
                 Format.asprintf
-                  "Incorrect parameters provided for clientcert, both should be a filepath or pem string"
-                in
-                Log.err (fun m -> m "%s" msg);
-                Lwt_result.fail (`Connect_error msg))
-            | None -> Lwt_result.return ()
-        )
+                  "Incorrect parameters provided for clientcert, both should \
+                   be a filepath or pem string"
+              in
+              Log.err (fun m -> m "%s" msg);
+              Lwt_result.fail (`Connect_error msg))
+          | None ->
+            Lwt_result.return ())
         else
           (* Don't bother configuring verify locations if we're not going to be
-            verifying the peer. *)
+             verifying the peer. *)
           Lwt_result.return ()
       in
       let s = Lwt_ssl.embed_uninitialized_socket fd ctx in

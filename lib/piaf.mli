@@ -263,10 +263,10 @@ module Versions : sig
   end
 end
 
-module Cert: sig
-  type t = 
-  | Filepath of string
-  | Certpem of string
+module Cert : sig
+  type t =
+    | Filepath of string
+    | Certpem of string
 
   val pp : Format.formatter -> t -> unit
 end
@@ -293,7 +293,7 @@ module Config : sig
     ; capath : string option
           (** The path to a directory which contains CA certificates in PEM
               format *)
-    ; clientcert: (Cert.t * Cert.t) option
+    ; clientcert : (Cert.t * Cert.t) option
           (** Client certificate in PEM format *)
     ; min_tls_version : Versions.TLS.t
     ; max_tls_version : Versions.TLS.t

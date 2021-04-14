@@ -4,6 +4,7 @@
 [submodule "vendor/httpaf"]
 	path = vendor/httpaf
 	url = https://github.com/anmonteiro/httpaf.git
+	branch = anmonteiro/unsafe
 [submodule "vendor/ocaml-h2"]
 	path = vendor/ocaml-h2
 	url = https://github.com/anmonteiro/ocaml-h2.git
