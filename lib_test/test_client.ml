@@ -221,6 +221,41 @@ let test_https_server_certs _ () =
        ~headers:Headers.(of_list [ Well_known.content_length, "1" ])
        `OK)
     response;
+  let* () = Helper_server.teardown server in
+  (* Verify server cert rsa with SAN from cert string *)
+  let* server, _ =
+    Helper_server.listen
+      ~http_port:8080
+      ~certfile:"server_rsa_san.pem"
+      ~certkey:"server_rsa_san.key"
+      ()
+  in
+  let inchannel = open_in (Helper_server.cert_path // "ca.pem") in
+  let certstring =
+    really_input_string inchannel (in_channel_length inchannel)
+  in
+  close_in inchannel;
+  let* response =
+    Client.Oneshot.get
+      ~config:
+        { Config.default with
+          follow_redirects = true
+        ; max_redirects = 1
+        ; allow_insecure = false
+        ; max_http_version = Versions.HTTP.v1_1
+        ; cacert = Some (Cert.Certpem certstring)
+        }
+      (Uri.of_string "https://localhost:9443")
+  in
+  let response = Result.get_ok response in
+  Alcotest.check
+    response_testable
+    "expected response"
+    (Response.create
+       ~version:Versions.HTTP.v1_1
+       ~headers:Headers.(of_list [ Well_known.content_length, "1" ])
+       `OK)
+    response;
   Helper_server.teardown server
 
 let test_https_client_certs _ () =

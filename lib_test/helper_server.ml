@@ -103,11 +103,16 @@ module ALPN = struct
     | _ :: xs ->
       first_match l1 xs
 
-  let https_server ?(check_client_cert = false) port =
+  let https_server
+      ?(check_client_cert = false)
+      ?(certfile = "server.pem")
+      ?(certkey = "server.key")
+      port
+    =
     let listen_address = Unix.(ADDR_INET (inet_addr_loopback, port)) in
     let ca = cert_path // "ca.pem" in
-    let cert = cert_path // "server.pem" in
-    let priv_key = cert_path // "server.key" in
+    let cert = cert_path // certfile in
+    let priv_key = cert_path // certkey in
     let error_p, wakeup_error = Lwt.task () in
     let server =
       Lwt_io.establish_server_with_client_socket
@@ -155,10 +160,17 @@ end
 type t = Lwt_io.server * Lwt_io.server
 
 let listen
-    ?(http_port = 8080) ?(https_port = 9443) ?(check_client_cert = false) ()
+    ?(http_port = 8080)
+    ?(https_port = 9443)
+    ?(check_client_cert = false)
+    ?(certfile = "server.pem")
+    ?(certkey = "server.key")
+    ()
   =
   let http_server = HTTP.listen http_port in
-  let https_server, error_p = ALPN.https_server https_port ~check_client_cert in
+  let https_server, error_p =
+    ALPN.https_server https_port ~check_client_cert ~certfile ~certkey
+  in
   Lwt.both http_server https_server >|= fun p -> p, error_p
 
 let teardown (http, https) =
