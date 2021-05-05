@@ -124,7 +124,7 @@ let load_verify_locations ?(cacert = "") ?(capath = "") ctx =
           (if capath = "" then "none" else capath));
     Error (`Exn exn)
 
-let configure_verify_locations ctx cacert capath =
+let configure_verify_locations ?cacert ?capath ctx =
   let promise, resolver = Lwt.wait () in
   Lwt.async (fun () ->
       let result =
@@ -308,12 +308,11 @@ let connect ~hostname ~config ~alpn_protocols fd =
             | Some certarg ->
               (match certarg with
               | Filepath path ->
-                let somepath = Some path in
-                configure_verify_locations ctx somepath capath
+                configure_verify_locations ctx ~cacert:path ?capath
               | Certpem cert ->
                 Lwt_result.return (load_peer_ca_cert ~certificate:cert ctx))
             | None ->
-              configure_verify_locations ctx None capath
+              configure_verify_locations ctx ?capath
           in
           (* Send client cert if present *)
           match clientcert with
