@@ -256,6 +256,30 @@ let test_https_server_certs _ () =
        ~headers:Headers.(of_list [ Well_known.content_length, "1" ])
        `OK)
     response;
+  let* () = Helper_server.teardown server in
+  (* Verify server SAN IP address *)
+  let* server, _ = Helper_server.listen ~http_port:8080 ~certfile:"server_san_ip.pem" ~certkey:"server_san_ip.key" () in
+  let* response =
+    Client.Oneshot.get
+      ~config:
+        { Config.default with
+          follow_redirects = true
+        ; max_redirects = 1
+        ; allow_insecure = false
+        ; max_http_version = Versions.HTTP.v1_1
+        ; cacert = Some (Cert.Filepath (Helper_server.cert_path // "ca.pem"))
+        }
+      (Uri.of_string "https://127.0.0.1:9443")
+  in
+  let response = Result.get_ok response in
+  Alcotest.check
+    response_testable
+    "expected response"
+    (Response.create
+       ~version:Versions.HTTP.v1_1
+       ~headers:Headers.(of_list [ Well_known.content_length, "1" ])
+       `OK)
+    response;
   Helper_server.teardown server
 
 let test_https_client_certs _ () =
