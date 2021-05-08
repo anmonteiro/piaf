@@ -344,10 +344,20 @@ let connect ~hostname ~config ~alpn_protocols fd =
       in
       let s = Lwt_ssl.embed_uninitialized_socket fd ctx in
       let ssl_sock = Lwt_ssl.ssl_socket_of_uninitialized_socket s in
-      Ssl.set_client_SNI_hostname ssl_sock hostname;
-      (* https://wiki.openssl.org/index.php/Hostname_validation *)
-      Ssl.set_hostflags ssl_sock [ No_partial_wildcards ];
-      Ssl.set_host ssl_sock hostname;
+      (* If hostname is an IP address, check that instead of the hostname *)
+      let ipaddr = Ipaddr.of_string hostname in
+      let* () =
+        match ipaddr with
+        | Ok ipadr ->
+          Ssl.set_ip ssl_sock (Ipaddr.to_string ipadr);
+          Lwt_result.return ()
+        | _ ->
+          Ssl.set_client_SNI_hostname ssl_sock hostname;
+          (* https://wiki.openssl.org/index.php/Hostname_validation *)
+          Ssl.set_hostflags ssl_sock [ No_partial_wildcards ];
+          Ssl.set_host ssl_sock hostname;
+          Lwt_result.return ()
+      in
       let open Lwt.Syntax in
       let+ socket_or_error =
         Lwt.catch
