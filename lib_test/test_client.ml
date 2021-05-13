@@ -258,7 +258,13 @@ let test_https_server_certs _ () =
     response;
   let* () = Helper_server.teardown server in
   (* Verify server SAN IP address *)
-  let* server, _ = Helper_server.listen ~http_port:8080 ~certfile:"server_san_ip.pem" ~certkey:"server_san_ip.key" () in
+  let* server, _ =
+    Helper_server.listen
+      ~http_port:8080
+      ~certfile:"server_san_ip.pem"
+      ~certkey:"server_san_ip.key"
+      ()
+  in
   let* response =
     Client.Oneshot.get
       ~config:

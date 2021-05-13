@@ -348,12 +348,12 @@ let connect ~hostname ~config ~alpn_protocols fd =
       let ipaddr = Ipaddr.of_string hostname in
       (match ipaddr with
       | Ok ipadr ->
-        Ssl.set_ip ssl_sock (Ipaddr.to_string ipadr);
+        Ssl.set_ip ssl_sock (Ipaddr.to_string ipadr)
       | _ ->
         Ssl.set_client_SNI_hostname ssl_sock hostname;
         (* https://wiki.openssl.org/index.php/Hostname_validation *)
         Ssl.set_hostflags ssl_sock [ No_partial_wildcards ];
-        Ssl.set_host ssl_sock hostname;);
+        Ssl.set_host ssl_sock hostname);
       let open Lwt.Syntax in
       let+ socket_or_error =
         Lwt.catch
