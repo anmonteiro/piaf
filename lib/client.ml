@@ -166,14 +166,19 @@ let make_impl ~config ~conn_info fd =
   let open Lwt_result.Syntax in
   let* () = connect ~config ~conn_info fd in
   Log.info (fun m -> m "Connected to %a" Connection_info.pp_hum conn_info);
+  match conn_info.scheme with
+  | Scheme.HTTP ->
+    create_http_connection ~config fd
+  | HTTPS ->
+    create_https_connection ~config ~conn_info fd
+
+let open_connection ~config conn_info =
+  let fd = Lwt_unix.socket Unix.PF_INET Unix.SOCK_STREAM 0 in
+  if config.Config.tcp_nodelay then (
+    Lwt_unix.setsockopt fd Lwt_unix.TCP_NODELAY true;
+    Logs.debug (fun m -> m "TCP_NODELAY set"));
   let open Lwt.Syntax in
-  let* impl =
-    match conn_info.scheme with
-    | Scheme.HTTP ->
-      create_http_connection ~config fd
-    | HTTPS ->
-      create_https_connection ~config ~conn_info fd
-  in
+  let* impl = make_impl ~config ~conn_info fd in
   match impl with
   | Ok _ ->
     Lwt.return impl
@@ -181,13 +186,6 @@ let make_impl ~config ~conn_info fd =
     let open Lwt.Syntax in
     let+ () = close_connection ~conn_info fd in
     impl
-
-let open_connection ~config conn_info =
-  let fd = Lwt_unix.socket Unix.PF_INET Unix.SOCK_STREAM 0 in
-  if config.Config.tcp_nodelay then (
-    Lwt_unix.setsockopt fd Lwt_unix.TCP_NODELAY true;
-    Logs.debug (fun m -> m "TCP_NODELAY set"));
-  make_impl ~config ~conn_info fd
 
 let change_connection t conn_info =
   let open Lwt_result.Syntax in
