@@ -26,7 +26,6 @@ let
       buildInputs = (lib.attrValues piafDrvs) ++ (with ocamlPackages; [ ocaml dune findlib pkgs.ocamlformat ]);
       doCheck = true;
       checkPhase = ''
-        echo OI
         # Check code is formatted with OCamlformat
         dune build @fmt
       '';
