@@ -5,19 +5,37 @@ on:
    branches:
      - master
 jobs:
-  tests:
+  macOS:
+    runs-on: macos-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # Tests only on 2 latest versions as macOS runners are more expensive
+        ocamlVersion: [4_11, 4_12]
+    steps:
+    - uses: actions/checkout@v2
+      with:
+        submodules: 'recursive'
+    - uses: cachix/install-nix-action@v12
+    - uses: cachix/cachix-action@v8
+      with:
+        name: anmonteiro
+        signingKey: '${{ secrets.CACHIX_SIGNING_KEY }}'
+    - name: "Run nix-build"
+      run: nix-build ./nix/ci/test.nix -A native --argstr ocamlVersion ${{ matrix.ocamlVersion }}
+
+  linux:
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix:
         ocamlVersion: [4_08, 4_10, 4_11, 4_12]
     steps:
     - uses: actions/checkout@v2
       with:
         submodules: 'recursive'
-    - uses: cachix/install-nix-action@v12
-      with:
-        skip_adding_nixpkgs_channel: true
-    - uses: cachix/cachix-action@v8
+    - uses: cachix/install-nix-action@v13
+    - uses: cachix/cachix-action@v10
       with:
         name: anmonteiro
         signingKey: '${{ secrets.CACHIX_SIGNING_KEY }}'
