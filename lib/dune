@@ -13,4 +13,5 @@
   lwt_ssl
   magic-mime
   ssl
-  uri))
+  uri
+  ipaddr))
