@@ -38,6 +38,7 @@ rec {
       alcotest
       alcotest-lwt
       dune-site
+      digestif
     ];
 
     inherit doCheck;
