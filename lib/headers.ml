@@ -76,10 +76,9 @@ let canonicalize_headers ~body_length ~host ~version headers =
     | { Versions.HTTP.major = 2; _ } ->
       of_list
         ((Well_known.HTTP2.host, host)
-         ::
-         List.map
-           (fun (name, value) -> String.lowercase_ascii name, value)
-           headers)
+        :: List.map
+             (fun (name, value) -> String.lowercase_ascii name, value)
+             headers)
     | { major = 1; _ } ->
       add_unless_exists (of_list headers) "Host" host
     | _ ->

@@ -364,9 +364,9 @@ let make_request_info
       let open Headers in
       if is_h2c_upgrade then
         (Well_known.connection, "Upgrade, HTTP2-Settings")
-        ::
-        (Well_known.upgrade, "h2c")
-        :: ("HTTP2-Settings", Stdlib.Result.get_ok h2_settings) :: headers
+        :: (Well_known.upgrade, "h2c")
+        :: ("HTTP2-Settings", Stdlib.Result.get_ok h2_settings)
+        :: headers
       else
         headers
     in

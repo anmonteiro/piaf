@@ -228,7 +228,8 @@ module Error = struct
            SSL 3.0 or TLS 1.0, this result code is returned only if a closure
            alert has occurred in the protocol, i.e. if the connection has been
            closed cleanly. Note that in this case [Error_zero_return] does not
-           necessarily indicate that the underlying transport has been closed. *)
+           necessarily indicate that the underlying transport has been
+           closed. *)
         "SSL Connection closed"
     in
     Format.asprintf "%s: %s" error_string (Ssl.get_error_string ())
