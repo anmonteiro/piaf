@@ -213,7 +213,8 @@ module Cookie = struct
     List.fold_left
       (fun acc header ->
         let comps = Stringext.split_trim_left ~on:";" ~trim:" \t" header in
-        (* We don't handle $Path, $Domain, $Port, $Version (or $anything $else) *)
+        (* We don't handle $Path, $Domain, $Port, $Version (or $anything
+           $else) *)
         let cookies =
           List.filter (fun s -> String.length s > 0 && s.[0] != '$') comps
         in
