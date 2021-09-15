@@ -36,23 +36,10 @@ module type BODY = Body.BODY
 
 module Body :
   BODY
-    with type Read.t = [ `read ] Httpaf.Body.t
-     and type Write.t = [ `write ] Httpaf.Body.t = struct
-  module Read = struct
-    type t = [ `read ] Httpaf.Body.t
-
-    include (
-      Httpaf.Body :
-        module type of Httpaf.Body with type 'rw t := 'rw Httpaf.Body.t)
-  end
-
-  module Write = struct
-    type t = [ `write ] Httpaf.Body.t
-
-    include (
-      Httpaf.Body :
-        module type of Httpaf.Body with type 'rw t := 'rw Httpaf.Body.t)
-  end
+    with type Reader.t = Httpaf.Body.Reader.t
+     and type Writer.t = Httpaf.Body.Writer.t = struct
+  module Reader = Httpaf.Body.Reader
+  module Writer = Httpaf.Body.Writer
 end
 
 module MakeHTTP1
@@ -63,8 +50,8 @@ module MakeHTTP1
     with type Client.t = Httpaf_client.t
      and type Client.socket = Httpaf_client.socket
      and type Client.runtime = Httpaf_client.runtime
-     and type Body.Read.t = [ `read ] Httpaf.Body.t
-     and type Body.Write.t = [ `write ] Httpaf.Body.t = struct
+     and type Body.Reader.t = Httpaf.Body.Reader.t
+     and type Body.Writer.t = Httpaf.Body.Writer.t = struct
   module Body = Body
 
   module Client = struct
@@ -98,10 +85,10 @@ module MakeHTTP1
             `GET
         in
         (* TODO: revisit whether this is necessary. *)
-        if request_method = `HEAD then Body.Read.close_reader body;
+        if request_method = `HEAD then Body.Reader.close body;
         let body =
           Piaf_body.of_prim_body
-            (module Body : BODY with type Read.t = [ `read ] Httpaf.Body.t)
+            (module Body : BODY with type Reader.t = Httpaf.Body.Reader.t)
             ~body_length:
               (Httpaf.Response.body_length ~request_method response
                 :> Piaf_body.length)

@@ -53,24 +53,28 @@ module MakeHTTP2
     with type Client.t = H2_client.t
      and type Client.socket = H2_client.socket
      and type Client.runtime = H2_client.runtime
-     and type Body.Read.t = [ `read ] H2.Body.t
-     and type Body.Write.t = [ `write ] H2.Body.t = struct
+     and type Body.Reader.t = [ `read ] H2.Body.t
+     and type Body.Writer.t = [ `write ] H2.Body.t = struct
   module Body :
     BODY
-      with type Read.t = [ `read ] H2.Body.t
-       and type Write.t = [ `write ] H2.Body.t = struct
-    module Read = struct
+      with type Reader.t = [ `read ] H2.Body.t
+       and type Writer.t = [ `write ] H2.Body.t = struct
+    module Reader = struct
       type t = [ `read ] H2.Body.t
 
       include (
         H2.Body : module type of H2.Body with type 'rw t := 'rw H2.Body.t)
+
+      let close = close_reader
     end
 
-    module Write = struct
+    module Writer = struct
       type t = [ `write ] H2.Body.t
 
       include (
         H2.Body : module type of H2.Body with type 'rw t := 'rw H2.Body.t)
+
+      let close = close_writer
     end
   end
 
@@ -93,7 +97,7 @@ module MakeHTTP2
       let response_handler response body =
         let body =
           Piaf_body.of_prim_body
-            (module Body : BODY with type Read.t = [ `read ] H2.Body.t)
+            (module Body : BODY with type Reader.t = [ `read ] H2.Body.t)
             ~body_length:(H2.Response.body_length response :> Piaf_body.length)
             body
         in
@@ -113,8 +117,8 @@ module HTTP : Http_intf.HTTP2 = struct
       with type Client.t = H2_lwt_unix.Client.t
        and type Client.socket = Lwt_unix.file_descr
        and type Client.runtime = H2_lwt_unix.Client.runtime
-      with type Body.Read.t = [ `read ] H2.Body.t
-       and type Body.Write.t = [ `write ] H2.Body.t =
+      with type Body.Reader.t = [ `read ] H2.Body.t
+       and type Body.Writer.t = [ `write ] H2.Body.t =
     MakeHTTP2 (H2_lwt_unix.Client) (Scheme.Runtime.HTTP)
 
   include (HTTP_2 : module type of HTTP_2 with module Client := HTTP_2.Client)
@@ -133,7 +137,7 @@ module HTTP : Http_intf.HTTP2 = struct
       let response_handler response body =
         let body =
           Piaf_body.of_prim_body
-            (module Body : BODY with type Read.t = [ `read ] H2.Body.t)
+            (module Body : BODY with type Reader.t = [ `read ] H2.Body.t)
             ~body_length:(H2.Response.body_length response :> Piaf_body.length)
             body
         in

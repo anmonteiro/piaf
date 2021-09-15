@@ -59,11 +59,11 @@ module ALPN = struct
 
     let error_handler
         :  Unix.sockaddr -> ?request:Request.t -> _
-        -> (Headers.t -> [ `write ] Body.t) -> unit
+        -> (Headers.t -> Body.Writer.t) -> unit
       =
      fun _client_address ?request:_ _error start_response ->
       let response_body = start_response Headers.empty in
-      Body.close_writer response_body
+      Body.Writer.close response_body
   end
 
   module H2_handler = struct

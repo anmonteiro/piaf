@@ -73,7 +73,7 @@ let create_connection
     [ Lwt_result.return conn; Lwt_result.error connection_error_received ]
 
 let flush_and_close
-    : type a. (module Body.BODY with type Write.t = a) -> a -> unit
+    : type a. (module Body.BODY with type Writer.t = a) -> a -> unit
   =
  fun b request_body ->
   Body.flush_and_close b request_body (fun () ->
@@ -122,7 +122,7 @@ let send_request
     conn
   in
   let module Client = Http.Client in
-  let module Bodyw = Http.Body.Write in
+  let module Bodyw = Http.Body.Writer in
   let response_received, notify_response = Lwt.wait () in
   let response_handler response = Lwt.wakeup_later notify_response response in
   let error_received, notify_error = Lwt.wait () in
@@ -135,7 +135,7 @@ let send_request
   Lwt.async (fun () ->
       match body.contents with
       | `Empty _ ->
-        Lwt.wrap1 Bodyw.close_writer request_body
+        Lwt.wrap1 Bodyw.close request_body
       | `String s ->
         Bodyw.write_string request_body s;
         Lwt.wrap2 flush_and_close (module Http.Body) request_body
