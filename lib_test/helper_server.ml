@@ -151,8 +151,10 @@ module ALPN = struct
               ret)
             (fun exn ->
               Format.eprintf "EXN: %s@." (Printexc.to_string exn);
-              Lwt.wakeup_later wakeup_error (Error (`Exn exn));
-              Lwt.return_unit))
+              if Lwt.is_sleeping error_p then
+                Lwt.wrap2 Lwt.wakeup_later wakeup_error (Error (`Exn exn))
+              else
+                Lwt.return_unit))
     in
     server, error_p
 end
