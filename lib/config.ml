@@ -130,7 +130,7 @@ let to_http2_config
   ; enable_server_push = enable_http2_server_push
   ; (* Default to a flow control window of 128 MiB (should also be the default
      * in H2). *)
-    initial_window_size = 1 lsl 27
+    initial_window_size = Int32.(shift_left one 27)
   }
 
 let to_http2_settings t = H2.Config.to_settings (to_http2_config t)
