@@ -70,6 +70,7 @@ module Error_response = struct
 end
 
 let make_error_handler error_handler client_addr ?request error start_response =
+  let module Writer = Httpaf.Body.Writer in
   let respond ~headers body =
     let headers =
       Headers.add_length_related_headers ~body_length:(Body.length body) headers
@@ -77,13 +78,13 @@ let make_error_handler error_handler client_addr ?request error start_response =
     let response_body = start_response (Headers.to_http1 headers) in
     match Body.contents body with
     | `Empty _ ->
-      Httpaf.Body.close_writer response_body
+      Writer.close response_body
     | `String s ->
-      Httpaf.Body.write_string response_body s;
-      Httpaf.Body.close_writer response_body
+      Writer.write_string response_body s;
+      Writer.close response_body
     | `Bigstring { IOVec.buffer; off; len } ->
-      Httpaf.Body.write_bigstring response_body ~off ~len buffer;
-      Httpaf.Body.close_writer response_body
+      Writer.write_bigstring response_body ~off ~len buffer;
+      Writer.close response_body
     | `Stream stream ->
       Body.stream_write_body (module Http1.Body) response_body stream
   in
@@ -121,7 +122,7 @@ let request_handler handler client_addr reqd =
   let body_length = Httpaf.Request.body_length request in
   let request_body =
     Body.of_prim_body
-      (module Http1.Body : Body.BODY with type Read.t = [ `read ] Httpaf.Body.t)
+      (module Http1.Body : Body.BODY with type Reader.t = Httpaf.Body.Reader.t)
       ~body_length:(body_length :> Body.length)
       ~on_eof:(fun body ->
         match Reqd.error_code reqd with

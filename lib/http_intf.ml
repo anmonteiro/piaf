@@ -64,14 +64,14 @@ end
 module type HTTPCommon = sig
   module Body : Body.BODY
 
-  module Client : Client with type write_body := Body.Write.t
+  module Client : Client with type write_body := Body.Writer.t
 end
 
 module type HTTP1 = sig
   module Body : Body.BODY
 
   module Client : sig
-    include Client with type write_body := Body.Write.t
+    include Client with type write_body := Body.Writer.t
 
     val upgrade : t -> Gluten.impl -> unit
   end
@@ -94,7 +94,7 @@ module type HTTP2 = sig
   module Client : sig
     include
       Client
-        with type write_body := Body.Write.t
+        with type write_body := Body.Writer.t
          and type runtime = Gluten_lwt_unix.Client.t
 
     val create_h2c

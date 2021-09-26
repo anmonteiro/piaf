@@ -19,6 +19,7 @@ in
 with pkgs;
 
 (mkShell {
+  OCAMLRUNPARAM = "b";
   inputsFrom = lib.attrValues piafDrvs;
   buildInputs =
     (if release-mode then [

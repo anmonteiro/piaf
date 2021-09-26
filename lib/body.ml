@@ -226,10 +226,10 @@ let when_closed t f = Lwt.on_success (closed t) f
 
 (* "Primitive" body types for http/af / h2 compatibility *)
 module type BODY = sig
-  module Read : sig
+  module Reader : sig
     type t
 
-    val close_reader : t -> unit
+    val close : t -> unit
 
     val schedule_read
       :  t
@@ -240,7 +240,7 @@ module type BODY = sig
     val is_closed : t -> bool
   end
 
-  module Write : sig
+  module Writer : sig
     type t
 
     val write_char : t -> char -> unit
@@ -253,7 +253,7 @@ module type BODY = sig
 
     val flush : t -> (unit -> unit) -> unit
 
-    val close_writer : t -> unit
+    val close : t -> unit
 
     val is_closed : t -> bool
   end
@@ -263,21 +263,21 @@ let embed_error_received t error_received = t.error_received <- error_received
 
 let of_prim_body
     : type a.
-      (module BODY with type Read.t = a)
+      (module BODY with type Reader.t = a)
       -> ?on_eof:(t -> unit)
       -> body_length:length
       -> a
       -> t
   =
  fun (module Http_body) ?on_eof ~body_length body ->
-  let module Body = Http_body.Read in
+  let module Body = Http_body.Reader in
   let read_fn t () =
     let waiter, wakener = Lwt.task () in
     Body.schedule_read
       body
       ~on_eof:(fun () ->
         Option.iter (fun f -> f (Lazy.force t)) on_eof;
-        Body.close_reader body;
+        Body.close body;
         Lwt.wakeup_later wakener None)
       ~on_read:(fun buffer ~off ~len ->
         Lwt.wakeup_later wakener (Some (IOVec.make buffer ~off ~len)));
@@ -298,22 +298,23 @@ let of_prim_body
   Lazy.force t
 
 let flush_and_close
-    : type a. (module BODY with type Write.t = a) -> a -> (unit -> unit) -> unit
+    : type a.
+      (module BODY with type Writer.t = a) -> a -> (unit -> unit) -> unit
   =
  fun (module B) body f ->
-  let module Body = B.Write in
-  Body.close_writer body;
+  let module Body = B.Writer in
+  Body.close body;
   Body.flush body f
 
 let stream_write_body
     : type a.
-      (module BODY with type Write.t = a)
+      (module BODY with type Writer.t = a)
       -> a
       -> Bigstringaf.t IOVec.t Lwt_stream.t
       -> unit
   =
  fun (module B) body stream ->
-  let module Body = B.Write in
+  let module Body = B.Writer in
   Lwt.async (fun () ->
       let+ () =
         Lwt_stream.iter_s

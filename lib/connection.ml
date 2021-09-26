@@ -138,7 +138,7 @@ type t =
       { impl :
           (module Http_intf.HTTPCommon
              with type Client.t = 'a
-              and type Body.Read.t = 'b)
+              and type Body.Reader.t = 'b)
       ; handle : 'a
       ; runtime : Scheme.Runtime.t
       ; connection_error_received : Error.client Lwt.t
