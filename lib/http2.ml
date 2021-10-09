@@ -96,7 +96,7 @@ module MakeHTTP2
     let request t req ~error_handler ~response_handler =
       let response_handler response body =
         let body =
-          Piaf_body.of_prim_body
+          Piaf_body.of_raw_body
             (module Body : BODY with type Reader.t = [ `read ] H2.Body.t)
             ~body_length:(H2.Response.body_length response :> Piaf_body.length)
             body
@@ -136,7 +136,7 @@ module HTTP : Http_intf.HTTP2 = struct
       =
       let response_handler response body =
         let body =
-          Piaf_body.of_prim_body
+          Piaf_body.of_raw_body
             (module Body : BODY with type Reader.t = [ `read ] H2.Body.t)
             ~body_length:(H2.Response.body_length response :> Piaf_body.length)
             body

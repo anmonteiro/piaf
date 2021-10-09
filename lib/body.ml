@@ -86,6 +86,7 @@ type t =
   { length : length
   ; contents : contents
   ; mutable error_received : Error.t Lwt.t
+  ; mutable read_counter : int
   }
 
 (* Never resolves, giving a chance for the normal successful flow to always
@@ -93,7 +94,11 @@ type t =
 let default_error_received, _ = Lwt.wait ()
 
 let create ~length contents =
-  { length; contents; error_received = default_error_received }
+  { length
+  ; contents
+  ; error_received = default_error_received
+  ; read_counter = 0
+  }
 
 let length { length; _ } = length
 
@@ -261,7 +266,7 @@ end
 
 let embed_error_received t error_received = t.error_received <- error_received
 
-let of_prim_body
+let of_raw_body
     : type a.
       (module BODY with type Reader.t = a)
       -> ?on_eof:(t -> unit)
@@ -272,16 +277,32 @@ let of_prim_body
  fun (module Http_body) ?on_eof ~body_length body ->
   let module Body = Http_body.Reader in
   let read_fn t () =
+    let t = Lazy.force t in
     let waiter, wakener = Lwt.task () in
+    let on_read_direct buffer ~off ~len =
+      let iovec = IOVec.make buffer ~off ~len in
+      Lwt.wakeup_later wakener (Some iovec)
+    and on_read_with_yield buffer ~off ~len =
+      Lwt.async (fun () ->
+          let iovec = IOVec.make buffer ~off ~len in
+          let* () = Lwt.pause () in
+          Lwt.wrap2 Lwt.wakeup_later wakener (Some iovec))
+    in
+    t.read_counter <- t.read_counter + 1;
+    let on_read =
+      if t.read_counter > 128 then (
+        t.read_counter <- 0;
+        on_read_with_yield)
+      else
+        on_read_direct
+    in
     Body.schedule_read
       body
       ~on_eof:(fun () ->
-        Option.iter (fun f -> f (Lazy.force t)) on_eof;
+        Option.iter (fun f -> f t) on_eof;
         Body.close body;
         Lwt.wakeup_later wakener None)
-      ~on_read:(fun buffer ~off ~len ->
-        Lwt.wakeup_later wakener (Some (IOVec.make buffer ~off ~len)));
-    let t = Lazy.force t in
+      ~on_read;
     Lwt.choose
       [ waiter
       ; Lwt.bind t.error_received (fun _ ->

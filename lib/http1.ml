@@ -87,7 +87,7 @@ module MakeHTTP1
         (* TODO: revisit whether this is necessary. *)
         if request_method = `HEAD then Body.Reader.close body;
         let body =
-          Piaf_body.of_prim_body
+          Piaf_body.of_raw_body
             (module Body : BODY with type Reader.t = Httpaf.Body.Reader.t)
             ~body_length:
               (Httpaf.Response.body_length ~request_method response

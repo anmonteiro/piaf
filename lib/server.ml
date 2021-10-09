@@ -121,7 +121,7 @@ let request_handler handler client_addr reqd =
   let request = Reqd.request reqd in
   let body_length = Httpaf.Request.body_length request in
   let request_body =
-    Body.of_prim_body
+    Body.of_raw_body
       (module Http1.Body : Body.BODY with type Reader.t = Httpaf.Body.Reader.t)
       ~body_length:(body_length :> Body.length)
       ~on_eof:(fun body ->
