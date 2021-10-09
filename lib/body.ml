@@ -280,13 +280,14 @@ let of_raw_body
     let t = Lazy.force t in
     let waiter, wakener = Lwt.task () in
     let on_read_direct buffer ~off ~len =
-      let iovec = IOVec.make buffer ~off ~len in
-      Lwt.wakeup_later wakener (Some iovec)
+      Lwt.wakeup_later wakener (Some (IOVec.make buffer ~off ~len))
     and on_read_with_yield buffer ~off ~len =
       Lwt.async (fun () ->
-          let iovec = IOVec.make buffer ~off ~len in
           let* () = Lwt.pause () in
-          Lwt.wrap2 Lwt.wakeup_later wakener (Some iovec))
+          Lwt.wrap2
+            Lwt.wakeup_later
+            wakener
+            (Some (IOVec.make buffer ~off ~len)))
     in
     t.read_counter <- t.read_counter + 1;
     let on_read =
