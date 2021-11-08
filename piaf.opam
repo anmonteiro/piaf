@@ -21,6 +21,7 @@ depends: [
   "ssl" {>= "0.5.10"}
   "lwt_ssl"
   "mrmime"
+  "prettym"
   "pecu"
   "psq"
   "uri"

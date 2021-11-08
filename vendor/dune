@@ -90,7 +90,7 @@
    unstrctrd.parser
    base64
    base64.rfc2045
-   mrmime.prettym
+   prettym
    pecu
    result
    rresult
