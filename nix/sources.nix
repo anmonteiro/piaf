@@ -2,7 +2,7 @@
 let
   overlays =
     builtins.fetchTarball
-      https://github.com/anmonteiro/nix-overlays/archive/518560ead.tar.gz;
+      https://github.com/anmonteiro/nix-overlays/archive/1c7f1673.tar.gz;
 
 in
 import "${overlays}/boot.nix" {

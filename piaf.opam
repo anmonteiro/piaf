@@ -15,15 +15,16 @@ depends: [
   "angstrom"
   "faraday"
   "bigstringaf" {>= "0.5.0"}
+  "ipaddr"
   "logs"
   "lwt"
   "conf-libssl"
   "ssl" {>= "0.5.10"}
   "lwt_ssl"
-  "mrmime"
   "prettym"
   "pecu"
   "psq"
+  "rresult"
   "uri"
   "magic-mime"
   "gluten-lwt-unix"
