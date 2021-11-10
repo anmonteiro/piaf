@@ -22,6 +22,7 @@ rec {
       magic-mime
       ssl
       uri
+      ipaddr
 
       # (vendored) httpaf dependencies
       angstrom
@@ -32,8 +33,10 @@ rec {
       psq
 
       # (vendored) multipart_form dependencies
+      base64
       pecu
-      mrmime
+      prettym
+      unstrctrd
 
       alcotest
       alcotest-lwt

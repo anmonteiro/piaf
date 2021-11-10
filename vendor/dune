@@ -90,6 +90,7 @@
    unstrctrd.parser
    base64
    base64.rfc2045
+   logs
    prettym
    pecu
    result
