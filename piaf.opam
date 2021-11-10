@@ -24,6 +24,7 @@ depends: [
   "prettym"
   "pecu"
   "psq"
+  "rresult"
   "uri"
   "magic-mime"
   "gluten-lwt-unix"

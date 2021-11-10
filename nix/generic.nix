@@ -36,6 +36,7 @@ rec {
       base64
       pecu
       prettym
+      rresult
       unstrctrd
 
       alcotest
