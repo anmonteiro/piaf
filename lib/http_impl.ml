@@ -32,7 +32,7 @@
 (* This module uses the interfaces in `s.ml` to abstract over HTTP/1 and HTTP/2
  * and their respective insecure / secure versions. *)
 
-open Monads
+open Monads.Bindings
 
 let src = Logs.Src.create "piaf.http" ~doc:"Piaf HTTP module"
 
@@ -40,6 +40,8 @@ module Log = (val Logs.src_log src : Logs.LOG)
 
 let make_error_handler notify_response_received (_, error) =
   Lwt.wakeup notify_response_received error
+
+let lwterr e = Lwt.map (fun e -> Error e) e
 
 let create_connection
     : type a r.
@@ -52,7 +54,6 @@ let create_connection
       -> (Connection.t, Error.client) result Lwt.t
   =
  fun (module Http_impl) ~config ~version socket ->
-  let open Lwt.Syntax in
   let connection_error_received, notify_connection_error_received =
     Lwt.wait ()
   in
@@ -69,8 +70,7 @@ let create_connection
       ; version
       }
   in
-  Lwt.choose
-    [ Lwt_result.return conn; Lwt_result.error connection_error_received ]
+  Lwt.choose [ Lwt_result.return conn; lwterr connection_error_received ]
 
 let flush_and_close
     : type a. (module Body.BODY with type Writer.t = a) -> a -> unit
@@ -85,15 +85,14 @@ let handle_response
     -> (Response.t, Error.client) result Lwt.t
   =
  fun response_p response_error_p connection_error_p ->
-  let open Lwt.Syntax in
   (* Use `Lwt.choose` specifically so that we don't cancel the
    * `connection_error_p` promise. We want it to stick around for subsequent
    * requests on the connection. *)
   let+ result =
     Lwt.choose
       [ Lwt_result.ok response_p
-      ; Lwt_result.error response_error_p
-      ; Lwt_result.error connection_error_p
+      ; lwterr response_error_p
+      ; lwterr connection_error_p
       ]
   in
   match result with
@@ -182,7 +181,6 @@ let create_h2c_connection
       Log.info (fun m -> m "Connection state changed (HTTP/2 confirmed)");
       (* Doesn't write the body by design. The server holds on to the HTTP/1.1 body
        * that was sent as part of the upgrade. *)
-      let open Lwt.Syntax in
       let+ result =
         handle_response
           response_received

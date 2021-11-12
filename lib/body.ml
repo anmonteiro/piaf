@@ -29,8 +29,7 @@
  * POSSIBILITY OF SUCH DAMAGE.
  *---------------------------------------------------------------------------*)
 
-open Monads
-open Lwt.Syntax
+open Monads.Bindings
 
 let src = Logs.Src.create "piaf.body" ~doc:"Piaf Body module"
 

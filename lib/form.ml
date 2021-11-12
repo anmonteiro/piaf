@@ -29,6 +29,8 @@
  * POSSIBILITY OF SUCH DAMAGE.
  *---------------------------------------------------------------------------*)
 
+open Monads.Bindings
+
 module Multipart = struct
   type t =
     { name : string
@@ -50,14 +52,13 @@ module Multipart = struct
       false
 
   let stream ?(max_chunk_size = 0x100000) (request : Request.t) =
-    let open Lwt_result.Syntax in
     (* TODO(anmonteiro): validate max content-length from a config, etc. *)
     match Headers.get_exn request.headers "content-type" with
     | content_type when is_valid_content_type content_type ->
       let stream, _or_error = Body.to_stream request.body in
       let kvs, push_to_kvs = Lwt_stream.create () in
       let emit name stream = push_to_kvs (Some (name, stream)) in
-      let+ multipart =
+      let++! multipart =
         Multipart.parse_multipart_form
           ~content_type
           ~max_chunk_size
@@ -104,9 +105,7 @@ module Multipart = struct
         (`Msg "Wrong or missing `content-type` header for multipart upload")
 
   let assoc ?max_chunk_size (request : Request.t) =
-    let open Lwt_result.Syntax in
-    let* field_stream = stream ?max_chunk_size request in
-    let open Lwt.Syntax in
+    let**! field_stream = stream ?max_chunk_size request in
     let* result =
       Lwt_stream.fold (fun t acc -> (t.name, t) :: acc) field_stream []
     in

@@ -29,6 +29,7 @@
  * POSSIBILITY OF SUCH DAMAGE.
  *---------------------------------------------------------------------------*)
 
+open Monads.Bindings
 module Piaf_body = Body
 
 module type BODY = Body.BODY
@@ -60,7 +61,6 @@ module MakeHTTP1
 
     (* Error handler for HTTP/1 connections isn't used *)
     let create_connection ~config ~error_handler:_ fd =
-      let open Lwt.Syntax in
       let+ t = create_connection ~config:(Config.to_http1_config config) fd in
       t, Runtime_scheme.make t.runtime
 
