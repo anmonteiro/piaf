@@ -2,7 +2,7 @@ open Lwt.Syntax
 open Piaf
 
 let test_of_file _ () =
-  let+ response = Response.of_file "./lib_test/test_response.ml" in
+  let+ response = Response.of_file "./test_response.ml" in
   Alcotest.(check string)
     "expected status 200"
     "200"
