@@ -29,7 +29,7 @@
  * POSSIBILITY OF SUCH DAMAGE.
  *---------------------------------------------------------------------------*)
 
-open Monads
+open Monads.Bindings
 module Status = H2.Status
 
 type t =
@@ -63,12 +63,19 @@ let of_stream ?version ?headers ~body status =
 
 (* TODO: accept buffer for I/O, so that caller can pool buffers? *)
 let of_file ?version ?(headers = Headers.empty) path =
-  let open Lwt.Syntax in
   let mime = Magic_mime.lookup path in
   let headers =
     Headers.(add_unless_exists headers Well_known.content_type mime)
   in
-  let* channel = Lwt_io.open_file ~flags:[ O_RDONLY ] ~mode:Lwt_io.input path in
+  let**! channel =
+    Lwt.catch
+      (fun () ->
+        let+ channel =
+          Lwt_io.open_file ~flags:[ O_RDONLY ] ~mode:Lwt_io.input path
+        in
+        Ok channel)
+      (fun exn -> Lwt_result.fail (`Exn exn))
+  in
   let+ length = Lwt_io.length channel in
   let remaining = ref (Int64.to_int length) in
   let stream =
@@ -89,11 +96,12 @@ let of_file ?version ?(headers = Headers.empty) path =
   in
   Lwt.on_success (Lwt_stream.closed stream) (fun () ->
       Lwt.ignore_result (Lwt_io.close channel));
-  create
-    ?version
-    ~headers
-    ~body:(Body.of_string_stream ~length:`Chunked stream)
-    `OK
+  Ok
+    (create
+       ?version
+       ~headers
+       ~body:(Body.of_string_stream ~length:`Chunked stream)
+       `OK)
 
 let upgrade ?version ?(headers = Headers.empty) upgrade_handler =
   create

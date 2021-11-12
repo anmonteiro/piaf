@@ -542,7 +542,7 @@ module Response : sig
     :  ?version:Versions.HTTP.t
     -> ?headers:Headers.t
     -> string
-    -> t Lwt.t
+    -> (t, Error.t) Lwt_result.t
 
   val persistent_connection : t -> bool
 

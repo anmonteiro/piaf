@@ -29,8 +29,6 @@
  * POSSIBILITY OF SUCH DAMAGE.
  *---------------------------------------------------------------------------*)
 
-open Monads
-
 let make_error_handler real_handler type_ error =
   let error : Error.client =
     match error with

@@ -1,6 +1,5 @@
 open Lwt.Syntax
 open Piaf
-module Result = Stdlib.Result
 
 let ( // ) = Filename.concat
 
