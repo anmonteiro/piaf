@@ -29,12 +29,11 @@
  * POSSIBILITY OF SUCH DAMAGE.
  *---------------------------------------------------------------------------*)
 
-open Monads
+open Monads.Bindings
 open Util
 module Version = Httpaf.Version
 
 let resolve_host ~port hostname =
-  let open Lwt.Syntax in
   let+ addresses =
     Lwt_unix.getaddrinfo
       hostname
@@ -109,12 +108,11 @@ module Connection_info = struct
       80
 
   let of_uri uri =
-    let open Lwt_result.Syntax in
     let uri = Uri.canonicalize uri in
     match Uri.host uri, Scheme.of_uri uri with
     | Some host, Ok scheme ->
       let port = infer_port ~scheme uri in
-      let+ addresses = resolve_host ~port host in
+      let++! addresses = resolve_host ~port host in
       { scheme; uri; host; port; addresses }
     | None, _ ->
       Lwt_result.fail

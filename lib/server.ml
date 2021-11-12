@@ -29,7 +29,7 @@
  * POSSIBILITY OF SUCH DAMAGE.
  *---------------------------------------------------------------------------*)
 
-open Monads
+open Monads.Bindings
 
 let src = Logs.Src.create "piaf.server" ~doc:"Piaf Server module"
 
@@ -137,7 +137,6 @@ let request_handler handler client_addr reqd =
    * one we start below. *)
   Lwt.async_exception_hook := report_exn reqd;
   Lwt.async (fun () ->
-      let open Lwt.Syntax in
       Lwt.catch
         (fun () ->
           let+ ({ Response.headers; body; _ } as response) =

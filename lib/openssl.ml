@@ -29,7 +29,7 @@
  * POSSIBILITY OF SUCH DAMAGE.
  *---------------------------------------------------------------------------*)
 
-open Monads
+open Monads.Bindings
 
 let src = Logs.Src.create "piaf.openssl" ~doc:"Piaf Client module"
 
@@ -246,7 +246,6 @@ end
 
 (* Assumes Lwt_unix.connect has already been called. *)
 let connect ~hostname ~config ~alpn_protocols fd =
-  let open Lwt_result.Syntax in
   let { Config.allow_insecure
       ; cacert
       ; capath
@@ -294,7 +293,7 @@ let connect ~hostname ~config ~alpn_protocols fd =
       Ssl.set_context_alpn_protos ctx alpn_protocols;
       (* Use the server's preferences rather than the client's *)
       Ssl.honor_cipher_order ctx;
-      let* () =
+      let**! () =
         if not allow_insecure then (
           (* Fail connecting if peer verification fails:
            * SSL always tries to verify the peer, this only says whether it should
@@ -304,7 +303,7 @@ let connect ~hostname ~config ~alpn_protocols fd =
            * https://www.openssl.org/docs/man1.1.1/man3/SSL_CTX_set_verify.html *)
           Ssl.set_verify ctx [ Ssl.Verify_peer ] None;
           (* Server certificate verification *)
-          let* () =
+          let**! () =
             match cacert with
             | Some certarg ->
               (match certarg with
@@ -355,7 +354,6 @@ let connect ~hostname ~config ~alpn_protocols fd =
         (* https://wiki.openssl.org/index.php/Hostname_validation *)
         Ssl.set_hostflags ssl_sock [ No_partial_wildcards ];
         Ssl.set_host ssl_sock hostname);
-      let open Lwt.Syntax in
       let+ socket_or_error =
         Lwt.catch
           (fun () -> Lwt_result.ok (Lwt_ssl.ssl_perform_handshake s))

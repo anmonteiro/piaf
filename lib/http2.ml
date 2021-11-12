@@ -29,6 +29,8 @@
  * POSSIBILITY OF SUCH DAMAGE.
  *---------------------------------------------------------------------------*)
 
+open Monads.Bindings
+
 let make_error_handler real_handler type_ error =
   let error : Error.client =
     match error with
@@ -80,7 +82,6 @@ module MakeHTTP2
     include H2_client
 
     let create_connection ~config ~error_handler fd =
-      let open Lwt.Syntax in
       let+ t =
         create_connection
           ~config:(Config.to_http2_config config)
