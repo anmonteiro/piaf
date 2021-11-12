@@ -29,7 +29,6 @@
  * POSSIBILITY OF SUCH DAMAGE.
  *---------------------------------------------------------------------------*)
 
-open Monads
 module Piaf_body = Body
 
 module type BODY = Body.BODY

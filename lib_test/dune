@@ -3,6 +3,10 @@
  (modules test_cookies)
  (libraries alcotest piaf))
 
+(generate_sites_module
+ (module cert_sites)
+ (sourceroot))
+
 (test
  (name test_client)
  (libraries alcotest alcotest-lwt piaf logs.fmt dune-site)
@@ -10,6 +14,7 @@
  (deps
   (source_tree "./certificates")))
 
-(generate_sites_module
- (module cert_sites)
- (sourceroot))
+(test
+ (name test_response)
+ (libraries alcotest alcotest-lwt piaf logs.fmt)
+ (modules test_response))

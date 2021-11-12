@@ -28,15 +28,30 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  *---------------------------------------------------------------------------*)
+module Option = struct
+  include Option
 
-module Lwt = struct
-  include Lwt
+  let ( let+ ) option f = Option.map f option
 
-  module Syntax = struct
-    let ( let+ ) x f = map f x
+  let ( let* ) = Option.bind
 
-    let ( let* ) = bind
-  end
+  let ( and* ) o1 o2 =
+    match o1, o2 with Some x, Some y -> Some (x, y) | _ -> None
+end
+
+module Result = struct
+  include Result
+
+  let ( let+ ) result f = map f result
+
+  let ( let* ) = bind
+
+  let ( and* ) r1 r2 =
+    match r1, r2 with
+    | Ok x, Ok y ->
+      Ok (x, y)
+    | Ok _, Error e | Error e, Ok _ | Error e, Error _ ->
+      Error e
 end
 
 module Lwt_result = struct
@@ -49,4 +64,38 @@ module Lwt_result = struct
 
     let ( let* ) = bind
   end
+end
+
+module Bindings = struct
+  (* use `let*` / `let+` for Lwt. These are the ones we're going to end up
+   * using the most *)
+  include Lwt.Syntax
+
+  (* Option *)
+  open Option
+
+  let ( let*? ) = ( let* )
+
+  let ( let+? ) = ( let+ )
+
+  let ( and*? ) = ( and* )
+
+  (* Result *)
+
+  open Result
+
+  let ( let*! ) = ( let* )
+
+  let ( let+! ) = ( let+ )
+
+  let ( and*! ) = ( and* )
+
+  (* Lwt_result *)
+  open Lwt_result.Syntax
+
+  let ( let**! ) = ( let* )
+
+  let ( let++! ) = ( let+ )
+
+  let ( and**! ) = ( and* )
 end
