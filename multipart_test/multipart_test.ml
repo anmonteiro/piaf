@@ -1,4 +1,5 @@
 open Lwt.Syntax
+module Multipart_form = Piaf_multipart_form
 
 let content_type =
   "multipart/form-data; boundary=----WebKitFormBoundaryVuTaDGWRcduyfmAv"

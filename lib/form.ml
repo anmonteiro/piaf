@@ -30,6 +30,7 @@
  *---------------------------------------------------------------------------*)
 
 open Monads.Bindings
+module Multipart_form = Piaf_multipart_form
 
 module Multipart = struct
   type t =

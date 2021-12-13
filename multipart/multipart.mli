@@ -32,20 +32,23 @@
 type t
 
 module Pp : sig
-  val pp_field : Format.formatter -> Multipart_form.Field.field -> unit
+  val pp_field : Format.formatter -> Piaf_multipart_form.Field.field -> unit
 
   (* val pp_contents : Format.formatter -> t -> unit *)
 
-  val pp_ty : Format.formatter -> Multipart_form.Content_type.Type.t -> unit
+  val pp_ty
+    :  Format.formatter
+    -> Piaf_multipart_form.Content_type.Type.t
+    -> unit
 
   val pp_subty
     :  Format.formatter
-    -> Multipart_form.Content_type.Subtype.t
+    -> Piaf_multipart_form.Content_type.Subtype.t
     -> unit
 
   val pp_content_type
     :  Format.formatter
-    -> Multipart_form.Content_type.t
+    -> Piaf_multipart_form.Content_type.t
     -> unit
 
   val pp_extension
@@ -56,17 +59,19 @@ end
 
 val parse_content_type
   :  string
-  -> (Multipart_form.Content_type.t, [> `Msg of string ]) result
+  -> (Piaf_multipart_form.Content_type.t, [> `Msg of string ]) result
 
 val result_headers : t -> (string * string) list
 
-val result_fields : t -> (string * Multipart_form.Header.t) list
+val result_fields : t -> (string * Piaf_multipart_form.Header.t) list
 
 val content_disposition
-  :  Multipart_form.Header.t
-  -> Multipart_form.Content_disposition.t option
+  :  Piaf_multipart_form.Header.t
+  -> Piaf_multipart_form.Content_disposition.t option
 
-val content_type : Multipart_form.Header.t -> Multipart_form.Content_type.t
+val content_type
+  :  Piaf_multipart_form.Header.t
+  -> Piaf_multipart_form.Content_type.t
 
 val parse_multipart_form
   :  content_type:string
