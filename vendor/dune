@@ -76,25 +76,25 @@
   (libraries faraday-lwt-unix piaf.h2 piaf.h2-lwt gluten-lwt-unix lwt.unix)))
 
 (subdir
- multipart_form/lib
+ multipart_form
  (library
-  (name multipart_form)
+  (name piaf_multipart_form)
   (public_name piaf.multipart_form)
   (libraries
+   logs
    bigarray-compat
    bigstringaf
-   faraday
    ke
    stdlib-shims
    unstrctrd
    unstrctrd.parser
    base64
    base64.rfc2045
-   logs
    prettym
    pecu
    result
    rresult
    uutf
    fmt
-   angstrom)))
+   angstrom
+   faraday)))
