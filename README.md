@@ -78,3 +78,9 @@ Run `dune exec bin/carl.exe` to run `carl`, the `curl`-like example.
 Copyright (c) 2019 António Nuno Monteiro
 
 piaf is distributed under the 3-Clause BSD License, see [LICENSE](./LICENSE).
+
+The `vendor/multipart_form` directory contains a fork of
+[`multipart_form`](https://github.com/dinosaure/multipart_form) which is
+licensed under the MIT License.
+[`multipart_form.LICENSE`](./multipart_form.LICENSE) reproduces the original
+license text.
