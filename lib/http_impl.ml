@@ -38,7 +38,7 @@ let src = Logs.Src.create "piaf.http" ~doc:"Piaf HTTP module"
 
 module Log = (val Logs.src_log src : Logs.LOG)
 
-let make_error_handler notify_response_received (_, error) =
+let make_error_handler notify_response_received ~kind:_ error =
   Lwt.wakeup notify_response_received error
 
 let lwterr e = Lwt.map (fun e -> Error e) e
