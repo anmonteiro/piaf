@@ -106,7 +106,7 @@ module MakeHTTP1
             other
         in
         (* All HTTP/1.1 errors cause the connection to close. *)
-        error_handler (`Connection, error)
+        error_handler ~kind:`Connection error
       in
       request t (Request.to_http1 req) ~error_handler ~response_handler
   end

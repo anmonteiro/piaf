@@ -29,7 +29,7 @@
  * POSSIBILITY OF SUCH DAMAGE.
  *---------------------------------------------------------------------------*)
 
-type error_handler = Error.kind * Error.client -> unit
+type error_handler = kind:Error.kind -> Error.client -> unit
 
 module type Client = sig
   type socket

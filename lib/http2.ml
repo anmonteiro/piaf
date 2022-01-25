@@ -39,7 +39,7 @@ let make_error_handler real_handler type_ error =
     | (`Exn _ | `Malformed_response _ | `Protocol_error _) as other ->
       other
   in
-  real_handler (type_, error)
+  real_handler ~kind:type_ error
 
 module Piaf_body = Body
 
