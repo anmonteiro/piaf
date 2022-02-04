@@ -490,6 +490,9 @@ let call t ~meth ?(headers = []) ?(body = Body.empty) target =
 
 let request t ?headers ?body ~meth target = call t ?headers ?body ~meth target
 
+let send t { Request.headers; body; meth; target; _ } =
+  call t ~headers:(Headers.to_list headers) ~body ~meth target
+
 let head t ?headers target = call t ?headers ~meth:`HEAD target
 
 let get t ?headers target = call t ?headers ~meth:`GET target
