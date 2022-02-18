@@ -2,11 +2,11 @@
  (name piaf)
  (public_name piaf)
  (libraries
-  piaf.multipart
-  piaf.h2
-  piaf.h2-lwt-unix
-  piaf.httpaf
-  piaf.httpaf-lwt-unix
+  multipart
+  h2
+  h2-lwt-unix
+  httpaf
+  httpaf-lwt-unix
   logs
   logs.lwt
   lwt

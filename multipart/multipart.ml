@@ -44,8 +44,6 @@ module List = struct
     aux f [] l
 end
 
-module Multipart_form = Piaf_multipart_form
-
 module Pp = struct
   let pp_extension formatter t =
     let payload = match t with `Ietf_token x | `X_token x -> x in

@@ -1,4 +1,4 @@
 (library
  (name multipart)
  (public_name piaf.multipart)
- (libraries faraday ke piaf.multipart_form lwt))
+ (libraries faraday ke multipart_form lwt))
