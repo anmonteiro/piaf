@@ -32,12 +32,7 @@ rec {
       # (vendored) h2 dependencies
       psq
 
-      # (vendored) multipart_form dependencies
-      base64
-      pecu
-      prettym
-      rresult
-      unstrctrd
+      multipart_form
 
       alcotest
       alcotest-lwt
