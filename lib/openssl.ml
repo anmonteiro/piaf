@@ -52,7 +52,8 @@ module Time = struct
     |]
 
   let pp_hum
-      formatter { Unix.tm_sec; tm_min; tm_hour; tm_mday; tm_mon; tm_year; _ }
+      formatter
+      { Unix.tm_sec; tm_min; tm_hour; tm_mday; tm_mon; tm_year; _ }
     =
     let year = 1900 + tm_year in
     Format.fprintf
@@ -70,8 +71,8 @@ let () = Ssl.init ()
 
 let pp_cert_verify_result ~allow_insecure formatter verify_result =
   let verify_error_string = Ssl.get_verify_error_string verify_result in
-  if verify_result = 0 then
-    Format.fprintf formatter "%s" verify_error_string
+  if verify_result = 0
+  then Format.fprintf formatter "%s" verify_error_string
   else
     Format.fprintf
       formatter
@@ -112,8 +113,7 @@ let load_peer_ca_cert ~certificate ctx = Ssl.add_cert_to_store ctx certificate
 
 let load_verify_locations ?(cacert = "") ?(capath = "") ctx =
   match Ssl.load_verify_locations ctx cacert capath with
-  | () ->
-    Ok ()
+  | () -> Ok ()
   | exception (Invalid_argument _ as exn) ->
     Log.err (fun m ->
         m
@@ -133,49 +133,34 @@ let configure_verify_locations ?cacert ?capath ctx =
           load_verify_locations ?cacert ?capath ctx
         | None, None ->
           (* Use default CA certificates *)
-          if Ssl.set_default_verify_paths ctx then
-            Ok ()
-          else
-            Error (`Connect_error "Failed to set default verify paths")
+          if Ssl.set_default_verify_paths ctx
+          then Ok ()
+          else Error (`Connect_error "Failed to set default verify paths")
       in
       Lwt.wrap2 Lwt.wakeup_later resolver result);
   promise
 
 let version_of_ssl = function
-  | Ssl.SSLv23 ->
-    Versions.TLS.Any
-  | SSLv3 ->
-    SSLv3
-  | TLSv1 ->
-    TLSv1_0
-  | TLSv1_1 ->
-    TLSv1_1
-  | TLSv1_2 ->
-    TLSv1_2
-  | TLSv1_3 ->
-    TLSv1_3
+  | Ssl.SSLv23 -> Versions.TLS.Any
+  | SSLv3 -> SSLv3
+  | TLSv1 -> TLSv1_0
+  | TLSv1_1 -> TLSv1_1
+  | TLSv1_2 -> TLSv1_2
+  | TLSv1_3 -> TLSv1_3
 
 let version_to_ssl = function
-  | Versions.TLS.Any ->
-    Ssl.SSLv23
-  | SSLv3 ->
-    SSLv3
-  | TLSv1_0 ->
-    TLSv1
-  | TLSv1_1 ->
-    TLSv1_1
-  | TLSv1_2 ->
-    TLSv1_2
-  | TLSv1_3 ->
-    TLSv1_3
+  | Versions.TLS.Any -> Ssl.SSLv23
+  | SSLv3 -> SSLv3
+  | TLSv1_0 -> TLSv1
+  | TLSv1_1 -> TLSv1_1
+  | TLSv1_2 -> TLSv1_2
+  | TLSv1_3 -> TLSv1_3
 
 let protocols_to_disable min max =
   let f =
     match min, max with
-    | Versions.TLS.Any, _ ->
-      fun x -> Versions.TLS.compare x max > 0
-    | _, Versions.TLS.Any ->
-      fun x -> Versions.TLS.compare x min < 0
+    | Versions.TLS.Any, _ -> fun x -> Versions.TLS.compare x max > 0
+    | _, Versions.TLS.Any -> fun x -> Versions.TLS.compare x min < 0
     | _ ->
       fun x -> Versions.TLS.compare x min < 0 || Versions.TLS.compare x max > 0
   in
@@ -184,41 +169,28 @@ let protocols_to_disable min max =
 
 module Error = struct
   let ssl_error_to_string = function
-    | Ssl.Error_none ->
-      "Error_none"
-    | Error_ssl ->
-      "Error_ssl"
-    | Error_want_read ->
-      "Error_want_read"
-    | Error_want_write ->
-      "Error_want_write"
-    | Error_want_x509_lookup ->
-      "Error_want_x509_lookup"
-    | Error_syscall ->
-      "Error_syscall"
-    | Error_zero_return ->
-      "Error_zero_return"
-    | Error_want_connect ->
-      "Error_want_connect"
-    | Error_want_accept ->
-      "Error_want_accept"
+    | Ssl.Error_none -> "Error_none"
+    | Error_ssl -> "Error_ssl"
+    | Error_want_read -> "Error_want_read"
+    | Error_want_write -> "Error_want_write"
+    | Error_want_x509_lookup -> "Error_want_x509_lookup"
+    | Error_syscall -> "Error_syscall"
+    | Error_zero_return -> "Error_zero_return"
+    | Error_want_connect -> "Error_want_connect"
+    | Error_want_accept -> "Error_want_accept"
 
   let ssl_error_to_string ssl_error =
     let error_string =
       match ssl_error with
-      | ( Ssl.Error_none
-        | Error_want_read
-        | Error_want_write
-        | Error_want_connect
-        | Error_want_accept
-        | Error_want_x509_lookup ) as e ->
+      | ( Ssl.Error_none | Error_want_read | Error_want_write
+        | Error_want_connect | Error_want_accept | Error_want_x509_lookup ) as e
+        ->
         Log.err (fun m ->
             m
               "`%s` should never be raised. Please report an issue."
               (ssl_error_to_string e));
         assert false
-      | Error_ssl ->
-        "SSL Error"
+      | Error_ssl -> "SSL Error"
       | Error_syscall ->
         (* Some I/O error occurred. The OpenSSL error queue may contain more
            information on the error. *)
@@ -262,8 +234,7 @@ let set_verify ~cacert ?capath ~clientcert ctx =
         configure_verify_locations ctx ~cacert:path ?capath
       | Certpem cert ->
         Lwt_result.return (load_peer_ca_cert ~certificate:cert ctx))
-    | None ->
-      configure_verify_locations ctx ?capath
+    | None -> configure_verify_locations ctx ?capath
   in
   (* Send client cert if present *)
   match clientcert with
@@ -283,8 +254,7 @@ let set_verify ~cacert ?capath ~clientcert ctx =
       in
       Log.err (fun m -> m "%s" msg);
       Lwt_result.fail (`Connect_error msg))
-  | None ->
-    Lwt_result.return ()
+  | None -> Lwt_result.return ()
 
 (* Assumes Lwt_unix.connect has already been called. *)
 let connect ~hostname ~config ~alpn_protocols fd =
@@ -299,7 +269,8 @@ let connect ~hostname ~config ~alpn_protocols fd =
     =
     config
   in
-  if Versions.TLS.compare min_tls_version max_tls_version > 0 then (
+  if Versions.TLS.compare min_tls_version max_tls_version > 0
+  then (
     let msg =
       Format.asprintf
         "Minimum configured TLS version (%a) can't be higher than maximum TLS \
@@ -318,8 +289,7 @@ let connect ~hostname ~config ~alpn_protocols fd =
           (Versions.TLS.to_max_version max_tls_version)
           Client_context)
     with
-    | exception Ssl.Method_error ->
-      Error.fail_with_too_old_ssl max_tls_version
+    | exception Ssl.Method_error -> Error.fail_with_too_old_ssl max_tls_version
     | exception Invalid_argument _ ->
       Error.fail_with_too_old_ssl max_tls_version
     | ctx ->
@@ -336,8 +306,8 @@ let connect ~hostname ~config ~alpn_protocols fd =
       (* Use the server's preferences rather than the client's *)
       Ssl.honor_cipher_order ctx;
       let**! () =
-        if not allow_insecure then
-          set_verify ~cacert ?capath ~clientcert ctx
+        if not allow_insecure
+        then set_verify ~cacert ?capath ~clientcert ctx
         else
           (* Don't bother configuring verify locations if we're not going to be
              verifying the peer. *)
@@ -348,8 +318,7 @@ let connect ~hostname ~config ~alpn_protocols fd =
       (* If hostname is an IP address, check that instead of the hostname *)
       let ipaddr = Ipaddr.of_string hostname in
       (match ipaddr with
-      | Ok ipadr ->
-        Ssl.set_ip ssl_sock (Ipaddr.to_string ipadr)
+      | Ok ipadr -> Ssl.set_ip ssl_sock (Ipaddr.to_string ipadr)
       | _ ->
         Ssl.set_client_SNI_hostname ssl_sock hostname;
         (* https://wiki.openssl.org/index.php/Hostname_validation *)
@@ -363,8 +332,7 @@ let connect ~hostname ~config ~alpn_protocols fd =
               let msg = Error.ssl_error_to_string ssl_error in
               Log.err (fun m -> m "%s" msg);
               Lwt_result.fail (`Connect_error msg)
-            | _ ->
-              assert false)
+            | _ -> assert false)
       in
       (match socket_or_error with
       | Ok ssl_socket ->
@@ -381,7 +349,8 @@ let connect ~hostname ~config ~alpn_protocols fd =
         Ok ssl_socket
       | Error e ->
         let verify_result = Ssl.get_verify_result ssl_sock in
-        if verify_result <> 0 then (
+        if verify_result <> 0
+        then (
           (* If we're here, `allow_insecure` better be false, otherwise we
            * forgot to handle some failure mode. The assert below will make us
            * remember. *)

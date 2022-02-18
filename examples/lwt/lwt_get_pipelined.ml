@@ -3,7 +3,6 @@ module Lwt_syntax = struct
     open Lwt
 
     let ( let+ ) x f = map f x
-
     let ( let* ) = bind
   end
 
@@ -11,7 +10,6 @@ module Lwt_syntax = struct
     open Lwt_result
 
     let ( let+ ) x f = map f x
-
     let ( let* ) = bind
   end
 end
@@ -48,14 +46,10 @@ let () =
     "lwt_get.exe HOST";
   let host =
     match !host with
-    | None ->
-      failwith "No hostname provided"
-    | Some host ->
-      host
+    | None -> failwith "No hostname provided"
+    | Some host -> host
   in
   Lwt_main.run
     (request host >|= function
-     | Ok () ->
-       ()
-     | Error e ->
-       failwith (Piaf.Error.to_string e))
+     | Ok () -> ()
+     | Error e -> failwith (Piaf.Error.to_string e))

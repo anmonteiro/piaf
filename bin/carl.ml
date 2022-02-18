@@ -34,21 +34,16 @@ open Piaf
 
 let setup_log ?style_renderer level =
   let pp_header src ppf (l, h) =
-    if l = Logs.App then
-      Format.fprintf ppf "%a" Logs_fmt.pp_header (l, h)
+    if l = Logs.App
+    then Format.fprintf ppf "%a" Logs_fmt.pp_header (l, h)
     else
       let x =
         match Array.length Sys.argv with
-        | 0 ->
-          Filename.basename Sys.executable_name
-        | _n ->
-          Filename.basename Sys.argv.(0)
+        | 0 -> Filename.basename Sys.executable_name
+        | _n -> Filename.basename Sys.argv.(0)
       in
       let x =
-        if Logs.Src.equal src Logs.default then
-          x
-        else
-          Logs.Src.name src
+        if Logs.Src.equal src Logs.default then x else Logs.Src.name src
       in
       Format.fprintf ppf "%s: %a " x Logs_fmt.pp_header (l, h)
   in
@@ -109,8 +104,7 @@ let pp_response_headers formatter { Response.headers; status; version; _ } =
     match status with
     | #Status.standard as st ->
       Format.asprintf " %s" (Status.default_reason_phrase st)
-    | `Code _ ->
-      ""
+    | `Code _ -> ""
   in
   Format.fprintf
     formatter
@@ -137,29 +131,26 @@ let rec uri_of_string ~scheme s =
   | Some _, None ->
     (* e.g. `//example.com` *)
     Uri.with_scheme maybe_uri (Some scheme)
-  | Some _, Some _ ->
-    maybe_uri
+  | Some _, Some _ -> maybe_uri
 
 module Ansi = struct
   let clear_line = "\u{1B}[2K"
-
   let line_up = "\u{1B}[A"
 
   let dumb =
     try match Sys.getenv "TERM" with "dumb" | "" -> true | _ -> false with
-    | Not_found ->
-      true
+    | Not_found -> true
 
   let isatty = try Unix.(isatty stdout) with Unix.Unix_error _ -> false
 end
 
 let ok = Ok ()
-
 let return_ok = Lwt.return ok
 
 let print_string ~cli formatter s =
   let open Lwt.Syntax in
-  if Ansi.isatty && cli.output = Stdout && String.contains s '\000' then (
+  if Ansi.isatty && cli.output = Stdout && String.contains s '\000'
+  then (
     let msg =
       "Binary output can mess up your terminal. Use \"--output -\" to tell \
        carl to output it to your terminal anyway, or consider \"--output \
@@ -174,18 +165,14 @@ let print_string ~cli formatter s =
 
 module Size = struct
   let gb = int_of_float (1024. ** 3.)
-
   let mb = int_of_float (1024. ** 2.)
-
   let kb = 1024
 end
 
 let report_progess ?(first = false) ~cli len total_len =
   match cli.output, total_len with
-  | Channel "-", _ ->
-    ()
-  | Stdout, _ when Unix.isatty Unix.stdout ->
-    ()
+  | Channel "-", _ -> ()
+  | Stdout, _ when Unix.isatty Unix.stdout -> ()
   | (Stdout | Channel _), `Fixed total_len ->
     let total_bars = 40. in
     let pct_complete = Int64.(to_float (div (mul len 100L) total_len)) in
@@ -202,25 +189,19 @@ let report_progess ?(first = false) ~cli len total_len =
     let len = Int64.to_int len in
     let len, unit =
       match len with
-      | len when len >= Size.gb ->
-        float_of_int len /. float_of_int Size.gb, "G"
-      | len when len >= Size.mb ->
-        float_of_int len /. float_of_int Size.mb, "M"
-      | len when len >= Size.kb ->
-        float_of_int len /. float_of_int Size.kb, "k"
-      | _ ->
-        float_of_int len, "B"
+      | len when len >= Size.gb -> float_of_int len /. float_of_int Size.gb, "G"
+      | len when len >= Size.mb -> float_of_int len /. float_of_int Size.mb, "M"
+      | len when len >= Size.kb -> float_of_int len /. float_of_int Size.kb, "k"
+      | _ -> float_of_int len, "B"
     in
     Format.eprintf
       "%s Transferred:@;<0 3>@[<v 0>%.2f%s@]@\n%!"
-      (if not first then
-         Ansi.clear_line ^ Ansi.line_up ^ Ansi.clear_line ^ Ansi.line_up
-      else
-        Ansi.clear_line)
+      (if not first
+      then Ansi.clear_line ^ Ansi.line_up ^ Ansi.clear_line ^ Ansi.line_up
+      else Ansi.clear_line)
       len
       unit
-  | _ ->
-    ()
+  | _ -> ()
 
 let inflate_chunk zstream result_buffer chunk =
   let buf_size = 1024 in
@@ -234,10 +215,8 @@ let inflate_chunk zstream result_buffer chunk =
     | true, _ ->
       assert (used_in <= len);
       Zlib.inflate_end zstream
-    | false, true ->
-      inner ~off:(off + used_in) ~len:(len - used_in)
-    | false, false ->
-      ()
+    | false, true -> inner ~off:(off + used_in) ~len:(len - used_in)
+    | false, false -> ()
   in
   inner ~off:0 ~len:(String.length chunk)
 
@@ -258,8 +237,7 @@ let handle_response ~cli ({ Response.body; _ } as response) =
   let { head; compressed; include_; _ } = cli in
   let* channel, formatter =
     match cli.output with
-    | Stdout | Channel "-" ->
-      Lwt_result.return (Lwt_io.stdout, Lwt_fmt.stdout)
+    | Stdout | Channel "-" -> Lwt_result.return (Lwt_io.stdout, Lwt_fmt.stdout)
     | Channel filename ->
       Lwt.catch
         (fun () ->
@@ -275,14 +253,15 @@ let handle_response ~cli ({ Response.body; _ } as response) =
   in
   let open Lwt.Syntax in
   let* () =
-    if head || include_ then
+    if head || include_
+    then
       let* () = Lwt_fmt.fprintf formatter "%a" pp_response_headers response in
       Lwt_fmt.flush formatter
-    else
-      Lwt.return_unit
+    else Lwt.return_unit
   in
   let* result =
-    if head then (
+    if head
+    then (
       Lwt.async (fun () ->
           let open Lwt.Syntax in
           let+ _ = Body.drain body in
@@ -296,10 +275,8 @@ let handle_response ~cli ({ Response.body; _ } as response) =
          * back. *)
         let* response_body_str = Body.to_string body in
         (match Ezgzip.decompress response_body_str with
-        | Ok body_str ->
-          print_string ~cli formatter body_str
-        | Error _ ->
-          assert false)
+        | Ok body_str -> print_string ~cli formatter body_str
+        | Error _ -> assert false)
       | true, Some encoding when String.lowercase_ascii encoding = "deflate" ->
         (* We requested a compressed response, and we got a compressed response
          * back. *)
@@ -335,10 +312,8 @@ let handle_response ~cli ({ Response.body; _ } as response) =
   in
   let+ () =
     match cli.output with
-    | Stdout | Channel "-" ->
-      Lwt.return_unit
-    | Channel _ ->
-      Lwt_io.close channel
+    | Stdout | Channel "-" -> Lwt.return_unit
+    | Channel _ -> Lwt_io.close channel
   in
   result
 
@@ -348,16 +323,13 @@ let build_headers
   let headers = ("User-Agent", user_agent) :: headers in
   let headers =
     match referer with
-    | None ->
-      headers
-    | Some referer ->
-      ("Referer", referer) :: headers
+    | None -> headers
+    | Some referer -> ("Referer", referer) :: headers
   in
   let headers =
-    if compressed then
-      ("Accept-Encoding", "deflate, gzip") :: headers
-    else
-      headers
+    if compressed
+    then ("Accept-Encoding", "deflate, gzip") :: headers
+    else headers
   in
   match oauth2_bearer, user with
   | Some token, _ ->
@@ -369,8 +341,7 @@ let build_headers
   | None, Some user ->
     Logs.debug (fun m -> m "Server authorization using Basic with user %s" user);
     ("Authorization", "Basic " ^ Base64.encode_exn user) :: headers
-  | None, None ->
-    headers
+  | None, None -> headers
 
 let request ~cli ~config ~iobuf uri =
   let open Lwt.Syntax in
@@ -379,8 +350,7 @@ let request ~cli ~config ~iobuf uri =
   let uri_user = Uri.userinfo uri in
   let cli =
     match cli.user with
-    | None ->
-      { cli with user = uri_user }
+    | None -> { cli with user = uri_user }
     | Some _ ->
       (* `-u` overrides the URI userinfo *)
       cli
@@ -388,8 +358,7 @@ let request ~cli ~config ~iobuf uri =
   let headers = build_headers ~cli in
   let* body =
     match data with
-    | Some (Data s) ->
-      Lwt.return_some (Body.of_string s)
+    | Some (Data s) -> Lwt.return_some (Body.of_string s)
     | Some (File filename) ->
       let* channel =
         Lwt_io.open_file
@@ -402,8 +371,8 @@ let request ~cli ~config ~iobuf uri =
       let remaining = ref (Int64.to_int length) in
       let stream =
         Lwt_stream.from (fun () ->
-            if !remaining = 0 then
-              Lwt.return_none
+            if !remaining = 0
+            then Lwt.return_none
             else
               let* payload =
                 Lwt_io.read
@@ -422,14 +391,11 @@ let request ~cli ~config ~iobuf uri =
             (fun (nm, _) -> String.lowercase_ascii nm = "transfer-encoding")
             headers
         with
-        | Some (_, "chunked") ->
-          `Chunked
-        | _ ->
-          `Fixed length
+        | Some (_, "chunked") -> `Chunked
+        | _ -> `Fixed length
       in
       Lwt.return_some (Body.of_string_stream ~length:body_length stream)
-    | None ->
-      Lwt.return_none
+    | None -> Lwt.return_none
   in
   let open Lwt_result.Syntax in
   let* response = Client.request ~config ~meth ~headers ?body uri in
@@ -444,8 +410,7 @@ let rec request_many ~cli ~config urls =
        * I/O on that file, sized according to the configuration we're running
        * with. *)
       Bigstringaf.create config.Config.body_buffer_size
-    | _ ->
-      Bigstringaf.empty
+    | _ -> Bigstringaf.empty
   in
   let { default_proto; _ } = cli in
   match urls with
@@ -456,22 +421,17 @@ let rec request_many ~cli ~config urls =
     let uri = uri_of_string ~scheme:default_proto x in
     let* r = request ~cli ~config ~iobuf uri in
     (match r with
-    | Ok () ->
-      Lwt.return (`Ok ())
-    | Error e ->
-      Lwt.return (`Error (false, Error.to_string e)))
+    | Ok () -> Lwt.return (`Ok ())
+    | Error e -> Lwt.return (`Error (false, Error.to_string e)))
   | x :: xs ->
     let uri = uri_of_string ~scheme:default_proto x in
     let* _r = request ~cli ~config ~iobuf uri in
     request_many ~cli ~config xs
 
 let log_level_of_list ~silent = function
-  | [] ->
-    if silent then None else Some Logs.Warning
-  | [ _ ] ->
-    Some Info
-  | _ ->
-    Some Debug
+  | [] -> if silent then None else Some Logs.Warning
+  | [ _ ] -> Some Info
+  | _ -> Some Debug
 
 let piaf_config_of_cli
     { follow_redirects
@@ -519,13 +479,11 @@ let piaf_config_of_cli
 
 let main ({ log_level; urls; _ } as cli) =
   setup_log log_level;
-  if (not Ansi.dumb) && Ansi.isatty then
-    Fmt.set_style_renderer Lwt_fmt.(get_formatter stdout) `Ansi_tty;
+  if (not Ansi.dumb) && Ansi.isatty
+  then Fmt.set_style_renderer Lwt_fmt.(get_formatter stdout) `Ansi_tty;
   match piaf_config_of_cli cli with
-  | Error msg ->
-    `Error (false, msg)
-  | Ok config ->
-    Lwt_main.run (request_many ~cli ~config urls)
+  | Error msg -> `Error (false, msg)
+  | Ok config -> Lwt_main.run (request_many ~cli ~config urls)
 
 (* --resolve <host:port:address[,address]...> Resolve the host+port to this address
  * --retry <num>   Retry request if transient problems occur
@@ -600,8 +558,7 @@ module CLI = struct
     let header_conv =
       let parse header =
         match String.split_on_char ':' header with
-        | [] ->
-          Error (`Msg "Header can't be the empty string")
+        | [] -> Error (`Msg "Header can't be the empty string")
         | [ x ] ->
           Error
             (`Msg (Format.asprintf "Expecting `name: value` string, got: %s" x))
@@ -689,10 +646,8 @@ module CLI = struct
     let tls_conv =
       let parse s =
         match Versions.TLS.of_string s with
-        | Ok v ->
-          Ok v
-        | Error msg ->
-          Error (`Msg msg)
+        | Ok v -> Ok v
+        | Error msg -> Error (`Msg msg)
       in
       let print = Versions.TLS.pp_hum in
       Arg.conv ~docv:"" (parse, print)
@@ -792,23 +747,17 @@ module CLI = struct
     ; max_redirects
     ; data =
         (match data, upload_file with
-        | None, None ->
-          None
+        | None, None -> None
         | Some data, _ ->
           (* `-d` takes precedence over `-T` *)
           Some (Data data)
-        | None, Some filename ->
-          Some (File filename))
+        | None, Some filename -> Some (File filename))
     ; meth =
         (match head, request, data with
-        | true, None, None ->
-          `HEAD
-        | _, None, Some _ ->
-          `POST
-        | _, None, None ->
-          `GET
-        | _, Some meth, _ ->
-          meth)
+        | true, None, None -> `HEAD
+        | _, None, Some _ -> `POST
+        | _, None, None -> `GET
+        | _, Some meth, _ -> meth)
     ; log_level = log_level_of_list ~silent verbose
     ; urls
     ; default_proto
@@ -821,38 +770,27 @@ module CLI = struct
         | true, _, _ | false, false, false ->
           (* Default to the highest supported if no override specified. *)
           v2_0
-        | false, true, _ ->
-          v1_1
-        | false, false, true ->
-          v1_0)
+        | false, true, _ -> v1_1
+        | false, false, true -> v1_0)
     ; h2c_upgrade = use_http_2
     ; http2_prior_knowledge
     ; cacert
     ; capath
     ; clientcert =
         (match cert, key with
-        | Some cert, Some key ->
-          Some (Cert.Filepath cert, Cert.Filepath key)
-        | _ ->
-          None)
+        | Some cert, Some key -> Some (Cert.Filepath cert, Cert.Filepath key)
+        | _ -> None)
     ; min_tls_version =
         (* select the _maximum_ min version *)
         Versions.TLS.(
           match tlsv1_3, tlsv1_2, tlsv1_1, tlsv1_0, tlsv1, sslv3 with
-          | true, _, _, _, _, _ ->
-            TLSv1_3
-          | _, true, _, _, _, _ ->
-            TLSv1_2
-          | _, _, true, _, _, _ ->
-            TLSv1_1
-          | _, _, _, true, _, _ ->
-            TLSv1_0
-          | _, _, _, _, true, _ ->
-            TLSv1_0
-          | _, _, _, _, _, true ->
-            SSLv3
-          | _, _, _, _, _, _ ->
-            TLSv1_0)
+          | true, _, _, _, _, _ -> TLSv1_3
+          | _, true, _, _, _, _ -> TLSv1_2
+          | _, _, true, _, _, _ -> TLSv1_1
+          | _, _, _, true, _, _ -> TLSv1_0
+          | _, _, _, _, true, _ -> TLSv1_0
+          | _, _, _, _, _, true -> SSLv3
+          | _, _, _, _, _, _ -> TLSv1_0)
     ; max_tls_version
     ; insecure
     ; tcp_nodelay

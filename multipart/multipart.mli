@@ -62,7 +62,6 @@ val parse_content_type
   -> (Piaf_multipart_form.Content_type.t, [> `Msg of string ]) result
 
 val result_headers : t -> (string * string) list
-
 val result_fields : t -> (string * Piaf_multipart_form.Header.t) list
 
 val content_disposition

@@ -34,7 +34,5 @@ type t =
   | Certpem of string
 
 let pp ppf = function
-  | Filepath s ->
-    Format.pp_print_string ppf (Printf.sprintf "Filepath %s" s)
-  | Certpem s ->
-    Format.pp_print_string ppf (Printf.sprintf "Certpem %s" s)
+  | Filepath s -> Format.pp_print_string ppf (Printf.sprintf "Filepath %s" s)
+  | Certpem s -> Format.pp_print_string ppf (Printf.sprintf "Certpem %s" s)

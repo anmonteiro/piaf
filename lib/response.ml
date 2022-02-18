@@ -80,8 +80,8 @@ let of_file ?version ?(headers = Headers.empty) path =
   let remaining = ref (Int64.to_int length) in
   let stream =
     Lwt_stream.from (fun () ->
-        if !remaining = 0 then
-          Lwt.return_none
+        if !remaining = 0
+        then Lwt.return_none
         else
           let* payload =
             Lwt_io.read
@@ -127,10 +127,8 @@ let to_http1 { status; headers; version; _ } =
   in
   let status =
     match status with
-    | #Httpaf.Status.t as http1_status ->
-      http1_status
-    | `Misdirected_request ->
-      `Code (H2.Status.to_code status)
+    | #Httpaf.Status.t as http1_status -> http1_status
+    | `Misdirected_request -> `Code (H2.Status.to_code status)
   in
   Httpaf.Response.create ~version ~headers:http1_headers status
 
@@ -153,8 +151,7 @@ let pp_hum formatter { headers; status; version; _ } =
     match status with
     | #Status.standard as st ->
       Format.asprintf " %s" (Status.default_reason_phrase st)
-    | `Code _ ->
-      ""
+    | `Code _ -> ""
   in
   Format.fprintf
     formatter

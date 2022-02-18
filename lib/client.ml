@@ -55,16 +55,14 @@ let create_http_connection ~config fd =
       , config.max_http_version
       , config.h2c_upgrade )
     with
-    | true, _, _ ->
-      (module Http2.HTTP : Http_intf.HTTP), Versions.HTTP.v2_0
+    | true, _, _ -> (module Http2.HTTP : Http_intf.HTTP), Versions.HTTP.v2_0
     | false, { Versions.HTTP.major = 2; _ }, true ->
       (module Http1.HTTP : Http_intf.HTTP), Versions.HTTP.v1_1
     | false, _, _ ->
       let version =
-        if Versions.HTTP.(compare config.max_http_version v2_0) >= 0 then
-          Versions.HTTP.v1_1
-        else
-          config.max_http_version
+        if Versions.HTTP.(compare config.max_http_version v2_0) >= 0
+        then Versions.HTTP.v1_1
+        else config.max_http_version
       in
       (module Http1.HTTP : Http_intf.HTTP), version
   in
@@ -79,8 +77,7 @@ let create_https_connection ~config ~conn_info fd =
     Openssl.connect ~config ~hostname:host ~alpn_protocols fd
   in
   match Lwt_ssl.ssl_socket ssl_client with
-  | None ->
-    failwith "handshake not established?"
+  | None -> failwith "handshake not established?"
   | Some ssl_socket ->
     let (module Https), version =
       match Ssl.get_negotiated_alpn_protocol ssl_socket with
@@ -98,14 +95,13 @@ let create_https_connection ~config ~conn_info fd =
          * and the remote doesn't speak ALPN. Otherwise, use the maximal HTTP/1
          * version configured. *)
         let impl, version =
-          if config.http2_prior_knowledge then
-            (module Http2.HTTPS : Http_intf.HTTPS), Versions.HTTP.v2_0
+          if config.http2_prior_knowledge
+          then (module Http2.HTTPS : Http_intf.HTTPS), Versions.HTTP.v2_0
           else
             ( (module Http1.HTTPS : Http_intf.HTTPS)
-            , if Versions.HTTP.(compare config.max_http_version v2_0) >= 0 then
-                Versions.HTTP.v1_1
-              else
-                config.max_http_version )
+            , if Versions.HTTP.(compare config.max_http_version v2_0) >= 0
+              then Versions.HTTP.v1_1
+              else config.max_http_version )
         in
         Log.info (fun m -> m "Defaulting to %a" Versions.HTTP.pp_hum version);
         impl, version
@@ -167,20 +163,18 @@ let make_impl ~config ~conn_info fd =
   let**! () = connect ~config ~conn_info fd in
   Log.info (fun m -> m "Connected to %a" Connection_info.pp_hum conn_info);
   match conn_info.scheme with
-  | Scheme.HTTP ->
-    create_http_connection ~config fd
-  | HTTPS ->
-    create_https_connection ~config ~conn_info fd
+  | Scheme.HTTP -> create_http_connection ~config fd
+  | HTTPS -> create_https_connection ~config ~conn_info fd
 
 let open_connection ~config conn_info =
   let fd = Lwt_unix.socket Unix.PF_INET Unix.SOCK_STREAM 0 in
-  if config.Config.tcp_nodelay then (
+  if config.Config.tcp_nodelay
+  then (
     Lwt_unix.setsockopt fd Lwt_unix.TCP_NODELAY true;
     Logs.debug (fun m -> m "TCP_NODELAY set"));
   let* impl = make_impl ~config ~conn_info fd in
   match impl with
-  | Ok _ ->
-    Lwt.return impl
+  | Ok _ -> Lwt.return impl
   | Error _ ->
     let+ () = close_connection ~conn_info fd in
     impl
@@ -227,8 +221,7 @@ let reuse_or_set_up_new_connection
     new_uri
   =
   match Scheme.of_uri new_uri with
-  | Error _ as e ->
-    Lwt.return e
+  | Error _ as e -> Lwt.return e
   | Ok new_scheme ->
     let new_conn_info =
       { conn_info with
@@ -238,7 +231,8 @@ let reuse_or_set_up_new_connection
       ; uri = new_uri
       }
     in
-    if (not t.persistent) || Http_impl.is_closed (module Http) handle then (
+    if (not t.persistent) || Http_impl.is_closed (module Http) handle
+    then (
       (* No way to avoid establishing a new connection if the previous one
        * wasn't persistent or the connection is closed. *)
       Lwt.ignore_result (shutdown t);
@@ -248,7 +242,8 @@ let reuse_or_set_up_new_connection
       let new_conn_info = { new_conn_info with addresses = new_addresses } in
       let++! () = change_connection t new_conn_info in
       false)
-    else if Connection_info.equal_without_resolving conn_info new_conn_info then (
+    else if Connection_info.equal_without_resolving conn_info new_conn_info
+    then (
       (* If we're redirecting within the same host / port / scheme, no need
        * to re-establish a new connection. *)
       Log.debug (fun m ->
@@ -264,13 +259,15 @@ let reuse_or_set_up_new_connection
       let new_conn_info = { new_conn_info with addresses = new_addresses } in
       (* Really avoiding having to establish a new connection here, if the new
        * host resolves to the same address and the port matches *)
-      if Connection_info.equal conn_info new_conn_info then (
+      if Connection_info.equal conn_info new_conn_info
+      then (
         Log.debug (fun m ->
             m "Reusing the same connection as the remote address didn't change");
         (* Even if we reused the connection, the URI could've changed. *)
         t.conn_info <- new_conn_info;
         Lwt_result.return true)
-      else (* No way to avoid establishing a new connection. *)
+      else
+        (* No way to avoid establishing a new connection. *)
         let++! () = change_connection t new_conn_info in
         false
 
@@ -321,10 +318,8 @@ let rec return_response
       in
       t.conn <- h2_conn;
       return_response t request_info response
-    | _ ->
-      Lwt_result.return response)
-  | _ ->
-    Lwt_result.return response
+    | _ -> Lwt_result.return response)
+  | _ -> Lwt_result.return response
 
 let is_h2c_upgrade ~config ~version ~scheme =
   match
@@ -336,8 +331,7 @@ let is_h2c_upgrade ~config ~version ~scheme =
   with
   | false, cur_version, max_version, true, Scheme.HTTP ->
     Versions.HTTP.(equal max_version v2_0 && equal cur_version v1_1)
-  | _ ->
-    false
+  | _ -> false
 
 let make_request_info
     { conn = Connection.Conn { version; _ }; conn_info; config; _ }
@@ -356,13 +350,13 @@ let make_request_info
      * reproduce them e.g. when following redirects. *)
     let headers =
       let open Headers in
-      if is_h2c_upgrade then
+      if is_h2c_upgrade
+      then
         (Well_known.connection, "Upgrade, HTTP2-Settings")
         :: (Well_known.upgrade, "h2c")
         :: ("HTTP2-Settings", Stdlib.Result.get_ok h2_settings)
         :: headers
-      else
-        headers
+      else headers
     in
     Headers.canonicalize_headers
       ~version
@@ -390,8 +384,7 @@ let rec send_request_and_handle_response
     (Http_impl.send_request conn ~body request
       :> (Response.t, Error.t) Lwt_result.t)
   in
-  if t.persistent then
-    t.persistent <- Response.persistent_connection response;
+  if t.persistent then t.persistent <- Response.persistent_connection response;
   (* TODO: 201 created can also return a Location header. Should we follow
    * those? *)
   match
@@ -419,8 +412,8 @@ let rec send_request_and_handle_response
      *
      * Otherwise, if we couldn't reuse the connection, drain the response body
      * and additionally shut down the old connection. *)
-    if did_reuse then
-      Lwt.ignore_result (Body.drain response.body)
+    if did_reuse
+    then Lwt.ignore_result (Body.drain response.body)
     else
       (* In this branch, don't bother waiting for the entire response body to
        * arrive, we're going to shut down the connection either way. Just hang
@@ -445,10 +438,8 @@ let rec send_request_and_handle_response
      *   is POST. *)
     let meth' =
       match meth, response.status with
-      | `POST, (`Found | `Moved_permanently) ->
-        `GET
-      | _ ->
-        meth
+      | `POST, (`Found | `Moved_permanently) -> `GET
+      | _ -> meth
     in
     let request_info' =
       make_request_info
@@ -480,8 +471,7 @@ let call t ~meth ?(headers = []) ?(body = Body.empty) target =
     if t.config.follow_redirects || Http_impl.is_closed (module Http) handle
     then
       (reuse_or_set_up_new_connection t t.uri :> (bool, Error.t) Lwt_result.t)
-    else
-      Lwt_result.return true
+    else Lwt_result.return true
   in
   let headers = t.config.default_headers @ headers in
   let request_info = make_request_info t ~meth ~headers ~body target in
@@ -494,11 +484,8 @@ let send t { Request.headers; body; meth; target; _ } =
   call t ~headers:(Headers.to_list headers) ~body ~meth target
 
 let head t ?headers target = call t ?headers ~meth:`HEAD target
-
 let get t ?headers target = call t ?headers ~meth:`GET target
-
 let post t ?headers ?body target = call t ?headers ?body ~meth:`POST target
-
 let put t ?headers ?body target = call t ?headers ?body ~meth:`PUT target
 
 let patch t ?headers ?body target =
@@ -510,7 +497,11 @@ module Oneshot = struct
   (* TODO(anmonteiro): if this is oneshot, why aren't we sending a
    * `Connection: * close` header? *)
   let call
-      ?(config = Config.default) ?(headers = []) ?(body = Body.empty) ~meth uri
+      ?(config = Config.default)
+      ?(headers = [])
+      ?(body = Body.empty)
+      ~meth
+      uri
     =
     let**! t = create ~config uri in
     let target = Uri.path_and_query t.uri in
@@ -525,20 +516,17 @@ module Oneshot = struct
         match response with
         | Ok { Response.body; _ } ->
           (match body.contents with
-          | `Empty _ | `String _ | `Bigstring _ ->
-            shutdown t
+          | `Empty _ | `String _ | `Bigstring _ -> shutdown t
           | `Stream stream ->
             let* () = Lwt_stream.closed stream in
             shutdown t)
-        | Error _ ->
-          Lwt.return_unit);
+        | Error _ -> Lwt.return_unit);
     response_result
 
   let request ?config ?headers ?body ~meth uri =
     call ?config ?headers ?body ~meth uri
 
   let head ?config ?headers uri = call ?config ~meth:`HEAD ?headers uri
-
   let get ?config ?headers uri = call ?config ~meth:`GET ?headers uri
 
   let post ?config ?headers ?body uri =

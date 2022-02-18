@@ -34,17 +34,14 @@ module Uri = struct
 
   let host_exn uri =
     match Uri.host uri with
-    | Some host ->
-      host
-    | None ->
-      raise (Failure "host_exn")
+    | Some host -> host
+    | None -> raise (Failure "host_exn")
 
   let parse_with_base_uri ~scheme ~uri location =
     let location_uri = Uri.of_string location in
     let new_uri =
       match Uri.host location_uri with
-      | Some _ ->
-        location_uri
+      | Some _ -> location_uri
       | None ->
         (* relative URI, replace the path and query on the old URI. *)
         Uri.resolve (Scheme.to_string scheme) uri location_uri
@@ -63,10 +60,8 @@ module Backtrace = struct
     in
     let format_backtrace_slot formatter slot =
       match slot with
-      | Some slot ->
-        Format.fprintf formatter "@[<h 0>%s@]" slot
-      | None ->
-        ()
+      | Some slot -> Format.fprintf formatter "@[<h 0>%s@]" slot
+      | None -> ()
     in
     (Format.pp_print_list
        ~pp_sep:(fun f () -> Format.fprintf f "@;")

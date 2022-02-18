@@ -47,10 +47,8 @@ module Multipart = struct
     Buffer.add_char ctbuf '\n';
     let ct = Multipart_form.Content_type.of_string (Buffer.contents ctbuf) in
     match ct with
-    | Ok { Multipart_form.Content_type.ty = `Multipart; _ } ->
-      true
-    | Ok _ | Error _ ->
-      false
+    | Ok { Multipart_form.Content_type.ty = `Multipart; _ } -> true
+    | Ok _ | Error _ -> false
 
   let stream ?(max_chunk_size = 0x100000) (request : Request.t) =
     (* TODO(anmonteiro): validate max content-length from a config, etc. *)

@@ -41,17 +41,11 @@ module Well_known = struct
   end
 
   let authorization = "authorization"
-
   let connection = "connection"
-
   let content_length = "content-length"
-
   let content_type = "content-type"
-
   let location = "location"
-
   let upgrade = "upgrade"
-
   let transfer_encoding = "transfer-encoding"
 end
 
@@ -62,12 +56,9 @@ let add_length_related_headers ~body_length headers =
   match body_length with
   | `Fixed n ->
     add_unless_exists headers Well_known.content_length (Int64.to_string n)
-  | `Chunked ->
-    add_unless_exists headers Well_known.transfer_encoding "chunked"
-  | `Close_delimited ->
-    add_unless_exists headers Well_known.connection "close"
-  | `Error _ | `Unknown ->
-    headers
+  | `Chunked -> add_unless_exists headers Well_known.transfer_encoding "chunked"
+  | `Close_delimited -> add_unless_exists headers Well_known.connection "close"
+  | `Error _ | `Unknown -> headers
 
 (* TODO: Add user-agent if not defined *)
 let canonicalize_headers ~body_length ~host ~version headers =
@@ -79,22 +70,16 @@ let canonicalize_headers ~body_length ~host ~version headers =
         :: List.map
              (fun (name, value) -> String.lowercase_ascii name, value)
              headers)
-    | { major = 1; _ } ->
-      add_unless_exists (of_list headers) "Host" host
-    | _ ->
-      failwith "unsupported version"
+    | { major = 1; _ } -> add_unless_exists (of_list headers) "Host" host
+    | _ -> failwith "unsupported version"
   in
   add_length_related_headers ~body_length headers
 
 let host t ~version =
   match version with
-  | { Versions.HTTP.major = 2; _ } ->
-    get t Well_known.HTTP2.host
-  | { major = 1; _ } ->
-    get t Well_known.HTTP1.host
-  | _ ->
-    None
+  | { Versions.HTTP.major = 2; _ } -> get t Well_known.HTTP2.host
+  | { major = 1; _ } -> get t Well_known.HTTP1.host
+  | _ -> None
 
 let of_http1 headers = of_rev_list (Httpaf.Headers.to_rev_list headers)
-
 let to_http1 headers = Httpaf.Headers.of_rev_list (to_rev_list headers)

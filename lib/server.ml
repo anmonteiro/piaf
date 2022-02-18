@@ -34,7 +34,6 @@ open Monads.Bindings
 let src = Logs.Src.create "piaf.server" ~doc:"Piaf Server module"
 
 module Log = (val Logs.src_log src : Logs.LOG)
-
 module Reqd = Httpaf.Reqd
 
 module Service = struct
@@ -77,8 +76,7 @@ let make_error_handler error_handler client_addr ?request error start_response =
     in
     let response_body = start_response (Headers.to_http1 headers) in
     match Body.contents body with
-    | `Empty _ ->
-      Writer.close response_body
+    | `Empty _ -> Writer.close response_body
     | `String s ->
       Writer.write_string response_body s;
       Writer.close response_body
@@ -101,7 +99,10 @@ let make_error_handler error_handler client_addr ?request error start_response =
       error_handler client_addr ?request ~respond error)
 
 let default_error_handler
-    _client_addr ?request:_ ~respond (_error : Httpaf.Server_connection.error)
+    _client_addr
+    ?request:_
+    ~respond
+    (_error : Httpaf.Server_connection.error)
   =
   respond ~headers:(Headers.of_list [ "connection", "close" ]) Body.empty;
   Lwt.return_unit
@@ -128,8 +129,7 @@ let request_handler handler client_addr reqd =
         match Reqd.error_code reqd with
         | Some error ->
           Body.embed_error_received body (Lwt.return (error :> Error.t))
-        | None ->
-          ())
+        | None -> ())
       (Reqd.request_body reqd)
   in
   let request = Request.of_http1 ~body:request_body request in
@@ -168,7 +168,8 @@ let request_handler handler client_addr reqd =
             let http1_response = Response.to_http1 response in
             (match Body.contents body with
             | `Empty upgrade_handler ->
-              if Body.Optional_handler.is_none upgrade_handler then
+              if Body.Optional_handler.is_none upgrade_handler
+              then
                 (* No upgrade *)
                 Reqd.respond_with_bigstring
                   reqd
@@ -179,8 +180,7 @@ let request_handler handler client_addr reqd =
                 assert (response.status = `Switching_protocols);
                 Reqd.respond_with_upgrade reqd http1_response.headers (fun () ->
                     Body.Optional_handler.call_if_some upgrade_handler upgrade))
-            | `String s ->
-              Reqd.respond_with_string reqd http1_response s
+            | `String s -> Reqd.respond_with_string reqd http1_response s
             | `Bigstring { IOVec.buffer; off; len } ->
               let bstr = Bigstringaf.sub ~off ~len buffer in
               Reqd.respond_with_bigstring reqd http1_response bstr

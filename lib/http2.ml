@@ -36,8 +36,7 @@ let make_error_handler real_handler type_ error =
     match error with
     | `Invalid_response_body_length { H2.Response.status; headers; _ } ->
       `Invalid_response_body_length (status, headers)
-    | (`Exn _ | `Malformed_response _ | `Protocol_error _) as other ->
-      other
+    | (`Exn _ | `Malformed_response _ | `Protocol_error _) as other -> other
   in
   real_handler ~kind:type_ error
 

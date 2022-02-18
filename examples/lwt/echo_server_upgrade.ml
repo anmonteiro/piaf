@@ -12,12 +12,9 @@ let connection_handler =
           ~on_eof:ignore
           ~on_read:(fun bs ~off ~len ->
             Websocketaf.Wsd.schedule wsd bs ~kind:opcode ~off ~len)
-      | `Connection_close ->
-        Websocketaf.Wsd.close wsd
-      | `Ping ->
-        Websocketaf.Wsd.send_pong wsd
-      | `Pong | `Other _ ->
-        ()
+      | `Connection_close -> Websocketaf.Wsd.close wsd
+      | `Ping -> Websocketaf.Wsd.send_pong wsd
+      | `Pong | `Other _ -> ()
     in
     let eof () =
       Format.eprintf "EOF\n%!";

@@ -37,29 +37,24 @@ module IOVec : sig
     }
 
   val make : 'a -> off:int -> len:int -> 'a t
-
   val length : _ t -> int
-
   val lengthv : _ t list -> int
-
   val shift : 'a t -> int -> 'a t
-
   val shiftv : 'a t list -> int -> 'a t list
-
   val pp_hum : Format.formatter -> _ t -> unit [@@ocaml.toplevel_printer]
 end
 
 module Method : module type of Method
 
 module Headers : sig
-  (** The type of a group of header fields. *)
   type t
+  (** The type of a group of header fields. *)
 
-  (** The type of a lowercase header name. *)
   type name = string
+  (** The type of a lowercase header name. *)
 
-  (** The type of a header value. *)
   type value = string
+  (** The type of a header value. *)
 
   (** {3 Constructor} *)
 
@@ -170,13 +165,11 @@ module Headers : sig
   (** {3 Iteration} *)
 
   val iter : f:(name -> value -> unit) -> t -> unit
-
   val fold : f:(name -> value -> 'a -> 'a) -> init:'a -> t -> 'a
 
   (** {3 Utilities} *)
 
   val to_string : t -> string
-
   val pp_hum : Format.formatter -> t -> unit
 
   module Well_known : sig
@@ -189,17 +182,11 @@ module Headers : sig
     end
 
     val authorization : string
-
     val connection : string
-
     val content_length : string
-
     val content_type : string
-
     val location : string
-
     val upgrade : string
-
     val transfer_encoding : string
   end
 end
@@ -210,9 +197,7 @@ module Scheme : sig
     | HTTPS
 
   val of_uri : Uri.t -> (t, [ `Msg of string ]) result
-
   val to_string : t -> string
-
   val pp_hum : Format.formatter -> t -> unit [@@ocaml.toplevel_printer]
 end
 
@@ -225,9 +210,7 @@ module Versions : sig
     end
 
     val v1_0 : t
-
     val v1_1 : t
-
     val v2_0 : t
   end
 
@@ -241,9 +224,7 @@ module Versions : sig
       | TLSv1_3
 
     val compare : t -> t -> int
-
     val of_string : string -> (t, string) result
-
     val pp_hum : Format.formatter -> t -> unit [@@ocaml.toplevel_printer]
   end
 
@@ -254,11 +235,8 @@ module Versions : sig
       | HTTP_2
 
     val of_version : HTTP.t -> t option
-
     val to_version : t -> HTTP.t
-
     val of_string : string -> t option
-
     val to_string : t -> string
   end
 end
@@ -340,7 +318,6 @@ module Error : sig
     ]
 
   val to_string : t -> string
-
   val pp_hum : Format.formatter -> t -> unit [@@ocaml.toplevel_printer]
 end
 
@@ -356,25 +333,15 @@ module Body : sig
     ]
 
   val length : t -> length
-
   val empty : t
-
   val of_stream : ?length:length -> Bigstringaf.t IOVec.t Lwt_stream.t -> t
-
   val of_string_stream : ?length:length -> string Lwt_stream.t -> t
-
   val of_string : string -> t
-
   val of_bigstring : ?off:int -> ?len:int -> Bigstringaf.t -> t
-
   val to_string : t -> (string, Error.t) Lwt_result.t
-
   val drain : t -> (unit, Error.t) Lwt_result.t
-
   val is_closed : t -> bool
-
   val closed : t -> (unit, Error.t) Lwt_result.t
-
   val when_closed : t -> ((unit, Error.t) result -> unit) -> unit
 
   (** {3 Traversal} *)
@@ -483,9 +450,7 @@ module Request : sig
     -> t
 
   val uri : t -> Uri.t
-
   val persistent_connection : t -> bool
-
   val pp_hum : Format.formatter -> t -> unit [@@ocaml.toplevel_printer]
 end
 
@@ -545,7 +510,6 @@ module Response : sig
     -> (t, Error.t) Lwt_result.t
 
   val persistent_connection : t -> bool
-
   val pp_hum : Format.formatter -> t -> unit [@@ocaml.toplevel_printer]
 end
 
@@ -773,29 +737,19 @@ module Cookies : sig
       -> t
 
     val with_expiration : t -> expiration -> t
-
     val with_path : t -> string -> t
-
     val with_domain : t -> string -> t
-
     val with_secure : t -> bool -> t
-
     val with_http_only : t -> bool -> t
-
     val with_same_site : t -> same_site -> t
-
     val serialize : t -> cookie
-
     val parse : Headers.t -> (string * t) list
-
     val key : t -> string
-
     val value : t -> string
   end
 
   module Cookie : sig
     val parse : Headers.t -> (string * string) list
-
     val serialize : (string * string) list -> cookie
   end
 end

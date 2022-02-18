@@ -33,11 +33,8 @@ type error_handler = kind:Error.kind -> Error.client -> unit
 
 module type Client = sig
   type socket
-
   type runtime
-
   type t
-
   type write_body
 
   val create_connection
@@ -56,14 +53,12 @@ module type Client = sig
     -> write_body
 
   val shutdown : t -> unit Lwt.t
-
   val is_closed : t -> bool
 end
 
 (* Common signature for sharing HTTP/1.X / HTTP/2 implementations. *)
 module type HTTPCommon = sig
   module Body : Body.BODY
-
   module Client : Client with type write_body := Body.Writer.t
 end
 
