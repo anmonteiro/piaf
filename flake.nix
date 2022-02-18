@@ -13,6 +13,6 @@
       rec {
         packages = pkgs.callPackage ./nix { inherit pkgs; };
         defaultPackage = packages.native.piaf;
-        devShell = import ./shell.nix { inherit pkgs; };
+        devShell = pkgs.callPackage ./shell.nix { };
       });
 }
