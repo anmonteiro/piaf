@@ -3,21 +3,16 @@ open Piaf
 
 let setup_log ?style_renderer level =
   let pp_header src ppf (l, h) =
-    if l = Logs.App then
-      Format.fprintf ppf "%a" Logs_fmt.pp_header (l, h)
+    if l = Logs.App
+    then Format.fprintf ppf "%a" Logs_fmt.pp_header (l, h)
     else
       let x =
         match Array.length Sys.argv with
-        | 0 ->
-          Filename.basename Sys.executable_name
-        | _n ->
-          Filename.basename Sys.argv.(0)
+        | 0 -> Filename.basename Sys.executable_name
+        | _n -> Filename.basename Sys.argv.(0)
       in
       let x =
-        if Logs.Src.equal src Logs.default then
-          x
-        else
-          Logs.Src.name src
+        if Logs.Src.equal src Logs.default then x else Logs.Src.name src
       in
       Format.fprintf ppf "%s: %a " x Logs_fmt.pp_header (l, h)
   in
@@ -36,11 +31,9 @@ let set_interval s f destroy =
   let rec set_interval_loop s f n =
     let timeout =
       Lwt_timeout.create s (fun () ->
-          if n > 0 then (
-            if f () then
-              set_interval_loop s f (n - 1))
-          else
-            destroy ())
+          if n > 0
+          then (if f () then set_interval_loop s f (n - 1))
+          else destroy ())
     in
     Lwt_timeout.start timeout
   in
@@ -73,8 +66,7 @@ let request_handler ({ request; _ } : Unix.sockaddr Server.ctx) =
     sse_response push;
     let response = Response.of_string_stream ~body `OK in
     Lwt.return response
-  | _ ->
-    assert false
+  | _ -> assert false
 
 let main port =
   let listen_address = Unix.(ADDR_INET (inet_addr_loopback, port)) in

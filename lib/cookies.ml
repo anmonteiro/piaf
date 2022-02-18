@@ -56,15 +56,10 @@ module Set_cookie = struct
     { cookie; expiration; domain; path; secure; http_only; same_site }
 
   let with_expiration t expiration = { t with expiration }
-
   let with_path t path = { t with path = Some path }
-
   let with_domain t domain = { t with domain = Some domain }
-
   let with_secure t secure = { t with secure }
-
   let with_http_only t http_only = { t with http_only }
-
   let with_same_site t same_site = { t with same_site = Some same_site }
 
   let serialize c =
@@ -78,25 +73,19 @@ module Set_cookie = struct
     in
     let attrs =
       match c.expiration with
-      | `Session ->
-        attrs
-      | `Max_age age ->
-        ("Max-Age=" ^ Int64.to_string age) :: attrs
+      | `Session -> attrs
+      | `Max_age age -> ("Max-Age=" ^ Int64.to_string age) :: attrs
     in
     let attrs =
       match c.same_site with
-      | None ->
-        attrs
+      | None -> attrs
       | Some same_site ->
         ("SameSite="
         ^
         match same_site with
-        | `Lax ->
-          "Lax"
-        | `None ->
-          "None"
-        | `Strict ->
-          "Strict")
+        | `Lax -> "Lax"
+        | `None -> "None"
+        | `Strict -> "Strict")
         :: attrs
     in
     let n, c = c.cookie in
@@ -109,10 +98,8 @@ module Set_cookie = struct
       List.map
         (fun attr ->
           match Stringext.split ~on:'=' attr with
-          | [] ->
-            "", ""
-          | n :: v ->
-            n, String.concat "=" v)
+          | [] -> "", ""
+          | n :: v -> n, String.concat "=" v)
         attrs
     in
     try
@@ -125,53 +112,40 @@ module Set_cookie = struct
         try
           let v = List.assoc "max-age" attrs in
           match Int64.of_string_opt v with
-          | Some v ->
-            `Max_age v
-          | None ->
-            `Session
+          | Some v -> `Max_age v
+          | None -> `Session
         with
-        | Not_found ->
-          `Session
+        | Not_found -> `Session
       in
       let path =
         try
           let v = List.assoc "path" attrs in
-          if v = "" || v.[0] <> '/' then
-            raise Not_found
-          else
-            Some v
+          if v = "" || v.[0] <> '/' then raise Not_found else Some v
         with
-        | Not_found ->
-          None
+        | Not_found -> None
       in
       let domain =
         try
           let v = List.assoc "domain" attrs in
-          if v = "" then
-            raise Not_found
+          if v = ""
+          then raise Not_found
           else
             Some
               (String.lowercase_ascii
                  (if v.[0] = '.' then Stringext.string_after v 1 else v))
         with
-        | Not_found ->
-          None
+        | Not_found -> None
       in
       let same_site =
         try
           let v = List.assoc "samesite" attrs in
           match String.lowercase_ascii v with
-          | "lax" ->
-            Some `Lax
-          | "strict" ->
-            Some `Strict
-          | "none" ->
-            Some `None
-          | _ ->
-            None
+          | "lax" -> Some `Lax
+          | "strict" -> Some `Strict
+          | "none" -> Some `None
+          | _ -> None
         with
-        | Not_found ->
-          None
+        | Not_found -> None
       in
       (* TODO: trim wsp *)
       ( fst cookie
@@ -185,15 +159,13 @@ module Set_cookie = struct
         } )
       :: alist
     with
-    | Failure _ ->
-      alist
+    | Failure _ -> alist
 
   (* TODO: check dupes+order *)
   let parse headers =
     List.fold_left parse [] (Headers.get_multi headers "set-cookie")
 
   let key { cookie = k, _; _ } = k
-
   let value { cookie = _, v; _ } = v
 end
 
@@ -220,12 +192,9 @@ module Cookie = struct
         in
         let split_pair nvp =
           match Stringext.split ~on:'=' nvp ~max:2 with
-          | [] ->
-            "", ""
-          | [ n ] ->
-            n, ""
-          | n :: v :: _ ->
-            n, v
+          | [] -> "", ""
+          | [ n ] -> n, ""
+          | n :: v :: _ -> n, v
         in
         List.map split_pair cookies @ acc)
       []

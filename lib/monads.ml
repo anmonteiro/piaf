@@ -32,7 +32,6 @@ module Option = struct
   include Option
 
   let ( let+ ) option f = Option.map f option
-
   let ( let* ) = Option.bind
 
   let ( and* ) o1 o2 =
@@ -43,15 +42,12 @@ module Result = struct
   include Result
 
   let ( let+ ) result f = map f result
-
   let ( let* ) = bind
 
   let ( and* ) r1 r2 =
     match r1, r2 with
-    | Ok x, Ok y ->
-      Ok (x, y)
-    | Ok _, Error e | Error e, Ok _ | Error e, Error _ ->
-      Error e
+    | Ok x, Ok y -> Ok (x, y)
+    | Ok _, Error e | Error e, Ok _ | Error e, Error _ -> Error e
 end
 
 module Lwt_result = struct
@@ -59,7 +55,6 @@ module Lwt_result = struct
 
   module Syntax = struct
     let ( let+ ) x f = map f x
-
     let ( let* ) = bind
   end
 end
@@ -73,9 +68,7 @@ module Bindings = struct
   open Option
 
   let ( let*? ) = ( let* )
-
   let ( let+? ) = ( let+ )
-
   let ( and*? ) = ( and* )
 
   (* Result *)
@@ -83,17 +76,13 @@ module Bindings = struct
   open Result
 
   let ( let*! ) = ( let* )
-
   let ( let+! ) = ( let+ )
-
   let ( and*! ) = ( and* )
 
   (* Lwt_result *)
   open Lwt_result.Syntax
 
   let ( let**! ) = ( let* )
-
   let ( let++! ) = ( let+ )
-
   let ( and**! ) = ( and* )
 end

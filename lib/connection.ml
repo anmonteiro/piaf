@@ -82,10 +82,8 @@ module Connection_info = struct
               String.equal
                 (Unix.string_of_inet_addr addr1)
                 (Unix.string_of_inet_addr addr2)
-            | ADDR_UNIX addr1, ADDR_UNIX addr2 ->
-              String.equal addr1 addr2
-            | _ ->
-              false)
+            | ADDR_UNIX addr1, ADDR_UNIX addr2 -> String.equal addr1 addr2
+            | _ -> false)
           c2.addresses)
       c1.addresses
 
@@ -99,13 +97,10 @@ module Connection_info = struct
   let infer_port ~scheme uri =
     match Uri.port uri, scheme with
     (* if a port is given, use it. *)
-    | Some port, _ ->
-      port
+    | Some port, _ -> port
     (* Otherwise, infer from the scheme. *)
-    | None, Scheme.HTTPS ->
-      443
-    | None, HTTP ->
-      80
+    | None, Scheme.HTTPS -> 443
+    | None, HTTP -> 80
 
   let of_uri uri =
     let uri = Uri.canonicalize uri in
@@ -117,14 +112,12 @@ module Connection_info = struct
     | None, _ ->
       Lwt_result.fail
         (`Msg (Format.asprintf "Missing host part for: %a" Uri.pp_hum uri))
-    | _, (Error _ as error) ->
-      Lwt.return error
+    | _, (Error _ as error) -> Lwt.return error
 
   let pp_address fmt = function
     | Unix.ADDR_INET (addr, port) ->
       Format.fprintf fmt "%s:%d" (Unix.string_of_inet_addr addr) port
-    | ADDR_UNIX addr ->
-      Format.fprintf fmt "%s" addr
+    | ADDR_UNIX addr -> Format.fprintf fmt "%s" addr
 
   let pp_hum fmt { addresses; host; _ } =
     let address = List.hd addresses in

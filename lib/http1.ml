@@ -68,8 +68,7 @@ module MakeHTTP1
       let response_handler response body =
         let request_method =
           match req.Request.meth with
-          | #Method.standard as meth ->
-            meth
+          | #Method.standard as meth -> meth
           | `Other _ ->
             (* XXX(anmonteiro): for methods defined outside of RFC7231, or
              * custom methods, just assume `GET`.
@@ -102,8 +101,7 @@ module MakeHTTP1
             ->
             `Invalid_response_body_length
               ((status :> H2.Status.t), Headers.of_http1 headers)
-          | (`Exn _ | `Malformed_response _) as other ->
-            other
+          | (`Exn _ | `Malformed_response _) as other -> other
         in
         (* All HTTP/1.1 errors cause the connection to close. *)
         error_handler ~kind:`Connection error

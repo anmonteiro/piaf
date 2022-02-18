@@ -33,21 +33,16 @@ let suite =
 let () =
   let setup_log ?style_renderer level =
     let pp_header src ppf (l, h) =
-      if l = Logs.App then
-        Format.fprintf ppf "%a" Logs_fmt.pp_header (l, h)
+      if l = Logs.App
+      then Format.fprintf ppf "%a" Logs_fmt.pp_header (l, h)
       else
         let x =
           match Array.length Sys.argv with
-          | 0 ->
-            Filename.basename Sys.executable_name
-          | _n ->
-            Filename.basename Sys.argv.(0)
+          | 0 -> Filename.basename Sys.executable_name
+          | _n -> Filename.basename Sys.argv.(0)
         in
         let x =
-          if Logs.Src.equal src Logs.default then
-            x
-          else
-            Logs.Src.name src
+          if Logs.Src.equal src Logs.default then x else Logs.Src.name src
         in
         Format.fprintf ppf "%s: %a " x Logs_fmt.pp_header (l, h)
     in

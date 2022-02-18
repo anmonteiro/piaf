@@ -32,5 +32,4 @@ let test_set_cookie () =
     (parse_one example)
 
 let suite = [ "set cookie", `Quick, test_set_cookie ]
-
 let () = Alcotest.run "cookie unit tests" [ "cookies", suite ]

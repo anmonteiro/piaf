@@ -30,8 +30,7 @@ type t =
   ]
 
 let to_string = function
-  | `Exn exn ->
-    Printexc.to_string exn
+  | `Exn exn -> Printexc.to_string exn
   | `Invalid_response_body_length (status, headers) ->
     Format.asprintf
       "Invalid Response body length. Status: %a, Headers: %a"
@@ -39,8 +38,7 @@ let to_string = function
       status
       Headers.pp_hum
       headers
-  | `Malformed_response msg ->
-    Format.asprintf "Malformed Response: %s" msg
+  | `Malformed_response msg -> Format.asprintf "Malformed Response: %s" msg
   | `Protocol_error (code, msg) ->
     Format.asprintf
       "Protocol Error (%a)%s%s"
@@ -48,15 +46,10 @@ let to_string = function
       code
       (if msg = "" then "" else ": ")
       msg
-  | `Connect_error msg ->
-    Format.asprintf "Connect Error: %s" msg
-  | `Bad_gateway ->
-    "Bad Gateway"
-  | `Bad_request ->
-    "Bad Request"
-  | `Internal_server_error ->
-    "Internal Server Error"
-  | `Msg string ->
-    string
+  | `Connect_error msg -> Format.asprintf "Connect Error: %s" msg
+  | `Bad_gateway -> "Bad Gateway"
+  | `Bad_request -> "Bad Request"
+  | `Internal_server_error -> "Internal Server Error"
+  | `Msg string -> string
 
 let pp_hum formatter t = Format.fprintf formatter "%s" (to_string t)

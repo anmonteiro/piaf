@@ -39,13 +39,9 @@ module Optional_handler : sig
   type t
 
   val none : t
-
   val some : ((Gluten.impl -> unit) -> unit) -> t
-
   val is_none : t -> bool
-
   val is_some : t -> bool
-
   val call_if_some : t -> (Gluten.impl -> unit) -> unit
 end = struct
   type t = (Gluten.impl -> unit) -> unit
@@ -53,16 +49,15 @@ end = struct
   let none = Sys.opaque_identity (fun _ -> ())
 
   let some f =
-    if f == none then
+    if f == none
+    then
       failwith
         "Optional_handler.some: the argument to the function can't be \
          represented as a value";
     f
 
   let is_none t = t == none
-
   let is_some t = not (is_none t)
-
   let call_if_some t = t
 end
 
@@ -100,11 +95,8 @@ let create ~length contents =
   }
 
 let length { length; _ } = length
-
 let contents { contents; _ } = contents
-
 let empty = create ~length:(`Fixed 0L) (`Empty Optional_handler.none)
-
 let of_stream ?(length = `Chunked) stream = create ~length (`Stream stream)
 
 let of_string_stream ?(length = `Chunked) stream =
@@ -131,40 +123,32 @@ let of_bigstring ?(off = 0) ?len bstr =
 let or_error t ~stream v =
   let+ () = Lwt_stream.closed stream in
   match Lwt.state t.error_received with
-  | Lwt.Return error ->
-    Error error
-  | Lwt.Fail _ | Lwt.Sleep ->
-    Ok v
+  | Lwt.Return error -> Error error
+  | Lwt.Fail _ | Lwt.Sleep -> Ok v
 
 let to_stream ({ contents; _ } as t) =
   let stream =
     match contents with
-    | `Empty _ ->
-      Lwt_stream.of_list []
+    | `Empty _ -> Lwt_stream.of_list []
     | `String s ->
       let len = String.length s in
       Lwt_stream.of_list
         [ IOVec.make (Bigstringaf.of_string ~off:0 ~len s) ~off:0 ~len ]
-    | `Bigstring iovec ->
-      Lwt_stream.of_list [ iovec ]
-    | `Stream stream ->
-      stream
+    | `Bigstring iovec -> Lwt_stream.of_list [ iovec ]
+    | `Stream stream -> stream
   in
   stream, or_error ~stream t ()
 
 let to_string ({ contents; length; _ } as t) =
   match contents with
-  | `Empty _ ->
-    Lwt_result.return ""
-  | `String s ->
-    Lwt_result.return s
+  | `Empty _ -> Lwt_result.return ""
+  | `String s -> Lwt_result.return s
   | `Bigstring { IOVec.buffer; off; len } ->
     Lwt_result.return (Bigstringaf.substring ~off ~len buffer)
   | `Stream stream ->
     let len =
       match length with
-      | `Fixed n ->
-        Int64.to_int n
+      | `Fixed n -> Int64.to_int n
       | _ ->
         (* TODO: use some config? *)
         0x100
@@ -183,10 +167,8 @@ let to_string ({ contents; length; _ } as t) =
 let to_string_stream ({ contents; _ } as t) =
   let stream =
     match contents with
-    | `Empty _ ->
-      Lwt_stream.of_list []
-    | `String s ->
-      Lwt_stream.of_list [ s ]
+    | `Empty _ -> Lwt_stream.of_list []
+    | `String s -> Lwt_stream.of_list [ s ]
     | `Bigstring { IOVec.buffer; off; len } ->
       Lwt_stream.of_list [ Bigstringaf.substring ~off ~len buffer ]
     | `Stream stream ->
@@ -199,32 +181,25 @@ let to_string_stream ({ contents; _ } as t) =
 
 let drain ({ contents; _ } as t) =
   match contents with
-  | `Empty _ | `String _ | `Bigstring _ ->
-    Lwt_result.return ()
+  | `Empty _ | `String _ | `Bigstring _ -> Lwt_result.return ()
   | `Stream stream ->
     let* () = Lwt_stream.junk_while (fun _ -> true) stream in
     or_error t ~stream ()
 
 let drain_available { contents; _ } =
   match contents with
-  | `Empty _ | `String _ | `Bigstring _ ->
-    Lwt.return_unit
-  | `Stream stream ->
-    Lwt_stream.junk_old stream
+  | `Empty _ | `String _ | `Bigstring _ -> Lwt.return_unit
+  | `Stream stream -> Lwt_stream.junk_old stream
 
 let is_closed t =
   match t.contents with
-  | `Empty _ | `String _ | `Bigstring _ ->
-    true
-  | `Stream stream ->
-    Lwt_stream.is_closed stream
+  | `Empty _ | `String _ | `Bigstring _ -> true
+  | `Stream stream -> Lwt_stream.is_closed stream
 
 let closed t =
   match t.contents with
-  | `Empty _ | `String _ | `Bigstring _ ->
-    Lwt_result.return ()
-  | `Stream stream ->
-    or_error t ~stream ()
+  | `Empty _ | `String _ | `Bigstring _ -> Lwt_result.return ()
+  | `Stream stream -> or_error t ~stream ()
 
 let when_closed t f = Lwt.on_success (closed t) f
 
@@ -248,17 +223,11 @@ module type BODY = sig
     type t
 
     val write_char : t -> char -> unit
-
     val write_string : t -> ?off:int -> ?len:int -> string -> unit
-
     val write_bigstring : t -> ?off:int -> ?len:int -> Bigstringaf.t -> unit
-
     val schedule_bigstring : t -> ?off:int -> ?len:int -> Bigstringaf.t -> unit
-
     val flush : t -> (unit -> unit) -> unit
-
     val close : t -> unit
-
     val is_closed : t -> bool
   end
 end
@@ -290,11 +259,11 @@ let of_raw_body
     in
     t.read_counter <- t.read_counter + 1;
     let on_read =
-      if t.read_counter > 128 then (
+      if t.read_counter > 128
+      then (
         t.read_counter <- 0;
         on_read_with_yield)
-      else
-        on_read_direct
+      else on_read_direct
     in
     Body.schedule_read
       body
@@ -343,15 +312,15 @@ let stream_write_body
             (* If the peer left abruptly the connection will be shutdown. Avoid
              * crashing the server with exceptions related to the writer being
              * closed. *)
-            if not (Body.is_closed body) then (
+            if not (Body.is_closed body)
+            then (
               Body.schedule_bigstring body ~off ~len buffer;
               let waiter, wakener = Lwt.wait () in
               Body.flush body (fun () ->
                   Lwt.wakeup_later wakener ();
                   Log.debug (fun m -> m "Flushed output chunk of length %d" len));
               waiter)
-            else
-              Lwt.return_unit)
+            else Lwt.return_unit)
           stream
       in
       Lwt.on_success (Lwt_stream.closed stream) (fun () ->

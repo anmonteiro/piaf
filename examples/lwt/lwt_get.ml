@@ -11,10 +11,8 @@ let request host =
     ~config:{ Piaf.Config.default with follow_redirects = true }
     (Uri.of_string host)
   >|= function
-  | Ok _response ->
-    ()
-  | Error e ->
-    failwith (Piaf.Error.to_string e)
+  | Ok _response -> ()
+  | Error e -> failwith (Piaf.Error.to_string e)
 
 let () =
   setup_log (Some Logs.Debug);
@@ -25,9 +23,7 @@ let () =
     "lwt_get.exe HOST";
   let host =
     match !host with
-    | None ->
-      failwith "No hostname provided"
-    | Some host ->
-      host
+    | None -> failwith "No hostname provided"
+    | Some host -> host
   in
   Lwt_main.run (request host)

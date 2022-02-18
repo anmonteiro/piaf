@@ -17,6 +17,5 @@ module H2c : sig
   type t
 
   val listen : int -> t Lwt.t
-
   val teardown : t -> unit Lwt.t
 end

@@ -112,7 +112,8 @@ let to_http2_config
   =
   let h2_default_buffer_size = H2.Config.default.read_buffer_size in
   let buffer_size =
-    if buffer_size < h2_default_buffer_size then (
+    if buffer_size < h2_default_buffer_size
+    then (
       Logs.warn (fun m ->
           m
             "Configured buffer size is smaller than the allowed by the HTTP/2 \
@@ -120,8 +121,7 @@ let to_http2_config
             buffer_size
             h2_default_buffer_size);
       h2_default_buffer_size)
-    else
-      buffer_size
+    else buffer_size
   in
   { H2.Config.default with
     read_buffer_size = buffer_size

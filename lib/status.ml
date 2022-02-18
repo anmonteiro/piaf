@@ -36,5 +36,4 @@ let is_permanent_redirection = function
   (* https://tools.ietf.org/html/rfc7538#section-3 *)
   | `Code 308 ->
     true
-  | _ ->
-    false
+  | _ -> false

@@ -133,8 +133,7 @@ let send_request
   in
   Lwt.async (fun () ->
       match body.contents with
-      | `Empty _ ->
-        Lwt.wrap1 Bodyw.close request_body
+      | `Empty _ -> Lwt.wrap1 Bodyw.close request_body
       | `String s ->
         Bodyw.write_string request_body s;
         Lwt.wrap2 flush_and_close (module Http.Body) request_body
@@ -199,10 +198,8 @@ let create_h2c_connection
             }
         in
         Ok (connection, response)
-      | Error _ as error ->
-        error)
-    | Error msg ->
-      can't_upgrade msg)
+      | Error _ as error -> error)
+    | Error msg -> can't_upgrade msg)
   | HTTPS _ ->
     can't_upgrade
       "Attempted to start HTTP/2 over cleartext TCP but was already \

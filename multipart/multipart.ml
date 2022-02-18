@@ -36,8 +36,7 @@ module List = struct
 
   let concat_map f l =
     let rec aux f acc = function
-      | [] ->
-        rev acc
+      | [] -> rev acc
       | x :: l ->
         let xs = f x in
         aux f (rev_append xs acc) l
@@ -66,20 +65,16 @@ module Pp = struct
   let pp_value formatter t =
     let ty, payload =
       match t with
-      | Multipart_form.Content_type.Parameters.String x ->
-        "String", x
-      | Token x ->
-        "Token", x
+      | Multipart_form.Content_type.Parameters.String x -> "String", x
+      | Token x -> "Token", x
     in
     Format.fprintf formatter "%s: %s" ty payload
 
   let pp_disposition_type formatter t =
     let ty =
       match t with
-      | `Inline ->
-        "inline"
-      | `Attachment ->
-        "attachment"
+      | `Inline -> "inline"
+      | `Attachment -> "attachment"
       | (`Ietf_token _ | `X_token _) as ext ->
         Format.asprintf "%a" pp_extension ext
     in
@@ -89,20 +84,13 @@ module Pp = struct
     let pp_one formatter (t : Unstrctrd.elt) =
       let s =
         match t with
-        | `Uchar u ->
-          Format.asprintf "Uchar: %c" (Uchar.to_char u)
-        | `CR ->
-          "CR"
-        | `LF ->
-          "LF"
-        | `WSP s ->
-          Format.asprintf "WSP: %s" (s :> string)
-        | `FWS wsp ->
-          Format.asprintf "FWS: %s" (wsp :> string)
-        | `d0 ->
-          "d0"
-        | `OBS_NO_WS_CTL obs ->
-          Format.asprintf "OB_NO_WS_CTL: %c" (obs :> char)
+        | `Uchar u -> Format.asprintf "Uchar: %c" (Uchar.to_char u)
+        | `CR -> "CR"
+        | `LF -> "LF"
+        | `WSP s -> Format.asprintf "WSP: %s" (s :> string)
+        | `FWS wsp -> Format.asprintf "FWS: %s" (wsp :> string)
+        | `d0 -> "d0"
+        | `OBS_NO_WS_CTL obs -> Format.asprintf "OB_NO_WS_CTL: %c" (obs :> char)
         | `Invalid_char invalid_char ->
           Format.asprintf "Invalid_char: %c" (invalid_char :> char)
       in
@@ -189,10 +177,8 @@ let content_disposition header =
 let name_of_header header =
   let open Multipart_form in
   match Header.content_disposition header with
-  | Some cdispo ->
-    Multipart_form.Content_disposition.name cdispo
-  | None ->
-    None
+  | Some cdispo -> Multipart_form.Content_disposition.name cdispo
+  | None -> None
 
 let rec result_headers t =
   let open Multipart_form in
@@ -212,8 +198,7 @@ let rec result_headers t =
           | Field.Field (_, Content_encoding, encoding) ->
             let encoding =
               match encoding with
-              | `Ietf_token s | `X_token s ->
-                s
+              | `Ietf_token s | `X_token s -> s
               | #Content_encoding.t ->
                 Format.asprintf "%a" Content_encoding.pp encoding
             in
@@ -221,10 +206,8 @@ let rec result_headers t =
           | Field.Field (_, Content_disposition, cdispo) ->
             let ty =
               match Content_disposition.disposition_type cdispo with
-              | `Ietf_token s | `X_token s ->
-                s
-              | ty ->
-                Format.asprintf "%a" Pp.pp_disposition_type ty
+              | `Ietf_token s | `X_token s -> s
+              | ty -> Format.asprintf "%a" Pp.pp_disposition_type ty
             in
             let name = Content_disposition.name cdispo in
             let filename = Content_disposition.filename cdispo in
@@ -243,8 +226,7 @@ let rec result_headers t =
                 filename
             in
             Some ((Field_name.content_disposition :> string), value)
-          | Field.Field (_, Field, _unstructured) ->
-            None)
+          | Field.Field (_, Field, _unstructured) -> None)
         (Header.assoc Field_name.content_disposition header
         @ Header.assoc Field_name.content_type header
         @ Header.assoc Field_name.content_transfer_encoding header)
@@ -256,23 +238,19 @@ let rec result_headers t =
     Format.eprintf "nameof: %B@." (Option.is_some (name_of_header header));
     let headers = atom_to_headers [] header in
     (match body with
-    | [] ->
-      headers
+    | [] -> headers
     | xs ->
       atom_to_headers [] header
       @ List.concat_map (function None -> [] | Some t -> result_headers t) xs)
-  | Leaf { header; _ } ->
-    atom_to_headers [] header
+  | Leaf { header; _ } -> atom_to_headers [] header
 
 let result_fields t =
   let open Multipart_form in
   let rec inner acc t =
     let atom_to_fields acc header =
       match name_of_header header with
-      | Some name ->
-        (name, header) :: acc
-      | None ->
-        acc
+      | Some name -> (name, header) :: acc
+      | None -> acc
     in
     match t with
     | Multipart { header; body : 'a t option list } ->
@@ -281,8 +259,7 @@ let result_fields t =
       in
       let atom_headers = atom_to_fields acc header in
       atom_headers
-    | Leaf { header; _ } ->
-      atom_to_fields acc header
+    | Leaf { header; _ } -> atom_to_fields acc header
   in
   inner [] t
 
@@ -316,8 +293,7 @@ let extract_parts ~emit ~finish ~max_chunk_size ~content_type stream =
       if committed = 0 then Qe.compress ke;
       let next_state =
         match Qe.N.peek ke with
-        | [] ->
-          continue Bigstringaf.empty ~off:0 ~len:0 Complete
+        | [] -> continue Bigstringaf.empty ~off:0 ~len:0 Complete
         | [ slice ] ->
           continue slice ~off:0 ~len:(Bigstringaf.length slice) Complete
         | slice :: _ ->
@@ -347,9 +323,10 @@ let extract_parts ~emit ~finish ~max_chunk_size ~content_type stream =
         Qe.N.unsafe_shift ke committed;
         if committed = 0 then Qe.compress ke;
         Qe.N.push ke ~blit ~length:Bigstringaf.length ~off ~len buffer;
-        if Qe.capacity ke > max_capacity then
-          Lwt.return_error "POST buffer has grown too much"
-        else if not (Qe.is_empty ke) then
+        if Qe.capacity ke > max_capacity
+        then Lwt.return_error "POST buffer has grown too much"
+        else if not (Qe.is_empty ke)
+        then
           (* XXX(anmonteiro): It's OK to only read the first slice of the
            * queue. Ke's implementation returns at most 2 buffers from `peek`:
            * the second one is returned if the buffer has wrapped around its
@@ -359,8 +336,7 @@ let extract_parts ~emit ~finish ~max_chunk_size ~content_type stream =
             continue slice ~off:0 ~len:(Bigstringaf.length slice) Incomplete
           in
           parse next_state
-        else
-          parse state
+        else parse state
       | Fail (pos, marks, msg) ->
         Lwt.return_error
           (Format.asprintf
@@ -368,8 +344,7 @@ let extract_parts ~emit ~finish ~max_chunk_size ~content_type stream =
              pos
              msg
              (String.concat "; " marks))
-      | Done (_, v) ->
-        Lwt.return_ok v)
+      | Done (_, v) -> Lwt.return_ok v)
   in
   parse state >|= function
   | Ok t ->
@@ -383,10 +358,13 @@ let extract_parts ~emit ~finish ~max_chunk_size ~content_type stream =
 type t = string option Multipart_form.t
 
 let parse_multipart_form
-    ~content_type ~max_chunk_size ~emit ?(finish = ignore) stream
+    ~content_type
+    ~max_chunk_size
+    ~emit
+    ?(finish = ignore)
+    stream
   =
   match parse_content_type content_type with
   | Ok content_type ->
     extract_parts ~emit ~finish ~max_chunk_size ~content_type stream
-  | Error e ->
-    Lwt.return_error e
+  | Error e -> Lwt.return_error e
