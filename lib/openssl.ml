@@ -244,6 +244,48 @@ module Error = struct
     Lwt_result.fail (`Connect_error reason)
 end
 
+let set_verify ~cacert ?capath ~clientcert ctx =
+  (* Fail connecting if peer verification fails:
+   * SSL always tries to verify the peer, this only says whether it should
+   * fail connecting if the verification fails, or if it should continue
+   * anyway. In any case, we check the result of verification below with
+   * Ssl.get_verify_result.
+   * https://www.openssl.org/docs/man1.1.1/man3/SSL_CTX_set_verify.html *)
+  Ssl.set_verify ctx [ Ssl.Verify_peer ] (Some Ssl.client_verify_callback);
+  Ssl.set_client_verify_callback_verbose false;
+  (* Server certificate verification *)
+  let**! () =
+    match cacert with
+    | Some certarg ->
+      (match certarg with
+      | Cert.Filepath path ->
+        configure_verify_locations ctx ~cacert:path ?capath
+      | Certpem cert ->
+        Lwt_result.return (load_peer_ca_cert ~certificate:cert ctx))
+    | None ->
+      configure_verify_locations ctx ?capath
+  in
+  (* Send client cert if present *)
+  match clientcert with
+  | Some certwithkey ->
+    (match certwithkey with
+    | Cert.Certpem cert, Cert.Certpem key ->
+      Lwt_result.return
+        (load_client_cert_from_string ~certificate:cert ~private_key:key ctx)
+    | Cert.Filepath cert, Cert.Filepath key ->
+      Lwt_result.return
+        (load_client_cert ~certificate:cert ~private_key:key ctx)
+    | _ ->
+      let msg =
+        Format.asprintf
+          "Incorrect parameters provided for clientcert, both should be a \
+           filepath or pem string"
+      in
+      Log.err (fun m -> m "%s" msg);
+      Lwt_result.fail (`Connect_error msg))
+  | None ->
+    Lwt_result.return ()
+
 (* Assumes Lwt_unix.connect has already been called. *)
 let connect ~hostname ~config ~alpn_protocols fd =
   let { Config.allow_insecure
@@ -294,49 +336,8 @@ let connect ~hostname ~config ~alpn_protocols fd =
       (* Use the server's preferences rather than the client's *)
       Ssl.honor_cipher_order ctx;
       let**! () =
-        if not allow_insecure then (
-          (* Fail connecting if peer verification fails:
-           * SSL always tries to verify the peer, this only says whether it should
-           * fail connecting if the verification fails, or if it should continue
-           * anyway. In any case, we check the result of verification below with
-           * Ssl.get_verify_result.
-           * https://www.openssl.org/docs/man1.1.1/man3/SSL_CTX_set_verify.html *)
-          Ssl.set_verify ctx [ Ssl.Verify_peer ] None;
-          (* Server certificate verification *)
-          let**! () =
-            match cacert with
-            | Some certarg ->
-              (match certarg with
-              | Filepath path ->
-                configure_verify_locations ctx ~cacert:path ?capath
-              | Certpem cert ->
-                Lwt_result.return (load_peer_ca_cert ~certificate:cert ctx))
-            | None ->
-              configure_verify_locations ctx ?capath
-          in
-          (* Send client cert if present *)
-          match clientcert with
-          | Some certwithkey ->
-            (match certwithkey with
-            | Cert.Certpem cert, Cert.Certpem key ->
-              Lwt_result.return
-                (load_client_cert_from_string
-                   ~certificate:cert
-                   ~private_key:key
-                   ctx)
-            | Cert.Filepath cert, Cert.Filepath key ->
-              Lwt_result.return
-                (load_client_cert ~certificate:cert ~private_key:key ctx)
-            | _ ->
-              let msg =
-                Format.asprintf
-                  "Incorrect parameters provided for clientcert, both should \
-                   be a filepath or pem string"
-              in
-              Log.err (fun m -> m "%s" msg);
-              Lwt_result.fail (`Connect_error msg))
-          | None ->
-            Lwt_result.return ())
+        if not allow_insecure then
+          set_verify ~cacert ?capath ~clientcert ctx
         else
           (* Don't bother configuring verify locations if we're not going to be
              verifying the peer. *)
