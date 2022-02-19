@@ -9,6 +9,15 @@ Unreleased
 - Close the file descriptor when failing to open a connection
   ([#97](https://github.com/anmonteiro/piaf/pull/97)) -
   [@EduardoRFS](https://github.com/EduardoRFS)
+- Yield to other threads when reading a message body. This improves fairness
+  for large message bodies
+  ([#100](https://github.com/anmonteiro/piaf/pull/100))
+- Add error handling to `Response.of_file`
+  ([#103](https://github.com/anmonteiro/piaf/pull/103))
+- Add `Client.send` which sends a `Request.t`
+  ([#110](https://github.com/anmonteiro/piaf/pull/110))
+- openssl: set the client verify callback
+  ([#112](https://github.com/anmonteiro/piaf/pull/112))
 
 0.1.0 2021-02-03
 --------------
