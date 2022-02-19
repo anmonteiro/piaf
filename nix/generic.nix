@@ -24,20 +24,11 @@ rec {
       uri
       ipaddr
 
-      # (vendored) httpaf dependencies
-      angstrom
-      faraday
+      httpaf-lwt-unix
       gluten-lwt-unix
+      h2-lwt-unix
 
-      # (vendored) h2 dependencies
-      psq
-
-      # (vendored) multipart_form dependencies
-      base64
-      pecu
-      prettym
-      rresult
-      unstrctrd
+      multipart_form
 
       alcotest
       alcotest-lwt

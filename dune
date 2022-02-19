@@ -7,5 +7,3 @@
  (release
   (ocamlopt_flags
    (:standard -O3 -unbox-closures))))
-
-(vendored_dirs vendor)
