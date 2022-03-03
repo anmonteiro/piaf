@@ -37,12 +37,12 @@ lib.generators.toYAML { }
           "uses" = "cachix/cachix-action@v10";
           "with" = {
             "name" = "anmonteiro";
-            "signingKey" = "''$''{{ secrets.CACHIX_SIGNING_KEY }}";
+            "signingKey" = "\${{ secrets.CACHIX_SIGNING_KEY }}";
           };
         }
         {
           "name" = "Run nix-build";
-          "run" = "nix-build ./nix/ci/test.nix -A native --argstr ocamlVersion ''$''{{ matrix.ocamlVersion }}";
+          "run" = "nix-build ./nix/ci/test.nix -A native --argstr ocamlVersion \${{ matrix.ocamlVersion }}";
         }
       ];
     };
@@ -72,12 +72,12 @@ lib.generators.toYAML { }
           "uses" = "cachix/cachix-action@v10";
           "with" = {
             "name" = "anmonteiro";
-            "signingKey" = "''$''{{ secrets.CACHIX_SIGNING_KEY }}";
+            "signingKey" = "\${{ secrets.CACHIX_SIGNING_KEY }}";
           };
         }
         {
           "name" = "Run nix-build";
-          "run" = "nix-build ./nix/ci/test.nix -A native -A musl64 --argstr ocamlVersion ''$''{{ matrix.ocamlVersion }}";
+          "run" = "nix-build ./nix/ci/test.nix -A native -A musl64 --argstr ocamlVersion \${{ matrix.ocamlVersion }}";
         }
       ];
     };
