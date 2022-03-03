@@ -11,7 +11,9 @@
         pkgs = nixpkgs.legacyPackages."${system}";
       in
       rec {
-        packages = pkgs.callPackage ./nix { inherit pkgs; };
+        packages = (pkgs.callPackage ./nix { inherit pkgs; }) // {
+          gh-actions = pkgs.callPackage ./nix/gh-actions.nix { };
+        };
         defaultPackage = packages.native.piaf;
         devShell = pkgs.callPackage ./shell.nix { };
       });
