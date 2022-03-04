@@ -7,3 +7,14 @@
  (release
   (ocamlopt_flags
    (:standard -O3 -unbox-closures))))
+
+(rule
+ (target test.yml)
+ (mode
+  (promote
+   (into .github/workflows)))
+ (deps
+  ./flake.nix
+  (source_tree ./nix))
+ (action
+  (run nix eval --raw "path:.#gh-actions" --write-to %{target})))
