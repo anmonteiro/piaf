@@ -845,7 +845,8 @@ module CLI = struct
 
   let cmd =
     let doc = "Like curl, for caml" in
-    Term.(ret (const main $ default_cmd)), Term.info "carl" ~version:"todo" ~doc
+    let info = Cmd.info "carl" ~version:"todo" ~doc in
+    Cmd.v info Term.(ret (const main $ default_cmd))
 end
 
-let () = Term.(exit @@ eval CLI.cmd)
+let () = exit (Cmd.eval CLI.cmd)
