@@ -509,6 +509,7 @@ module Response : sig
     -> string
     -> (t, Error.t) Lwt_result.t
 
+  val or_internal_error : (t, Error.t) Result.t -> t
   val persistent_connection : t -> bool
   val pp_hum : Format.formatter -> t -> unit [@@ocaml.toplevel_printer]
 end
