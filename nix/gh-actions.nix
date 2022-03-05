@@ -1,7 +1,7 @@
 { lib }:
 
 let
-  commonSteps = [
+  commonSteps = { name, signingKey }: [
     {
       uses = "actions/checkout@v2";
       "with" = {
@@ -14,8 +14,7 @@ let
     {
       uses = "cachix/cachix-action@v10";
       "with" = {
-        name = "anmonteiro";
-        signingKey = "\${{ secrets.CACHIX_SIGNING_KEY }}";
+        inherit name signingKey;
       };
     }
 
@@ -37,42 +36,54 @@ let
           ;
         };
       };
-      steps = commonSteps ++ steps;
-
     };
+
+  gh-actions = {
+    cachixBuild = { name, branches ? [ "master" ], os, cachix }:
+      lib.generators.toYAML { } {
+        inherit name;
+        on = {
+          pull_request = null;
+          push = {
+            inherit branches;
+          };
+        };
+
+        jobs = lib.mapAttrs
+          (os: steps:
+            job {
+              runs-on = os;
+              steps = commonSteps cachix
+                ++ [
+                {
+                  name = "Run nix-build";
+                  run = "nix-build ./nix/ci/test.nix -A native --argstr ocamlVersion \${{ matrix.ocamlVersion }}";
+                }
+              ];
+            })
+          os;
+      };
+  };
+
 in
 
-lib.generators.toYAML { } {
+gh-actions.cachixBuild {
   name = "Build";
-  on = {
-    pull_request = null;
-    push = {
-      branches = [
-        "master"
-      ];
+  cachix = {
+    name = "anmonteiro";
+    signingKey = "\${{ secrets.CACHIX_SIGNING_KEY }}";
+  };
+  os = {
+    macos-latest = {
+      name = "Run nix-build";
+      ocamlVersions = [ "4_13" "4_14" ];
+      run = "nix-build ./nix/ci/test.nix -A native --argstr ocamlVersion \${{ matrix.ocamlVersion }}";
+    };
+    ubuntu-latest = {
+      ocamlVersions = [ "4_12" "4_13" "4_14" ];
+      name = "Run nix-build";
+      run = "nix-build ./nix/ci/test.nix -A native -A musl64 --argstr ocamlVersion \${{ matrix.ocamlVersion }}";
     };
   };
 
-  jobs = {
-    macOS = job {
-      runs-on = "macos-latest";
-      ocamlVersions = [ "4_13" "4_14" ];
-      steps = [
-        {
-          name = "Run nix-build";
-          run = "nix-build ./nix/ci/test.nix -A native --argstr ocamlVersion \${{ matrix.ocamlVersion }}";
-        }
-      ];
-    };
-    linux = job {
-      runs-on = "ubuntu-latest";
-      ocamlVersions = [ "4_12" "4_13" "4_14" ];
-      steps = [
-        {
-          name = "Run nix-build";
-          run = "nix-build ./nix/ci/test.nix -A native -A musl64 --argstr ocamlVersion \${{ matrix.ocamlVersion }}";
-        }
-      ];
-    };
-  };
 }
