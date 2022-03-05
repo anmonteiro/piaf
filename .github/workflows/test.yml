@@ -28,7 +28,6 @@
         "fail-fast": false,
         "matrix": {
           "ocamlVersion": [
-            "4_12",
             "4_13",
             "4_14"
           ]
@@ -56,7 +55,7 @@
         },
         {
           "name": "Run nix-build",
-          "run": "nix-build ./nix/ci/test.nix -A native --argstr ocamlVersion ${{ matrix.ocamlVersion }}"
+          "run": "nix-build ./nix/ci/test.nix -A native -A musl64 --argstr ocamlVersion ${{ matrix.ocamlVersion }}"
         }
       ],
       "strategy": {

@@ -50,17 +50,14 @@ let
         };
 
         jobs = lib.mapAttrs
-          (os: steps:
-            job {
+          (os: { run, name, ... }@conf:
+            job ({
               runs-on = os;
               steps = commonSteps cachix
-                ++ [
-                {
-                  name = "Run nix-build";
-                  run = "nix-build ./nix/ci/test.nix -A native --argstr ocamlVersion \${{ matrix.ocamlVersion }}";
-                }
-              ];
-            })
+                ++ [{ inherit name run; }];
+            } // (if (conf ? ocamlVersions) then {
+              inherit (conf) ocamlVersions;
+            } else { })))
           os;
       };
   };
