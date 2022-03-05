@@ -17,4 +17,6 @@
   ./flake.nix
   (source_tree ./nix))
  (action
-  (run nix eval --raw "path:.#gh-actions" --write-to %{target})))
+  (progn
+   (run nix eval --raw "path:.#gh-actions" --write-to %{target})
+   (bash "echo \"$(cat %{target} | jq -r)\" > %{target}"))))

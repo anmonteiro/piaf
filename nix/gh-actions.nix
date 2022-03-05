@@ -21,19 +21,25 @@ let
 
   ];
 
-  job = { steps, ... }@attrs: attrs // {
-    strategy = {
-      fail-fast = false;
-      matrix = {
-        ocamlVersion = [
-          "4_12"
-          "4_13"
-        ];
+  job =
+    { steps
+    , ocamlVersions ? [
+        "4_12"
+        "4_13"
+        "4_14"
+      ]
+    , ...
+    }@attrs: (builtins.removeAttrs attrs [ "ocamlVersions" ]) // {
+      strategy = {
+        fail-fast = false;
+        matrix = {
+          ocamlVersion = ocamlVersions
+          ;
+        };
       };
-    };
-    steps = commonSteps ++ steps;
+      steps = commonSteps ++ steps;
 
-  };
+    };
 in
 
 lib.generators.toYAML { } {
@@ -50,6 +56,7 @@ lib.generators.toYAML { } {
   jobs = {
     macOS = job {
       runs-on = "macos-latest";
+      ocamlVersions = [ "4_13" "4_14" ];
       steps = [
         {
           name = "Run nix-build";
@@ -59,6 +66,7 @@ lib.generators.toYAML { } {
     };
     linux = job {
       runs-on = "ubuntu-latest";
+      ocamlVersions = [ "4_12" "4_13" "4_14" ];
       steps = [
         {
           name = "Run nix-build";
