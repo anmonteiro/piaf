@@ -18,6 +18,8 @@ Unreleased
   ([#110](https://github.com/anmonteiro/piaf/pull/110))
 - openssl: set the client verify callback
   ([#112](https://github.com/anmonteiro/piaf/pull/112))
+- Piaf.Response: add `or_internal_error`
+  ([#120](https://github.com/anmonteiro/piaf/pull/120))
 
 0.1.0 2021-02-03
 --------------

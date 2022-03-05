@@ -140,6 +140,12 @@ let of_h2 ?(body = Body.empty) response =
   let headers = H2.Headers.remove headers ":status" in
   { status; headers; version = { major = 2; minor = 0 }; body }
 
+let or_internal_error = function
+  | Ok r -> r
+  | Error err ->
+    let body = Format.asprintf "Internal Server Error: %a" Error.pp_hum err in
+    of_string ~body `Internal_server_error
+
 let persistent_connection { version; headers; _ } =
   Message.persistent_connection version headers
 
