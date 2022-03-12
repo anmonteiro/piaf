@@ -70,11 +70,13 @@ end
 
 let make_error_handler error_handler client_addr ?request error start_response =
   let module Writer = Httpaf.Body.Writer in
+  let was_response_written = ref false in
   let respond ~headers body =
     let headers =
       Headers.add_length_related_headers ~body_length:(Body.length body) headers
     in
     let response_body = start_response (Headers.to_http1 headers) in
+    was_response_written := true;
     match Body.contents body with
     | `Empty _ -> Writer.close response_body
     | `String s ->
@@ -87,8 +89,9 @@ let make_error_handler error_handler client_addr ?request error start_response =
       Body.stream_write_body (module Http1.Body) response_body stream
   in
   let request = Option.map Request.of_http1 request in
-  Lwt.async (fun () ->
-      Log.err (fun m ->
+  Lwt.dont_wait
+    (fun () ->
+      Log.info (fun m ->
           m
             "Error handler called with error: %a%a"
             Error.pp_hum
@@ -97,6 +100,19 @@ let make_error_handler error_handler client_addr ?request error start_response =
                  Format.fprintf fmt "; Request: @?%a" Request.pp_hum request))
             request);
       error_handler client_addr ?request ~respond error)
+    (fun exn ->
+      Log.err (fun m ->
+          let raw_backtrace = Printexc.get_raw_backtrace () in
+          m
+            "Exception in `error_handler`: %s.@]@;<0 2>@[<v 0>%a@]"
+            (Printexc.to_string exn)
+            Util.Backtrace.pp_hum
+            raw_backtrace);
+      if not !was_response_written
+      then
+        respond
+          ~headers:(Headers.of_list [])
+          (Body.of_string "Internal Server Error"))
 
 let default_error_handler
     _client_addr
