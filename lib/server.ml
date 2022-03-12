@@ -135,61 +135,55 @@ let request_handler handler client_addr reqd =
   let request = Request.of_http1 ~body:request_body request in
   (* Set the async exception hook for threads that raise exceptions within the
    * one we start below. *)
-  Lwt.async_exception_hook := report_exn reqd;
-  Lwt.async (fun () ->
-      Lwt.catch
-        (fun () ->
-          let+ ({ Response.headers; body; _ } as response) =
-            handler { ctx = client_addr; request }
-          in
-          (* XXX(anmonteiro): It's a little weird that, given an actual
-           * response returned from the handler, we decide to completely ignore
-           * it. There's a good justification here, which is that the error
-           * handler will be called. The alternative would be to have the
-           * request handler return a result type, but then we'd be ignoring
-           * the error instead. *)
-          match Reqd.error_code reqd with
-          | Some _ ->
-            (* Already handling an error, don't bother sending the response.
-             * `error_handler` will be called. *)
-            Log.info (fun m ->
-                m
-                  "Response returned by handler will not be written, currently \
-                   handling error")
-          | None ->
-            let response =
-              { response with
-                headers =
-                  Headers.add_length_related_headers
-                    ~body_length:(Body.length body)
-                    headers
-              }
-            in
-            let http1_response = Response.to_http1 response in
-            (match Body.contents body with
-            | `Empty upgrade_handler ->
-              if Body.Optional_handler.is_none upgrade_handler
-              then
-                (* No upgrade *)
-                Reqd.respond_with_bigstring
-                  reqd
-                  http1_response
-                  Bigstringaf.empty
-              else (
-                (* we created it ourselves *)
-                assert (response.status = `Switching_protocols);
-                Reqd.respond_with_upgrade reqd http1_response.headers (fun () ->
-                    Body.Optional_handler.call_if_some upgrade_handler upgrade))
-            | `String s -> Reqd.respond_with_string reqd http1_response s
-            | `Bigstring { IOVec.buffer; off; len } ->
-              let bstr = Bigstringaf.sub ~off ~len buffer in
-              Reqd.respond_with_bigstring reqd http1_response bstr
-            | `Stream stream ->
-              let response_body =
-                Reqd.respond_with_streaming reqd http1_response
-              in
-              Body.stream_write_body (module Http1.Body) response_body stream))
-        (Lwt.wrap2 report_exn reqd))
+  (* Lwt.async_exception_hook := report_exn reqd; *)
+  Lwt.dont_wait
+    (fun () ->
+      let+ ({ Response.headers; body; _ } as response) =
+        handler { ctx = client_addr; request }
+      in
+      (* XXX(anmonteiro): It's a little weird that, given an actual
+       * response returned from the handler, we decide to completely ignore
+       * it. There's a good justification here, which is that the error
+       * handler will be called. The alternative would be to have the
+       * request handler return a result type, but then we'd be ignoring
+       * the error instead. *)
+      match Reqd.error_code reqd with
+      | Some _ ->
+        (* Already handling an error, don't bother sending the response.
+         * `error_handler` will be called. *)
+        Log.info (fun m ->
+            m
+              "Response returned by handler will not be written, currently \
+               handling error")
+      | None ->
+        let response =
+          { response with
+            headers =
+              Headers.add_length_related_headers
+                ~body_length:(Body.length body)
+                headers
+          }
+        in
+        let http1_response = Response.to_http1 response in
+        (match Body.contents body with
+        | `Empty upgrade_handler ->
+          if Body.Optional_handler.is_none upgrade_handler
+          then
+            (* No upgrade *)
+            Reqd.respond_with_bigstring reqd http1_response Bigstringaf.empty
+          else (
+            (* we created it ourselves *)
+            assert (response.status = `Switching_protocols);
+            Reqd.respond_with_upgrade reqd http1_response.headers (fun () ->
+                Body.Optional_handler.call_if_some upgrade_handler upgrade))
+        | `String s -> Reqd.respond_with_string reqd http1_response s
+        | `Bigstring { IOVec.buffer; off; len } ->
+          let bstr = Bigstringaf.sub ~off ~len buffer in
+          Reqd.respond_with_bigstring reqd http1_response bstr
+        | `Stream stream ->
+          let response_body = Reqd.respond_with_streaming reqd http1_response in
+          Body.stream_write_body (module Http1.Body) response_body stream))
+    (report_exn reqd)
 
 let create ?config ?(error_handler = default_error_handler) handler =
   Httpaf_lwt_unix.Server.create_connection_handler
