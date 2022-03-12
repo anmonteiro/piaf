@@ -133,9 +133,6 @@ let request_handler handler client_addr reqd =
       (Reqd.request_body reqd)
   in
   let request = Request.of_http1 ~body:request_body request in
-  (* Set the async exception hook for threads that raise exceptions within the
-   * one we start below. *)
-  (* Lwt.async_exception_hook := report_exn reqd; *)
   Lwt.dont_wait
     (fun () ->
       let+ ({ Response.headers; body; _ } as response) =
