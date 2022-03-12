@@ -20,6 +20,8 @@ Unreleased
   ([#112](https://github.com/anmonteiro/piaf/pull/112))
 - Piaf.Response: add `or_internal_error`
   ([#120](https://github.com/anmonteiro/piaf/pull/120))
+- Piaf.Server: prefer `Lwt.dont_wait` to the global exception hook
+  ([#123](https://github.com/anmonteiro/piaf/pull/123))
 
 0.1.0 2021-02-03
 --------------
