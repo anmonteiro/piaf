@@ -1,5 +1,5 @@
 (*----------------------------------------------------------------------------
- * Copyright (c) 2019-2020, António Nuno Monteiro
+ * Copyright (c) 2019-2022, António Nuno Monteiro
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -155,24 +155,15 @@ let send_request
       | `Sendfile src_fd ->
         (match runtime with
         | HTTP runtime ->
-          let dst_fd = Gluten_lwt_unix.Client.socket runtime in
-          Format.eprintf "DO IT@.";
           Bodyw.close request_body;
-          let sent_ret =
-            Sendfile.sendfile
-              ~src:(Lwt_unix.unix_file_descr src_fd)
-              (Lwt_unix.unix_file_descr dst_fd)
-          in
-          (match sent_ret with
-          | Ok sent ->
-            (* NOTE(anmonteiro): we don't need to
-             * `Gluten.Server.report_write_result` here given that we put
-             * bytes in the file descriptor off-band. `report_write_result`
-             * just tracks the internal Faraday buffers. *)
-            Lwt.return_unit
-          | Error e ->
-            Lwt.wakeup notify_error (`Exn (Unix.Unix_error (e, "sendfile", "")));
-            Lwt.return_unit (* TODO(anmonteiro): log err *))
+          let on_exn exn = Lwt.wakeup notify_error (`Exn exn) in
+          Posix.sendfile
+            (module Http.Body)
+            ~on_exn
+            ~src_fd
+            ~dst_fd:(Gluten_lwt_unix.Client.socket runtime)
+            request_body;
+          Lwt.return_unit
         | HTTPS _ ->
           (* can't `sendfile` on an encrypted connection.
            * TODO(anmonteiro): Return error message saying that. *)

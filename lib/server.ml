@@ -1,5 +1,5 @@
 (*----------------------------------------------------------------------------
- * Copyright (c) 2020, António Nuno Monteiro
+ * Copyright (c) 2020-2022, António Nuno Monteiro
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -69,34 +69,11 @@ module Error_response = struct
   type t = unit
 end
 
-let sendfile ?(on_error = fun _exn -> ()) ~src_fd ~dst_fd response_body =
-  let module Writer = Http1.Body.Writer in
-  (* Flush everything to the wire before calling `sendfile`, as we're gonna
-     bypass the http/af runtime and write bytes to the file descriptor
-     directly. *)
-  Writer.flush response_body (fun () ->
-      let sent_ret =
-        Sendfile.sendfile
-          ~src:(Lwt_unix.unix_file_descr src_fd)
-          (Lwt_unix.unix_file_descr dst_fd)
-      in
-      match sent_ret with
-      | Ok sent ->
-        (* NOTE(anmonteiro): we don't need to
-         * `Gluten.Server.report_write_result` here given that we put
-         * bytes in the file descriptor off-band. `report_write_result`
-         * just tracks the internal Faraday buffers. *)
-        Log.debug (fun m -> m "`sendfile` wrote %d bytes successfully" sent)
-      | Error e ->
-        Writer.close response_body;
-        on_error (Unix.Unix_error (e, "sendfile", ""))
-      (* TODO(anmonteiro): log err *))
-
 let make_error_handler ~fd error_handler
     : Unix.sockaddr -> Server_connection.error_handler
   =
  fun client_addr ?request error start_response ->
-  let module Writer = Httpaf.Body.Writer in
+  let module Writer = Http1.Body.Writer in
   let was_response_written = ref false in
   let respond ~headers body =
     let headers =
@@ -115,8 +92,8 @@ let make_error_handler ~fd error_handler
     | `Stream stream ->
       Body.stream_write_body (module Http1.Body) response_body stream
     | `Sendfile src_fd ->
-      let dst_fd = fd in
-      sendfile ~src_fd ~dst_fd response_body
+      Writer.flush response_body (fun () ->
+          Posix.sendfile (module Http1.Body) ~src_fd ~dst_fd:fd response_body)
   in
 
   let request = Option.map Request.of_http1 request in
@@ -230,14 +207,19 @@ let request_handler ~fd handler : Unix.sockaddr -> Reqd.t Gluten.reqd -> unit =
           let response_body = Reqd.respond_with_streaming reqd http1_response in
           Body.stream_write_body (module Http1.Body) response_body stream
         | `Sendfile src_fd ->
-          let dst_fd = fd in
           let response_body =
             Reqd.respond_with_streaming
               ~flush_headers_immediately:true
               reqd
               http1_response
           in
-          sendfile ~on_error:exn_handler ~src_fd ~dst_fd response_body))
+          Http1.Body.Writer.flush response_body (fun () ->
+              Posix.sendfile
+                (module Http1.Body)
+                ~on_exn:exn_handler
+                ~src_fd
+                ~dst_fd:fd
+                response_body)))
     exn_handler
 
 let create ?config ?(error_handler = default_error_handler) handler
