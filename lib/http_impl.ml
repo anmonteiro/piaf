@@ -152,7 +152,7 @@ let send_request
         Lwt.on_success (Lwt_stream.closed stream) (fun () ->
             flush_and_close (module Http.Body) request_body);
         Lwt.wrap3 Body.stream_write_body (module Http.Body) request_body stream
-      | `Sendfile src_fd ->
+      | `Sendfile (src_fd, _, _) ->
         (match runtime with
         | HTTP runtime ->
           Bodyw.close request_body;

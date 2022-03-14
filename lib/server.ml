@@ -91,7 +91,7 @@ let make_error_handler ~fd error_handler
       Writer.close response_body
     | `Stream stream ->
       Body.stream_write_body (module Http1.Body) response_body stream
-    | `Sendfile src_fd ->
+    | `Sendfile (src_fd, _, _) ->
       Writer.flush response_body (fun () ->
           Posix.sendfile (module Http1.Body) ~src_fd ~dst_fd:fd response_body)
   in
@@ -206,7 +206,7 @@ let request_handler ~fd handler : Unix.sockaddr -> Reqd.t Gluten.reqd -> unit =
         | `Stream stream ->
           let response_body = Reqd.respond_with_streaming reqd http1_response in
           Body.stream_write_body (module Http1.Body) response_body stream
-        | `Sendfile src_fd ->
+        | `Sendfile (src_fd, _, _) ->
           let response_body =
             Reqd.respond_with_streaming
               ~flush_headers_immediately:true

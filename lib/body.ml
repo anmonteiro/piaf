@@ -74,7 +74,11 @@ type contents =
   | `String of string
   | `Bigstring of Bigstringaf.t IOVec.t
   | `Stream of Bigstringaf.t IOVec.t Lwt_stream.t
-  | `Sendfile of Lwt_unix.file_descr
+  | `Sendfile of
+    Lwt_unix.file_descr
+    * (* Waiter and notifier for when the fd closes. *)
+    unit Lwt.t
+    * unit Lwt.u
   ]
 
 type t =
@@ -136,7 +140,8 @@ let sendfile ?length path =
       `Fixed (Int64.of_int st_size)
     | Some length -> Lwt.return length
   in
-  Ok (create ~length (`Sendfile fd))
+  let t, u = Lwt.wait () in
+  Ok (create ~length (`Sendfile (fd, t, u)))
 
 let or_error t ~stream v =
   let+ () = Lwt_stream.closed stream in
@@ -144,8 +149,13 @@ let or_error t ~stream v =
   | Lwt.Return error -> Error error
   | Lwt.Fail _ | Lwt.Sleep -> Ok v
 
+let ensure_closed fd =
+  match Lwt_unix.state fd with
+  | Opened -> Lwt_unix.close fd
+  | Closed | Aborted _ -> Lwt.return_unit
+
 (* TODO: accept buffer for I/O, so that caller can pool buffers? *)
-let stream_of_fd fd =
+let stream_of_fd ?on_close fd =
   let+ { Unix.st_size = length; _ } = Lwt_unix.fstat fd in
   let remaining = ref length in
   let stream =
@@ -162,7 +172,11 @@ let stream_of_fd fd =
           Lwt.return_some (IOVec.make buf ~off:0 ~len:bytes_read))
   in
   Lwt.on_success (Lwt_stream.closed stream) (fun () ->
-      Lwt.ignore_result (Lwt_unix.close fd));
+      Lwt.dont_wait
+        (fun () ->
+          let+ () = ensure_closed fd in
+          Option.iter (fun f -> f ()) on_close)
+        (fun _exn -> Option.iter (fun f -> f ()) on_close));
   stream
 
 let to_stream ({ contents; _ } as t) =
@@ -176,7 +190,8 @@ let to_stream ({ contents; _ } as t) =
            [ IOVec.make (Bigstringaf.of_string ~off:0 ~len s) ~off:0 ~len ])
     | `Bigstring iovec -> Lwt.return (Lwt_stream.of_list [ iovec ])
     | `Stream stream -> Lwt.return stream
-    | `Sendfile fd -> stream_of_fd fd
+    | `Sendfile (fd, _, u) ->
+      stream_of_fd ~on_close:(fun () -> Lwt.wakeup_later u ()) fd
   in
   stream, or_error ~stream t ()
 
@@ -208,8 +223,8 @@ let to_string ({ contents; _ } as t) =
   | `Stream stream ->
     let* str = stream_to_string t stream in
     or_error t ~stream str
-  | `Sendfile fd ->
-    let* stream = stream_of_fd fd in
+  | `Sendfile (fd, _, u) ->
+    let* stream = stream_of_fd ~on_close:(fun () -> Lwt.wakeup_later u ()) fd in
     let* str = stream_to_string t stream in
     or_error t ~stream str
 
@@ -226,8 +241,10 @@ let to_string_stream ({ contents; _ } as t) =
            (fun { IOVec.buffer; off; len } ->
              Bigstringaf.substring buffer ~off ~len)
            stream)
-    | `Sendfile fd ->
-      let+ stream = stream_of_fd fd in
+    | `Sendfile (fd, _, u) ->
+      let+ stream =
+        stream_of_fd ~on_close:(fun () -> Lwt.wakeup_later u ()) fd
+      in
       Lwt_stream.map
         (fun { IOVec.buffer; off; len } ->
           Bigstringaf.substring buffer ~off ~len)
@@ -241,21 +258,32 @@ let drain ({ contents; _ } as t) =
   | `Stream stream ->
     let* () = Lwt_stream.junk_while (fun _ -> true) stream in
     or_error t ~stream ()
+  | `Sendfile (fd, _, _) ->
+    let+ () = ensure_closed fd in
+    Ok ()
 
 let drain_available { contents; _ } =
   match contents with
   | `Empty _ | `String _ | `Bigstring _ -> Lwt.return_unit
   | `Stream stream -> Lwt_stream.junk_old stream
+  | `Sendfile (fd, _, _) -> ensure_closed fd
 
 let is_closed t =
   match t.contents with
   | `Empty _ | `String _ | `Bigstring _ -> true
   | `Stream stream -> Lwt_stream.is_closed stream
+  | `Sendfile (fd, _, _) ->
+    (match Lwt_unix.state fd with
+    | Opened -> false
+    | Closed | Aborted _ -> true)
 
 let closed t =
   match t.contents with
   | `Empty _ | `String _ | `Bigstring _ -> Lwt_result.return ()
   | `Stream stream -> or_error t ~stream ()
+  | `Sendfile (_fd, t, _u) ->
+    let+ () = t in
+    Ok ()
 
 let when_closed t f = Lwt.on_success (closed t) f
 
