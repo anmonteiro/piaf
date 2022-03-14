@@ -284,7 +284,7 @@ let handle_response ~cli ({ Response.body; _ } as response) =
         print_string ~cli formatter s
       | _ ->
         let open Lwt.Syntax in
-        let stream, or_error = Body.to_stream body in
+        let* stream, or_error = Body.to_stream body in
         let total_len = Body.length body in
         Lwt.catch
           (fun () ->

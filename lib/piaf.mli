@@ -342,6 +342,7 @@ module Body : sig
   val of_string_stream : ?length:length -> string Lwt_stream.t -> t
   val of_string : string -> t
   val of_bigstring : ?off:int -> ?len:int -> Bigstringaf.t -> t
+  val sendfile : ?length:length -> string -> (t, Error.t) Lwt_result.t
   val to_string : t -> (string, Error.t) Lwt_result.t
   val drain : t -> (unit, Error.t) Lwt_result.t
   val is_closed : t -> bool
@@ -429,9 +430,11 @@ module Body : sig
 
   val to_stream
     :  t
-    -> Bigstringaf.t IOVec.t Lwt_stream.t * (unit, Error.t) Lwt_result.t
+    -> (Bigstringaf.t IOVec.t Lwt_stream.t * (unit, Error.t) Lwt_result.t) Lwt.t
 
-  val to_string_stream : t -> string Lwt_stream.t * (unit, Error.t) Lwt_result.t
+  val to_string_stream
+    :  t
+    -> (string Lwt_stream.t * (unit, Error.t) Lwt_result.t) Lwt.t
 end
 
 module Request : sig
@@ -507,7 +510,13 @@ module Response : sig
     -> ((Gluten.impl -> unit) -> unit)
     -> t
 
-  val of_file
+  val copy_file
+    :  ?version:Versions.HTTP.t
+    -> ?headers:Headers.t
+    -> string
+    -> (t, Error.t) Lwt_result.t
+
+  val sendfile
     :  ?version:Versions.HTTP.t
     -> ?headers:Headers.t
     -> string

@@ -14,4 +14,5 @@
   magic-mime
   ssl
   uri
-  ipaddr))
+  ipaddr
+  sendfile))
