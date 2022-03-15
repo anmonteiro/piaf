@@ -111,10 +111,10 @@ let handle_response
     error
 
 let send_request
-    :  Connection.t -> body:Body.t -> Request.t
+    :  Connection.t -> config:Config.t -> body:Body.t -> Request.t
     -> (Response.t, 'err) Lwt_result.t
   =
- fun conn ~body request ->
+ fun conn ~config ~body request ->
   let (Connection.Conn
         { impl = (module Http); handle; connection_error_received; _ })
     =
@@ -129,7 +129,12 @@ let send_request
   Log.info (fun m ->
       m "@[<v 0>Sending request:@]@]@;<0 2>@[<v 0>%a@]@." Request.pp_hum request);
   let request_body =
-    Http.Client.request handle request ~error_handler ~response_handler
+    Http.Client.request
+      handle
+      ~flush_headers_immediately:config.flush_headers_immediately
+      ~error_handler
+      ~response_handler
+      request
   in
   Lwt.async (fun () ->
       match body.contents with

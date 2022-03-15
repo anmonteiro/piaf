@@ -64,7 +64,13 @@ module MakeHTTP1
       let+ t = create_connection ~config:(Config.to_http1_config config) fd in
       t, Runtime_scheme.make t.runtime
 
-    let request t req ~error_handler ~response_handler =
+    let request
+        t
+        ~flush_headers_immediately
+        ~error_handler
+        ~response_handler
+        req
+      =
       let response_handler response body =
         let request_method =
           match req.Request.meth with
@@ -106,7 +112,12 @@ module MakeHTTP1
         (* All HTTP/1.1 errors cause the connection to close. *)
         error_handler ~kind:`Connection error
       in
-      request t (Request.to_http1 req) ~error_handler ~response_handler
+      request
+        t
+        ~flush_headers_immediately
+        ~error_handler
+        ~response_handler
+        (Request.to_http1 req)
   end
 end
 

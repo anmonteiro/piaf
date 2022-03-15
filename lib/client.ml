@@ -381,7 +381,7 @@ let rec send_request_and_handle_response
     ({ remaining_redirects; request; headers; meth; _ } as request_info)
   =
   let**! response =
-    (Http_impl.send_request conn ~body request
+    (Http_impl.send_request conn ~config ~body request
       :> (Response.t, Error.t) Lwt_result.t)
   in
   if t.persistent then t.persistent <- Response.persistent_connection response;
