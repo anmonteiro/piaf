@@ -22,6 +22,10 @@ Unreleased
   ([#120](https://github.com/anmonteiro/piaf/pull/120))
 - Piaf.Server: prefer `Lwt.dont_wait` to the global exception hook
   ([#123](https://github.com/anmonteiro/piaf/pull/123))
+- Piaf.Response: Add `Body.sendfile` and `Response.sendfile`
+  ([#124](https://github.com/anmonteiro/piaf/pull/123))
+- Piaf.Config: Add `config.flush_headers_immediately`
+  ([#125](https://github.com/anmonteiro/piaf/pull/125))
 
 0.1.0 2021-02-03
 --------------
