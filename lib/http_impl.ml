@@ -1,5 +1,5 @@
 (*----------------------------------------------------------------------------
- * Copyright (c) 2019-2020, António Nuno Monteiro
+ * Copyright (c) 2019-2022, António Nuno Monteiro
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -38,8 +38,8 @@ let src = Logs.Src.create "piaf.http" ~doc:"Piaf HTTP module"
 
 module Log = (val Logs.src_log src : Logs.LOG)
 
-let make_error_handler notify_response_received ~kind:_ error =
-  Lwt.wakeup notify_response_received error
+let make_error_handler notify_error ~kind:_ error =
+  Lwt.wakeup notify_error error
 
 let lwterr e = Lwt.map (fun e -> Error e) e
 
@@ -116,7 +116,7 @@ let send_request
   =
  fun conn ~config ~body request ->
   let (Connection.Conn
-        { impl = (module Http); handle; connection_error_received; _ })
+        { impl = (module Http); handle; connection_error_received; runtime; _ })
     =
     conn
   in
@@ -128,10 +128,15 @@ let send_request
   let error_handler = make_error_handler notify_error in
   Log.info (fun m ->
       m "@[<v 0>Sending request:@]@]@;<0 2>@[<v 0>%a@]@." Request.pp_hum request);
+  let flush_headers_immediately =
+    match body.contents with
+    | `Sendfile _ -> true
+    | _ -> config.flush_headers_immediately
+  in
   let request_body =
     Http.Client.request
       handle
-      ~flush_headers_immediately:config.flush_headers_immediately
+      ~flush_headers_immediately
       ~error_handler
       ~response_handler
       request
@@ -148,7 +153,23 @@ let send_request
       | `Stream stream ->
         Lwt.on_success (Lwt_stream.closed stream) (fun () ->
             flush_and_close (module Http.Body) request_body);
-        Lwt.wrap3 Body.stream_write_body (module Http.Body) request_body stream);
+        Lwt.wrap3 Body.stream_write_body (module Http.Body) request_body stream
+      | `Sendfile (src_fd, _, _) ->
+        (match runtime with
+        | HTTP runtime ->
+          Bodyw.close request_body;
+          let on_exn exn = Lwt.wakeup notify_error (`Exn exn) in
+          Posix.sendfile
+            (module Http.Body)
+            ~on_exn
+            ~src_fd
+            ~dst_fd:(Gluten_lwt_unix.Client.socket runtime)
+            request_body;
+          Lwt.return_unit
+        | HTTPS _ ->
+          (* can't `sendfile` on an encrypted connection.
+           * TODO(anmonteiro): Return error message saying that. *)
+          assert false));
   handle_response response_received error_received connection_error_received
 
 let can't_upgrade msg =

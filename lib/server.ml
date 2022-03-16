@@ -1,5 +1,5 @@
 (*----------------------------------------------------------------------------
- * Copyright (c) 2020, António Nuno Monteiro
+ * Copyright (c) 2020-2022, António Nuno Monteiro
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -35,6 +35,7 @@ let src = Logs.Src.create "piaf.server" ~doc:"Piaf Server module"
 
 module Log = (val Logs.src_log src : Logs.LOG)
 module Reqd = Httpaf.Reqd
+module Server_connection = Httpaf.Server_connection
 
 module Service = struct
   type ('req, 'resp) t = 'req -> 'resp Lwt.t
@@ -68,8 +69,11 @@ module Error_response = struct
   type t = unit
 end
 
-let make_error_handler error_handler client_addr ?request error start_response =
-  let module Writer = Httpaf.Body.Writer in
+let make_error_handler ~fd error_handler
+    : Unix.sockaddr -> Server_connection.error_handler
+  =
+ fun client_addr ?request error start_response ->
+  let module Writer = Http1.Body.Writer in
   let was_response_written = ref false in
   let respond ~headers body =
     let headers =
@@ -87,7 +91,11 @@ let make_error_handler error_handler client_addr ?request error start_response =
       Writer.close response_body
     | `Stream stream ->
       Body.stream_write_body (module Http1.Body) response_body stream
+    | `Sendfile (src_fd, _, _) ->
+      Writer.flush response_body (fun () ->
+          Posix.sendfile (module Http1.Body) ~src_fd ~dst_fd:fd response_body)
   in
+
   let request = Option.map Request.of_http1 request in
   Lwt.dont_wait
     (fun () ->
@@ -118,7 +126,7 @@ let default_error_handler
     _client_addr
     ?request:_
     ~respond
-    (_error : Httpaf.Server_connection.error)
+    (_error : Server_connection.error)
   =
   respond ~headers:(Headers.of_list [ "connection", "close" ]) Body.empty;
   Lwt.return_unit
@@ -133,7 +141,8 @@ let report_exn reqd exn =
         raw_backtrace);
   Reqd.report_exn reqd exn
 
-let request_handler handler client_addr reqd =
+let request_handler ~fd handler : Unix.sockaddr -> Reqd.t Gluten.reqd -> unit =
+ fun client_addr reqd ->
   let { Gluten.reqd; upgrade } = reqd in
   let request = Reqd.request reqd in
   let body_length = Httpaf.Request.body_length request in
@@ -148,6 +157,7 @@ let request_handler handler client_addr reqd =
         | None -> ())
       (Reqd.request_body reqd)
   in
+  let exn_handler = report_exn reqd in
   let request = Request.of_http1 ~body:request_body request in
   Lwt.dont_wait
     (fun () ->
@@ -195,11 +205,30 @@ let request_handler handler client_addr reqd =
           Reqd.respond_with_bigstring reqd http1_response bstr
         | `Stream stream ->
           let response_body = Reqd.respond_with_streaming reqd http1_response in
-          Body.stream_write_body (module Http1.Body) response_body stream))
-    (report_exn reqd)
+          Body.stream_write_body (module Http1.Body) response_body stream
+        | `Sendfile (src_fd, _, _) ->
+          let response_body =
+            Reqd.respond_with_streaming
+              ~flush_headers_immediately:true
+              reqd
+              http1_response
+          in
+          Http1.Body.Writer.flush response_body (fun () ->
+              Posix.sendfile
+                (module Http1.Body)
+                ~on_exn:exn_handler
+                ~src_fd
+                ~dst_fd:fd
+                response_body)))
+    exn_handler
 
-let create ?config ?(error_handler = default_error_handler) handler =
+let create ?config ?(error_handler = default_error_handler) handler
+    : Unix.sockaddr -> Lwt_unix.file_descr -> unit Lwt.t
+  =
+ fun sockaddr fd ->
   Httpaf_lwt_unix.Server.create_connection_handler
     ?config:(Option.map Config.to_http1_config config)
-    ~request_handler:(request_handler handler)
-    ~error_handler:(make_error_handler error_handler)
+    ~request_handler:(request_handler ~fd handler)
+    ~error_handler:(make_error_handler ~fd error_handler)
+    sockaddr
+    fd

@@ -515,11 +515,8 @@ module Oneshot = struct
         let* response = response_result in
         match response with
         | Ok { Response.body; _ } ->
-          (match body.contents with
-          | `Empty _ | `String _ | `Bigstring _ -> shutdown t
-          | `Stream stream ->
-            let* () = Lwt_stream.closed stream in
-            shutdown t)
+          let* _body_closed = Body.closed body in
+          shutdown t
         | Error _ -> Lwt.return_unit);
     response_result
 

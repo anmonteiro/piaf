@@ -1,5 +1,5 @@
 (*----------------------------------------------------------------------------
- * Copyright (c) 2019-2020, António Nuno Monteiro
+ * Copyright (c) 2019-2022, António Nuno Monteiro
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -61,46 +61,32 @@ let of_string_stream ?version ?headers ~body status =
 let of_stream ?version ?headers ~body status =
   create ?version ?headers ~body:(Body.of_stream body) status
 
-(* TODO: accept buffer for I/O, so that caller can pool buffers? *)
-let of_file ?version ?(headers = Headers.empty) path =
+let sendfile ?version ?(headers = Headers.empty) path =
   let mime = Magic_mime.lookup path in
   let headers =
     Headers.(add_unless_exists headers Well_known.content_type mime)
   in
-  let**! channel =
+  let++! body = Body.sendfile path in
+  create ?version ~headers ~body `OK
+
+let copy_file ?version ?(headers = Headers.empty) path =
+  let mime = Magic_mime.lookup path in
+  let headers =
+    Headers.(add_unless_exists headers Well_known.content_type mime)
+  in
+  let**! fd =
     Lwt.catch
       (fun () ->
-        let+ channel =
-          Lwt_io.open_file ~flags:[ O_RDONLY ] ~mode:Lwt_io.input path
-        in
-        Ok channel)
+        let+ fd = Lwt_unix.openfile path [ O_RDONLY ] 0 in
+        Ok fd)
       (fun exn -> Lwt_result.fail (`Exn exn))
   in
-  let+ length = Lwt_io.length channel in
-  let remaining = ref (Int64.to_int length) in
-  let stream =
-    Lwt_stream.from (fun () ->
-        if !remaining = 0
-        then Lwt.return_none
-        else
-          let* payload =
-            Lwt_io.read
-            (* TODO: read from config buffer size? *)
-            (* ~count:(min config.Config.body_buffer_size !remaining) *)
-              ~count:(min 0x4000 !remaining)
-              channel
-          in
-          let read = String.length payload in
-          remaining := !remaining - read;
-          Lwt.return_some payload)
-  in
-  Lwt.on_success (Lwt_stream.closed stream) (fun () ->
-      Lwt.ignore_result (Lwt_io.close channel));
+  let+ stream = Body.stream_of_fd fd in
   Ok
     (create
        ?version
        ~headers
-       ~body:(Body.of_string_stream ~length:`Chunked stream)
+       ~body:(Body.of_stream ~length:`Chunked stream)
        `OK)
 
 let upgrade ?version ?(headers = Headers.empty) upgrade_handler =

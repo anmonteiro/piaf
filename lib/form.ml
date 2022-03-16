@@ -53,7 +53,7 @@ module Multipart = struct
     (* TODO(anmonteiro): validate max content-length from a config, etc. *)
     match Headers.get_exn request.headers "content-type" with
     | content_type when is_valid_content_type content_type ->
-      let stream, _or_error = Body.to_stream request.body in
+      let* stream, _or_error = Body.to_stream request.body in
       let kvs, push_to_kvs = Lwt_stream.create () in
       let emit name stream = push_to_kvs (Some (name, stream)) in
       let++! multipart =
@@ -107,7 +107,7 @@ module Multipart = struct
     let* result =
       Lwt_stream.fold (fun t acc -> (t.name, t) :: acc) field_stream []
     in
-    let _stream, or_error = Body.to_stream request.body in
+    let* _stream, or_error = Body.to_stream request.body in
     let+ or_error_result = or_error in
     Result.map (fun () -> result) or_error_result
 end

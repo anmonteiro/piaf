@@ -23,6 +23,7 @@ rec {
       ssl
       uri
       ipaddr
+      sendfile
 
       httpaf-lwt-unix
       gluten-lwt-unix
