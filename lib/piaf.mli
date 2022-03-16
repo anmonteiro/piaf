@@ -285,6 +285,10 @@ module Config : sig
     ; enable_http2_server_push : bool
     ; default_headers : (Headers.name * Headers.value) list
           (** Set default headers (on the client) to be sent on every request. *)
+    ; flush_headers_immediately : bool
+          (** Specifies whether to flush message headers to the transport
+              immediately, or if Piaf should wait for the first body bytes to be
+              written. Defaults to [false]. *)
     }
 
   val default : t

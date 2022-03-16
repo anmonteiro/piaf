@@ -47,9 +47,10 @@ module type Client = sig
 
   val request
     :  t
-    -> Request.t
+    -> flush_headers_immediately:bool
     -> error_handler:error_handler
     -> response_handler:response_handler
+    -> Request.t
     -> write_body
 
   val shutdown : t -> unit Lwt.t

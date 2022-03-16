@@ -44,6 +44,14 @@ module Piaf_body = Body
 
 module type BODY = Body.BODY
 
+module Body :
+  BODY
+    with type Reader.t = H2.Body.Reader.t
+     and type Writer.t = H2.Body.Writer.t = struct
+  module Reader = H2.Body.Reader
+  module Writer = H2.Body.Writer
+end
+
 module MakeHTTP2
     (H2_client : H2_lwt.Client)
     (Runtime_scheme : Scheme.Runtime.SCHEME
@@ -52,30 +60,9 @@ module MakeHTTP2
     with type Client.t = H2_client.t
      and type Client.socket = H2_client.socket
      and type Client.runtime = H2_client.runtime
-     and type Body.Reader.t = [ `read ] H2.Body.t
-     and type Body.Writer.t = [ `write ] H2.Body.t = struct
-  module Body :
-    BODY
-      with type Reader.t = [ `read ] H2.Body.t
-       and type Writer.t = [ `write ] H2.Body.t = struct
-    module Reader = struct
-      type t = [ `read ] H2.Body.t
-
-      include (
-        H2.Body : module type of H2.Body with type 'rw t := 'rw H2.Body.t)
-
-      let close = close_reader
-    end
-
-    module Writer = struct
-      type t = [ `write ] H2.Body.t
-
-      include (
-        H2.Body : module type of H2.Body with type 'rw t := 'rw H2.Body.t)
-
-      let close = close_writer
-    end
-  end
+     and type Body.Reader.t = H2.Body.Reader.t
+     and type Body.Writer.t = H2.Body.Writer.t = struct
+  module Body = Body
 
   module Client = struct
     include H2_client
@@ -91,11 +78,17 @@ module MakeHTTP2
 
     type response_handler = Response.t -> unit
 
-    let request t req ~error_handler ~response_handler =
+    let request
+        t
+        ~flush_headers_immediately
+        ~error_handler
+        ~response_handler
+        req
+      =
       let response_handler response body =
         let body =
           Piaf_body.of_raw_body
-            (module Body : BODY with type Reader.t = [ `read ] H2.Body.t)
+            (module Body : BODY with type Reader.t = H2.Body.Reader.t)
             ~body_length:(H2.Response.body_length response :> Piaf_body.length)
             body
         in
@@ -103,9 +96,10 @@ module MakeHTTP2
       in
       request
         t
-        (Request.to_h2 req)
+        ~flush_headers_immediately
         ~error_handler:(make_error_handler error_handler `Stream)
         ~response_handler
+        (Request.to_h2 req)
   end
 end
 
@@ -115,8 +109,8 @@ module HTTP : Http_intf.HTTP2 = struct
       with type Client.t = H2_lwt_unix.Client.t
        and type Client.socket = Lwt_unix.file_descr
        and type Client.runtime = H2_lwt_unix.Client.runtime
-      with type Body.Reader.t = [ `read ] H2.Body.t
-       and type Body.Writer.t = [ `write ] H2.Body.t =
+      with type Body.Reader.t = H2.Body.Reader.t
+       and type Body.Writer.t = H2.Body.Writer.t =
     MakeHTTP2 (H2_lwt_unix.Client) (Scheme.Runtime.HTTP)
 
   include (HTTP_2 : module type of HTTP_2 with module Client := HTTP_2.Client)
@@ -135,7 +129,7 @@ module HTTP : Http_intf.HTTP2 = struct
       let response_handler response body =
         let body =
           Piaf_body.of_raw_body
-            (module Body : BODY with type Reader.t = [ `read ] H2.Body.t)
+            (module Body : BODY with type Reader.t = H2.Body.Reader.t)
             ~body_length:(H2.Response.body_length response :> Piaf_body.length)
             body
         in
