@@ -47,6 +47,7 @@ let suite =
         (fun (desc, ty, f) -> Alcotest_lwt.test_case desc ty f)
         [ "copy_file", `Quick, test_copy_file
         ; "non-existent copy_file", `Quick, test_copy_file_nonexistent
+        ; "sendfile", `Quick, test_sendfile
         ; "non-existent sendfile", `Quick, test_sendfile_nonexistent
         ] )
   ]

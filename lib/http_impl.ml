@@ -129,12 +129,14 @@ let send_request
   Log.info (fun m ->
       m "@[<v 0>Sending request:@]@]@;<0 2>@[<v 0>%a@]@." Request.pp_hum request);
   let flush_headers_immediately =
-    match body.contents with `Sendfile _ -> true | _ -> false
+    match body.contents with
+    | `Sendfile _ -> true
+    | _ -> config.flush_headers_immediately
   in
   let request_body =
     Http.Client.request
       handle
-      ~flush_headers_immediately:config.flush_headers_immediately
+      ~flush_headers_immediately
       ~error_handler
       ~response_handler
       request
