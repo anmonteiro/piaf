@@ -26,6 +26,7 @@ let
         "4_12"
         "4_13"
         "4_14"
+        "5_00"
       ]
     , ...
     }@attrs: (builtins.removeAttrs attrs [ "ocamlVersions" ]) // {
@@ -73,11 +74,11 @@ gh-actions.cachixBuild {
   os = {
     macos-latest = {
       name = "Run nix-build";
-      ocamlVersions = [ "4_13" "4_14" ];
+      ocamlVersions = [ "4_13" "4_14" "5_00" ];
       run = "nix-build ./nix/ci/test.nix -A native --argstr ocamlVersion \${{ matrix.ocamlVersion }}";
     };
     ubuntu-latest = {
-      ocamlVersions = [ "4_12" "4_13" "4_14" ];
+      ocamlVersions = [ "4_12" "4_13" "4_14" "5_00" ];
       name = "Run nix-build";
       run = "nix-build ./nix/ci/test.nix -A native -A musl64 --argstr ocamlVersion \${{ matrix.ocamlVersion }}";
     };
