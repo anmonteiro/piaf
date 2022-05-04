@@ -15,6 +15,7 @@
    (into .github/workflows)))
  (deps
   ./flake.nix
+  ./flake.lock
   (source_tree ./nix))
  (action
   (progn
