@@ -143,7 +143,7 @@ let connect ~config ~conn_info fd =
             "Connection timed out after %.0f milliseconds"
             (config.connect_timeout *. 1000.)
         in
-        Logs.err (fun m -> m "%s" msg);
+        Log.err (fun m -> m "%s" msg);
         Lwt_result.fail (`Connect_error msg)
       | Unix.Unix_error (ECONNREFUSED, _, _) ->
         Lwt_result.fail
@@ -171,7 +171,7 @@ let open_connection ~config conn_info =
   if config.Config.tcp_nodelay
   then (
     Lwt_unix.setsockopt fd Lwt_unix.TCP_NODELAY true;
-    Logs.debug (fun m -> m "TCP_NODELAY set"));
+    Log.debug (fun m -> m "TCP_NODELAY set"));
   let* impl = make_impl ~config ~conn_info fd in
   match impl with
   | Ok _ -> Lwt.return impl
