@@ -6,7 +6,7 @@ let
     url = with lock.nodes.nixpkgs.locked;"https://github.com/${owner}/${repo}";
     inherit (lock.nodes.nixpkgs.locked) rev;
   };
-  pkgs = import "${src}/boot.nix" {
+  pkgs = import src {
     extraOverlays = [
       (self: super: {
         ocamlPackages = super.ocaml-ng."ocamlPackages_${ocamlVersion}";
