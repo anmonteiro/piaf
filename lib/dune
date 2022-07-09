@@ -5,7 +5,6 @@
   multipart
   h2
   h2-lwt-unix
-  happy-eyeballs-lwt
   httpaf
   httpaf-lwt-unix
   logs
