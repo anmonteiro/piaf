@@ -88,7 +88,7 @@ type cli =
   ; max_tls_version : Versions.TLS.t
   ; insecure : bool
   ; user_agent : string
-  ; connect_timeout : float
+  ; connect_timeout : int
   ; referer : string option
   ; compressed : bool
   ; user : string option
@@ -473,7 +473,7 @@ let piaf_config_of_cli
       ; allow_insecure = insecure
       ; min_tls_version
       ; max_tls_version
-      ; connect_timeout
+      ; connect_timeout = connect_timeout * 1000
       ; body_buffer_size = 0x10000
       }
 
@@ -529,7 +529,7 @@ module CLI = struct
   let connect_timeout =
     let doc = "Maximum time allowed for connection" in
     let docv = "seconds" in
-    Arg.(value & opt float 30. & info [ "connect-timeout" ] ~doc ~docv)
+    Arg.(value & opt int 30 & info [ "connect-timeout" ] ~doc ~docv)
 
   let data =
     let doc = "HTTP POST data" in

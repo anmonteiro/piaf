@@ -8,10 +8,12 @@
   outputs = { self, nixpkgs, flake-utils }:
     flake-utils.lib.eachDefaultSystem (system:
       let
-        pkgs = nixpkgs.legacyPackages."${system}";
+        pkgs = nixpkgs.legacyPackages."${system}".extend (self: super: {
+          ocamlPackages = super.ocaml-ng.ocamlPackages_5_00;
+        });
       in
       rec {
-        packages = (pkgs.callPackage ./nix { inherit pkgs; }) // {
+        packages = (pkgs.callPackage ./nix { }) // {
           gh-actions = pkgs.callPackage ./nix/gh-actions.nix { };
         };
         defaultPackage = packages.native.piaf;

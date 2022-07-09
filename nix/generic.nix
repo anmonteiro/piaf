@@ -24,6 +24,7 @@ rec {
       uri
       ipaddr
       sendfile
+      happy-eyeballs-lwt
 
       httpaf-lwt-unix
       gluten-lwt-unix

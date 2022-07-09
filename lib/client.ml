@@ -31,7 +31,8 @@
 
 open Monads.Bindings
 open Util
-module Connection_info = Connection.Connection_info
+module Connect_info = Connection.Connect_info
+module Connected_info = Connection.Connected_info
 module Version = Httpaf.Version
 
 let src = Logs.Src.create "piaf.client" ~doc:"Piaf Client module"
@@ -40,7 +41,6 @@ module Log = (val Logs.src_log src : Logs.LOG)
 
 type t =
   { mutable conn : Connection.t
-  ; mutable conn_info : Connection_info.t
   ; mutable persistent : bool
   ; mutable uri : Uri.t
         (* The connection URI. Request entrypoints connect here.
@@ -48,7 +48,7 @@ type t =
   ; config : Config.t
   }
 
-let create_http_connection ~config fd =
+let create_http_connection ~config ~conn_info fd =
   let (module Http), version =
     match
       ( config.Config.http2_prior_knowledge
@@ -66,10 +66,10 @@ let create_http_connection ~config fd =
       in
       (module Http1.HTTP : Http_intf.HTTP), version
   in
-  Http_impl.create_connection (module Http) ~config ~version fd
+  Http_impl.create_connection (module Http) ~config ~conn_info ~version fd
 
 let create_https_connection ~config ~conn_info fd =
-  let { Connection_info.host; _ } = conn_info in
+  let { Connected_info.host; _ } = conn_info in
   let alpn_protocols =
     Versions.ALPN.protocols_of_version config.Config.max_http_version
   in
@@ -119,70 +119,41 @@ let create_https_connection ~config ~conn_info fd =
            * protocol that we didn't specify. *)
           assert false)
     in
-    Http_impl.create_connection (module Https) ~config ~version ssl_client
+    Http_impl.create_connection
+      (module Https)
+      ~config
+      ~conn_info
+      ~version
+      ssl_client
 
 let close_connection ~conn_info fd =
   Log.info (fun m ->
-      m "Closing connection to %a" Connection_info.pp_hum conn_info);
+      m "Closing connection to %a" Connected_info.pp_hum conn_info);
   Lwt_unix.close fd
 
-let connect ~config ~conn_info fd =
-  let { Connection_info.addresses; _ } = conn_info in
-  (* TODO: try addresses in e.g. a round robin fashion? *)
-  let address = List.hd addresses in
-  Lwt.catch
-    (fun () ->
-      Log.debug (fun m ->
-          m "Trying connection to %a" Connection_info.pp_hum conn_info);
-      Lwt_unix.with_timeout config.Config.connect_timeout (fun () ->
-          Lwt_result.ok (Lwt_unix.connect fd address)))
-    (function
-      | Lwt_unix.Timeout ->
-        let msg =
-          Format.asprintf
-            "Connection timed out after %.0f milliseconds"
-            (config.connect_timeout *. 1000.)
-        in
-        Log.err (fun m -> m "%s" msg);
-        Lwt_result.fail (`Connect_error msg)
-      | Unix.Unix_error (ECONNREFUSED, _, _) ->
-        Lwt_result.fail
-          (`Connect_error
-            (Format.asprintf
-               "Failed connecting to %a: connection refused"
-               Connection_info.pp_hum
-               conn_info))
-      | exn ->
-        Lwt_result.fail
-          (`Connect_error
-            (Format.asprintf
-               "FIXME: unhandled connection error (%s)"
-               (Printexc.to_string exn))))
-
-let make_impl ~config ~conn_info fd =
-  let**! () = connect ~config ~conn_info fd in
-  Log.info (fun m -> m "Connected to %a" Connection_info.pp_hum conn_info);
-  match conn_info.scheme with
-  | Scheme.HTTP -> create_http_connection ~config fd
-  | HTTPS -> create_https_connection ~config ~conn_info fd
-
-let open_connection ~config conn_info =
-  let fd = Lwt_unix.socket Unix.PF_INET Unix.SOCK_STREAM 0 in
+let open_connection ~config { Connect_info.host; port; scheme; uri } =
+  let**! (addr, port), fd = Connection.connect ~config host ~port in
+  Log.info (fun m -> m "Connected to %a:%d" Ipaddr.pp addr port);
   if config.Config.tcp_nodelay
   then (
     Lwt_unix.setsockopt fd Lwt_unix.TCP_NODELAY true;
     Log.debug (fun m -> m "TCP_NODELAY set"));
-  let* impl = make_impl ~config ~conn_info fd in
-  match impl with
-  | Ok _ -> Lwt.return impl
+  let conn_info = { Connected_info.host; scheme; port; addr; uri } in
+  let* result =
+    match conn_info.Connected_info.scheme with
+    | Scheme.HTTP -> create_http_connection ~config ~conn_info fd
+    | HTTPS -> create_https_connection ~config ~conn_info fd
+  in
+  match result with
+  | Ok _ -> Lwt.return result
   | Error _ ->
     let+ () = close_connection ~conn_info fd in
-    impl
+    result
 
 let change_connection t conn_info =
   let++! conn' = open_connection ~config:t.config conn_info in
   t.conn <- conn';
-  t.conn_info <- conn_info
+  t.uri <- conn_info.uri
 
 (* This function and `drain_available_body_bytes_and_shutdown` both take a
  * `conn_info` and a `Connection.t` instead of just a `t` too allow reuse when
@@ -191,85 +162,62 @@ let change_connection t conn_info =
  * Due to the fact that `t.conn` is mutable, we could run into weird
  * asynchronous edge cases and shut down the connection that's currently in use
  * instead of the old one. *)
-let shutdown_conn ~conn_info (Connection.Conn { impl; handle; _ }) =
+let shutdown_conn (Connection.Conn { impl; handle; conn_info; _ }) =
   Log.info (fun m ->
       m
         "Tearing down %s connection to %a"
         (String.uppercase_ascii
-           (Scheme.to_string conn_info.Connection_info.scheme))
-        Connection_info.pp_hum
+           (Scheme.to_string conn_info.Connected_info.scheme))
+        Connected_info.pp_hum
         conn_info);
   Http_impl.shutdown (module (val impl)) handle
 
-let drain_available_body_bytes_and_shutdown ~conn_info conn response_body =
+let drain_available_body_bytes_and_shutdown conn response_body =
   Log.debug (fun m -> m "Ignoring the response body");
   (* Junk what's available because we're going to close the connection.
    * This is to avoid leaking memory. We're not going to use this
    * response body so it doesn't need to stay around. *)
   Lwt.async (fun () ->
       let* () = Body.drain_available response_body in
-      shutdown_conn ~conn_info conn)
+      shutdown_conn conn)
 
-let shutdown { conn; conn_info; _ } = shutdown_conn ~conn_info conn
+let shutdown { conn; _ } = shutdown_conn conn
 
 (* returns true if it succeeding in reusing the connection, false otherwise. *)
 let reuse_or_set_up_new_connection
-    ({ conn = Connection.Conn { impl = (module Http); handle; _ }
-     ; conn_info
+    ({ conn =
+         Connection.Conn
+           ({ impl = (module Http); handle; conn_info; _ } as conn)
      ; _
      } as t)
     new_uri
   =
-  match Scheme.of_uri new_uri with
+  match Connect_info.of_uri new_uri with
   | Error _ as e -> Lwt.return e
-  | Ok new_scheme ->
-    let new_conn_info =
-      { conn_info with
-        port = Connection_info.infer_port ~scheme:new_scheme new_uri
-      ; scheme = new_scheme
-      ; host = Uri.host_exn new_uri
-      ; uri = new_uri
-      }
-    in
+  | Ok new_conn_info ->
     if (not t.persistent) || Http_impl.is_closed (module Http) handle
     then (
       (* No way to avoid establishing a new connection if the previous one
        * wasn't persistent or the connection is closed. *)
-      Lwt.ignore_result (shutdown t);
-      let**! new_addresses =
-        Connection.resolve_host ~port:new_conn_info.port new_conn_info.host
-      in
-      let new_conn_info = { new_conn_info with addresses = new_addresses } in
+      Lwt.async (fun () -> shutdown t);
       let++! () = change_connection t new_conn_info in
       false)
-    else if Connection_info.equal_without_resolving conn_info new_conn_info
+    else if Connect_info.equal
+              (Connected_info.to_connect_info conn_info)
+              new_conn_info
     then (
       (* If we're redirecting within the same host / port / scheme, no need
        * to re-establish a new connection. *)
       Log.debug (fun m ->
           m "Reusing the same connection as the host / port didn't change");
       (* Even if we reused the connection, the URI could've changed. *)
-      t.conn_info <- new_conn_info;
+      conn.conn_info <- { conn_info with uri = new_uri };
+      (* Connected_info.merge conn_info new_conn_info; *)
       Lwt_result.return true)
     else
-      let**! new_addresses =
-        Connection.resolve_host ~port:new_conn_info.port new_conn_info.host
-      in
-      (* Now we know the new address *)
-      let new_conn_info = { new_conn_info with addresses = new_addresses } in
-      (* Really avoiding having to establish a new connection here, if the new
-       * host resolves to the same address and the port matches *)
-      if Connection_info.equal conn_info new_conn_info
-      then (
-        Log.debug (fun m ->
-            m "Reusing the same connection as the remote address didn't change");
-        (* Even if we reused the connection, the URI could've changed. *)
-        t.conn_info <- new_conn_info;
-        Lwt_result.return true)
-      else
-        (* No way to avoid establishing a new connection. *)
-        let++! () = change_connection t new_conn_info in
-        false
+      (* No way to avoid establishing a new connection. *)
+      let++! () = change_connection t new_conn_info in
+      false
 
 type request_info =
   { remaining_redirects : int
@@ -281,15 +229,19 @@ type request_info =
   }
 
 let rec return_response
-    ({ conn = Connection.Conn { impl = (module Http); runtime; _ }
-     ; conn_info
-     ; config
-     ; _
-     } as t)
+    ({ conn; config; _ } as t)
     ({ request; _ } as request_info)
     ({ Response.status; headers; version; body } as response)
   =
-  let { Connection_info.scheme; _ } = conn_info in
+  let (Connection.Conn
+        { impl = (module Http)
+        ; runtime
+        ; conn_info = { Connected_info.scheme; _ } as conn_info
+        ; _
+        })
+    =
+    conn
+  in
   (* A particular set of conditions must be true: we're receiving an HTTP
    * response, over HTTP/1.1, that has status 101, and we've asked to upgrade
    * to HTTP/2 via h2c. `http2_prior_knowledge` must also be false, because
@@ -313,7 +265,11 @@ let rec return_response
       let (module Http2) = (module Http2.HTTP : Http_intf.HTTP2) in
       let**! () = Body.drain body in
       let**! h2_conn, response =
-        (Http_impl.create_h2c_connection ~config ~http_request:request runtime
+        (Http_impl.create_h2c_connection
+           ~config
+           ~conn_info
+           ~http_request:request
+           runtime
           :> (Connection.t * Response.t, Error.t) Lwt_result.t)
       in
       t.conn <- h2_conn;
@@ -334,14 +290,14 @@ let is_h2c_upgrade ~config ~version ~scheme =
   | _ -> false
 
 let make_request_info
-    { conn = Connection.Conn { version; _ }; conn_info; config; _ }
+    { conn = Connection.Conn { version; conn_info; _ }; config; _ }
     ?(remaining_redirects = config.max_redirects)
     ~meth
     ~headers
     ~body
     target
   =
-  let { Connection_info.host; scheme; _ } = conn_info in
+  let { Connected_info.host; scheme; _ } = conn_info in
   let is_h2c_upgrade = is_h2c_upgrade ~config ~version ~scheme in
   let h2_settings = H2.Settings.to_base64 (Config.to_http2_settings config) in
   let canonical_headers =
@@ -376,7 +332,7 @@ let make_request_info
   { remaining_redirects; headers; request; meth; target; is_h2c_upgrade }
 
 let rec send_request_and_handle_response
-    ({ conn; conn_info; uri; config; _ } as t)
+    ({ conn = Conn { conn_info; _ } as conn; uri; config; _ } as t)
     ~body
     ({ remaining_redirects; request; headers; meth; _ } as request_info)
   =
@@ -401,7 +357,7 @@ let rec send_request_and_handle_response
     Log.err (fun m -> m "%s" msg);
     Lwt_result.fail (`Connect_error msg)
   | true, true, _, Some location ->
-    let { Connection_info.scheme; _ } = conn_info in
+    let { Connected_info.scheme; _ } = conn_info in
     let new_uri = Uri.parse_with_base_uri ~scheme ~uri location in
     let**! did_reuse =
       (reuse_or_set_up_new_connection t new_uri :> (bool, Error.t) Lwt_result.t)
@@ -418,7 +374,7 @@ let rec send_request_and_handle_response
       (* In this branch, don't bother waiting for the entire response body to
        * arrive, we're going to shut down the connection either way. Just hang
        * up. *)
-      drain_available_body_bytes_and_shutdown ~conn_info conn response.body;
+      drain_available_body_bytes_and_shutdown conn response.body;
     if Status.is_permanent_redirection response.status then t.uri <- new_uri;
     let target = Uri.path_and_query new_uri in
     (* From RFC7231§6.4:
@@ -456,11 +412,11 @@ let rec send_request_and_handle_response
     return_response t request_info response
 
 let create ?(config = Config.default) uri =
-  let**! conn_info = Connection_info.of_uri uri in
+  let**! conn_info = Lwt_result.lift (Connect_info.of_uri uri) in
   let++! conn =
     (open_connection ~config conn_info :> (Connection.t, Error.t) Lwt_result.t)
   in
-  { conn; conn_info; persistent = true; uri; config }
+  { conn; persistent = true; uri; config }
 
 let call t ~meth ?(headers = []) ?(body = Body.empty) target =
   (* Need to try to reconnect to the base host on every call, if redirects are
