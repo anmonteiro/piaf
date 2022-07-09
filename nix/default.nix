@@ -9,12 +9,8 @@
     inherit doCheck;
   };
 
-  musl64 =
-    let
-      pkgs' = pkgsCross.musl64;
-    in
-    pkgs'.callPackage ./generic.nix {
-      static = true;
-      inherit doCheck;
-    };
+  musl64 = pkgsCross.musl64.callPackage ./generic.nix {
+    static = true;
+    inherit doCheck;
+  };
 }
