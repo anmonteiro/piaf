@@ -6,7 +6,7 @@ let
     url = with lock.nodes.nixpkgs.locked;"https://github.com/${owner}/${repo}";
     inherit (lock.nodes.nixpkgs.locked) rev;
   };
-  pkgs = import "${src}/boot.nix" {
+  pkgs = import src {
     extraOverlays = [
       (self: super: {
         ocamlPackages = super.ocaml-ng."ocamlPackages_${ocamlVersion}";
@@ -18,12 +18,8 @@ let
     ];
   };
 
-  inherit (pkgs) lib stdenv fetchTarball ocamlPackages;
-
-  piafPkgs = (import ./.. {
-    inherit pkgs;
-    doCheck = true;
-  });
+  inherit (pkgs) lib stdenv fetchTarball ocamlPackages callPackage;
+  piafPkgs = callPackage ./.. { doCheck = true; };
 
   test = pkg:
     let piafDrvs = lib.filterAttrs (_: value: lib.isDerivation value) pkg;
@@ -39,7 +35,12 @@ let
       installPhase = ''
         touch $out
       '';
-      buildInputs = (lib.attrValues piafDrvs) ++ (with ocamlPackages; [ ocaml dune findlib pkgs.ocamlformat ]);
+      buildInputs = (lib.attrValues piafDrvs) ++ (with ocamlPackages; [
+        ocaml
+        dune
+        findlib
+        ocamlformat
+      ]);
       doCheck = true;
       checkPhase = ''
         # Check code is formatted with OCamlformat

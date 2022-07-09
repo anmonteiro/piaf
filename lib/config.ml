@@ -66,8 +66,9 @@ type t =
   ; min_tls_version : Versions.TLS.t
   ; max_tls_version : Versions.TLS.t
   ; tcp_nodelay : bool
-  ; connect_timeout : float (* Buffer sizes *)
-  ; buffer_size : int
+  ; connect_timeout : float (* seconds *)
+  ; (* Buffer sizes *)
+    buffer_size : int
         (** Buffer size used for requests and responses. Defaults to 16384 bytes *)
   ; body_buffer_size : int
         (** Buffer size used for request and response bodies. *)
@@ -96,7 +97,7 @@ let default =
   ; min_tls_version = TLSv1_0
   ; max_tls_version = TLSv1_3
   ; tcp_nodelay = true
-  ; connect_timeout = 30.0
+  ; connect_timeout = 30.
   ; buffer_size = 0x4000
   ; body_buffer_size = 0x1000
   ; (* TODO: we don't really support push yet. *)
