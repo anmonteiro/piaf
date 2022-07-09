@@ -18,12 +18,8 @@ let
     ];
   };
 
-  inherit (pkgs) lib stdenv fetchTarball ocamlPackages;
-
-  piafPkgs = (import ./.. {
-    inherit pkgs;
-    doCheck = true;
-  });
+  inherit (pkgs) lib stdenv fetchTarball ocamlPackages callPackage;
+  piafPkgs = callPackage ./.. { doCheck = true; };
 
   test = pkg:
     let piafDrvs = lib.filterAttrs (_: value: lib.isDerivation value) pkg;
