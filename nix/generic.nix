@@ -1,4 +1,4 @@
-{ stdenv, lib, ocamlPackages, static ? false, doCheck, cacert }:
+{ stdenv, lib, ocamlPackages, static ? false, doCheck }:
 
 with ocamlPackages;
 
@@ -24,7 +24,6 @@ rec {
       uri
       ipaddr
       sendfile
-      happy-eyeballs-lwt
 
       httpaf-lwt-unix
       gluten-lwt-unix
@@ -39,7 +38,6 @@ rec {
     checkInputs = [
       alcotest
       alcotest-lwt
-      cacert
     ];
     inherit doCheck;
 
