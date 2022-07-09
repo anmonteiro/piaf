@@ -35,7 +35,12 @@ let
       installPhase = ''
         touch $out
       '';
-      buildInputs = (lib.attrValues piafDrvs) ++ (with ocamlPackages; [ ocaml dune findlib pkgs.ocamlformat ]);
+      buildInputs = (lib.attrValues piafDrvs) ++ (with ocamlPackages; [
+        ocaml
+        dune
+        findlib
+        ocamlformat
+      ]);
       doCheck = true;
       checkPhase = ''
         # Check code is formatted with OCamlformat

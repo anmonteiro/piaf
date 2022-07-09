@@ -1,4 +1,4 @@
-{ stdenv, lib, ocamlPackages, static ? false, doCheck }:
+{ stdenv, lib, ocamlPackages, static ? false, doCheck, cacert }:
 
 with ocamlPackages;
 
@@ -32,12 +32,15 @@ rec {
 
       multipart_form
 
-      alcotest
-      alcotest-lwt
       dune-site
       digestif
     ];
 
+    checkInputs = [
+      alcotest
+      alcotest-lwt
+      cacert
+    ];
     inherit doCheck;
 
     meta = {
