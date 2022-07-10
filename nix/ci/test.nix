@@ -10,10 +10,6 @@ let
     extraOverlays = [
       (self: super: {
         ocamlPackages = super.ocaml-ng."ocamlPackages_${ocamlVersion}";
-
-        pkgsCross.musl64 = super.pkgsCross.musl64 // {
-          ocamlPackages = super.pkgsCross.musl64.ocaml-ng."ocamlPackages_${ocamlVersion}";
-        };
       })
     ];
   };
