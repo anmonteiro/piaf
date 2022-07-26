@@ -9,8 +9,12 @@
     inherit doCheck;
   };
 
-  musl64 = pkgsCross.musl64.callPackage ./generic.nix {
-    static = true;
-    inherit doCheck;
-  };
+  musl64 = pkgsCross.musl64.callPackage
+    ({ callPackage, ocamlPackages }:
+      callPackage ./generic.nix
+        {
+          static = true;
+          inherit doCheck;
+        })
+    { };
 }
