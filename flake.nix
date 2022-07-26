@@ -13,10 +13,9 @@
         });
       in
       rec {
-        packages = (pkgs.callPackage ./nix { }) // {
-          gh-actions = pkgs.callPackage ./nix/gh-actions.nix { };
-        };
+        packages = (pkgs.callPackage ./nix { }) // { };
         defaultPackage = packages.native.piaf;
         devShell = pkgs.callPackage ./shell.nix { };
+        gh-actions = pkgs.callPackage ./nix/gh-actions.nix { };
       });
 }

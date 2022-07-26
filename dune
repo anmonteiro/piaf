@@ -19,5 +19,12 @@
   (source_tree ./nix))
  (action
   (progn
-   (run nix eval --show-trace --raw "path:.#gh-actions" --write-to %{target})
+   (run
+    nix
+    eval
+    --show-trace
+    --raw
+    "path:.#gh-actions.x86_64-linux"
+    --write-to
+    %{target})
    (bash "echo \"$(cat %{target} | jq -r)\" > %{target}"))))
