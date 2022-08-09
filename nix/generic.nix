@@ -33,9 +33,8 @@ rec {
 
       dune-site
       digestif
-    ];
 
-    checkInputs = [
+      # Not in checkInputs because we also run tests in the musl64 build
       alcotest
       alcotest-lwt
     ];
@@ -75,8 +74,6 @@ rec {
       camlzip
       ezgzip
     ];
-
-    inherit doCheck;
 
     meta = {
       description = "`curl` clone implemented using Piaf.";
