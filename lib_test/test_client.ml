@@ -164,8 +164,7 @@ let test_https _ () =
     "response error"
     (Error
        (`Connect_error
-         "SSL Error: error:1416F086:SSL \
-          routines:tls_process_server_certificate:certificate verify failed"))
+         "SSL Error: error:16000069:STORE routines::unregistered scheme"))
     response;
   Helper_server.teardown server
 

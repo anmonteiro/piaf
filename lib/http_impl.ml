@@ -49,11 +49,12 @@ let create_connection
          with type Client.socket = a
           and type Client.runtime = r)
       -> config:Config.t
+      -> conn_info:Connection.Connection_info.t
       -> version:Versions.HTTP.t
       -> a
       -> (Connection.t, Error.client) result Lwt.t
   =
- fun (module Http_impl) ~config ~version socket ->
+ fun (module Http_impl) ~config ~conn_info ~version socket ->
   let connection_error_received, notify_connection_error_received =
     Lwt.wait ()
   in
@@ -65,6 +66,7 @@ let create_connection
     Connection.Conn
       { impl = (module Http_impl)
       ; handle
+      ; conn_info
       ; runtime
       ; connection_error_received
       ; version
@@ -176,10 +178,11 @@ let can't_upgrade msg =
   Lwt_result.fail (`Protocol_error (H2.Error_code.HTTP_1_1_Required, msg))
 
 let create_h2c_connection
-    :  config:Config.t -> http_request:Request.t -> Scheme.Runtime.t
+    :  config:Config.t -> conn_info:Connection.Connection_info.t
+    -> http_request:Request.t -> Scheme.Runtime.t
     -> (Connection.t * Response.t, Error.client) result Lwt.t
   =
- fun ~config ~http_request runtime ->
+ fun ~config ~conn_info ~http_request runtime ->
   match runtime with
   | HTTP http_runtime ->
     let (module Http2) = (module Http2.HTTP : Http_intf.HTTP2) in
@@ -218,6 +221,7 @@ let create_h2c_connection
           Connection.Conn
             { impl = (module Http2)
             ; handle
+            ; conn_info
             ; runtime
             ; connection_error_received
             ; version = Versions.HTTP.v2_0

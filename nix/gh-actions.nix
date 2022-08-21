@@ -23,7 +23,6 @@ let
   job =
     { steps
     , ocamlVersions ? [
-        "4_12"
         "4_13"
         "4_14"
         "5_00"
@@ -78,7 +77,7 @@ gh-actions.cachixBuild {
       run = "nix-build ./nix/ci/test.nix -A native --argstr ocamlVersion \${{ matrix.ocamlVersion }}";
     };
     ubuntu-latest = {
-      ocamlVersions = [ "4_12" "4_13" "4_14" "5_00" ];
+      ocamlVersions = [ "4_13" "4_14" "5_00" ];
       name = "Run nix-build";
       run = "nix-build ./nix/ci/test.nix -A native -A musl64 --argstr ocamlVersion \${{ matrix.ocamlVersion }}";
     };

@@ -276,8 +276,9 @@ module Config : sig
     ; min_tls_version : Versions.TLS.t
     ; max_tls_version : Versions.TLS.t
     ; tcp_nodelay : bool
-    ; connect_timeout : float (* Buffer sizes *)
-    ; buffer_size : int
+    ; connect_timeout : float (* in seconds *)
+    ; (* Buffer sizes *)
+      buffer_size : int
           (** Buffer size used for requests and responses. Defaults to 16384
               bytes *)
     ; body_buffer_size : int

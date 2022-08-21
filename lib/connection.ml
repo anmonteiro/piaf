@@ -33,6 +33,10 @@ open Monads.Bindings
 open Util
 module Version = Httpaf.Version
 
+let src = Logs.Src.create "piaf.connection" ~doc:"Piaf Connection module"
+
+module Log = (val Logs.src_log src : Logs.LOG)
+
 let resolve_host ~port hostname =
   let+ addresses =
     Lwt_unix.getaddrinfo
@@ -58,11 +62,7 @@ module Connection_info = struct
     ; scheme : Scheme.t
     ; addresses : Unix.sockaddr list
     ; uri : Uri.t
-          (** Current URI the connection is connected to. A redirect could've
-              made the remote endpoint change.
-
-              Guaranteed to have a host part. *)
-    ; host : string  (** `Uri.host t.uri` but makes our life easier. *)
+    ; host : string
     }
 
   (* Only need the address and port to know whether the endpoint is the same or
@@ -94,13 +94,21 @@ module Connection_info = struct
     && c1.scheme = c2.scheme
     && Uri.host_exn c1.uri = Uri.host_exn c2.uri
 
+  let pp_address fmt = function
+    | Unix.ADDR_INET (addr, port) ->
+      Format.fprintf fmt "%s:%d" (Unix.string_of_inet_addr addr) port
+    | ADDR_UNIX addr -> Format.fprintf fmt "%s" addr
+
+  let pp_hum fmt { addresses; host; _ } =
+    let address = List.hd addresses in
+    Format.fprintf fmt "%s (%a)" host pp_address address
+
   let infer_port ~scheme uri =
-    match Uri.port uri, scheme with
+    match Uri.port uri with
     (* if a port is given, use it. *)
-    | Some port, _ -> port
+    | Some port -> port
     (* Otherwise, infer from the scheme. *)
-    | None, Scheme.HTTPS -> 443
-    | None, HTTP -> 80
+    | None -> Scheme.to_port scheme
 
   let of_uri uri =
     let uri = Uri.canonicalize uri in
@@ -113,16 +121,40 @@ module Connection_info = struct
       Lwt_result.fail
         (`Msg (Format.asprintf "Missing host part for: %a" Uri.pp_hum uri))
     | _, (Error _ as error) -> Lwt.return error
-
-  let pp_address fmt = function
-    | Unix.ADDR_INET (addr, port) ->
-      Format.fprintf fmt "%s:%d" (Unix.string_of_inet_addr addr) port
-    | ADDR_UNIX addr -> Format.fprintf fmt "%s" addr
-
-  let pp_hum fmt { addresses; host; _ } =
-    let address = List.hd addresses in
-    Format.fprintf fmt "%s (%a)" host pp_address address
 end
+
+let connect ~config ~conn_info fd =
+  let { Connection_info.addresses; _ } = conn_info in
+  (* TODO: try addresses in e.g. a round robin fashion? *)
+  let address = List.hd addresses in
+  Lwt.catch
+    (fun () ->
+      Log.debug (fun m ->
+          m "Trying connection to %a" Connection_info.pp_hum conn_info);
+      Lwt_unix.with_timeout config.Config.connect_timeout (fun () ->
+          Lwt_result.ok (Lwt_unix.connect fd address)))
+    (function
+      | Lwt_unix.Timeout ->
+        let msg =
+          Format.asprintf
+            "Connection timed out after %.0f milliseconds"
+            (config.connect_timeout *. 1000.)
+        in
+        Log.err (fun m -> m "%s" msg);
+        Lwt_result.fail (`Connect_error msg)
+      | Unix.Unix_error (ECONNREFUSED, _, _) ->
+        Lwt_result.fail
+          (`Connect_error
+            (Format.asprintf
+               "Failed connecting to %a: connection refused"
+               Connection_info.pp_hum
+               conn_info))
+      | exn ->
+        Lwt_result.fail
+          (`Connect_error
+            (Format.asprintf
+               "FIXME: unhandled connection error (%s)"
+               (Printexc.to_string exn))))
 
 type t =
   | Conn :
@@ -131,6 +163,7 @@ type t =
              with type Client.t = 'a
               and type Body.Reader.t = 'b)
       ; handle : 'a
+      ; mutable conn_info : Connection_info.t
       ; runtime : Scheme.Runtime.t
       ; connection_error_received : Error.client Lwt.t
       ; version : Version.t  (** HTTP version that this connection speaks *)

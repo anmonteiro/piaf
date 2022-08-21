@@ -1,5 +1,5 @@
 (*----------------------------------------------------------------------------
- * Copyright (c) 2019-2020, António Nuno Monteiro
+ * Copyright (c) 2019-2022, António Nuno Monteiro
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -40,6 +40,8 @@ let of_uri uri =
   (* We don't support anything else *)
   | Some other -> Error (`Msg (Format.asprintf "Unsupported scheme: %s" other))
 
+let to_port = function HTTPS -> 443 | HTTP -> 80
+let of_port = function 80 -> Some HTTP | 443 -> Some HTTPS | _p -> None
 let to_string = function HTTP -> "http" | HTTPS -> "https"
 let pp_hum formatter scheme = Format.fprintf formatter "%s" (to_string scheme)
 
