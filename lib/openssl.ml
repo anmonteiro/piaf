@@ -125,20 +125,15 @@ let load_verify_locations ?(cacert = "") ?(capath = "") ctx =
     Error (`Exn exn)
 
 let configure_verify_locations ?cacert ?capath ctx =
-  let promise, resolver = Lwt.wait () in
-  Lwt.async (fun () ->
-      let result =
-        match cacert, capath with
-        | Some _, Some _ | Some _, None | None, Some _ ->
-          load_verify_locations ?cacert ?capath ctx
-        | None, None ->
-          (* Use default CA certificates *)
-          if Ssl.set_default_verify_paths ctx
-          then Ok ()
-          else Error (`Connect_error "Failed to set default verify paths")
-      in
-      Lwt.wrap2 Lwt.wakeup_later resolver result);
-  promise
+  Eio_unix.run_in_systhread (fun () ->
+      match cacert, capath with
+      | Some _, Some _ | Some _, None | None, Some _ ->
+        load_verify_locations ?cacert ?capath ctx
+      | None, None ->
+        (* Use default CA certificates *)
+        if Ssl.set_default_verify_paths ctx
+        then Ok ()
+        else Error (`Connect_error "Failed to set default verify paths"))
 
 let version_of_ssl = function
   | Ssl.SSLv23 -> Versions.TLS.Any
@@ -213,7 +208,7 @@ module Error = struct
         Versions.TLS.pp_hum
         max_tls_version
     in
-    Lwt_result.fail (`Connect_error reason)
+    Error (`Connect_error reason)
 end
 
 let set_verify ~cacert ?capath ~clientcert ctx =
@@ -226,14 +221,13 @@ let set_verify ~cacert ?capath ~clientcert ctx =
   Ssl.set_verify ctx [ Ssl.Verify_peer ] (Some Ssl.client_verify_callback);
   Ssl.set_client_verify_callback_verbose false;
   (* Server certificate verification *)
-  let**! () =
+  let*! () =
     match cacert with
     | Some certarg ->
       (match certarg with
       | Cert.Filepath path ->
         configure_verify_locations ctx ~cacert:path ?capath
-      | Certpem cert ->
-        Lwt_result.return (load_peer_ca_cert ~certificate:cert ctx))
+      | Certpem cert -> Ok (load_peer_ca_cert ~certificate:cert ctx))
     | None -> configure_verify_locations ctx ?capath
   in
   (* Send client cert if present *)
@@ -241,11 +235,9 @@ let set_verify ~cacert ?capath ~clientcert ctx =
   | Some certwithkey ->
     (match certwithkey with
     | Cert.Certpem cert, Cert.Certpem key ->
-      Lwt_result.return
-        (load_client_cert_from_string ~certificate:cert ~private_key:key ctx)
+      Ok (load_client_cert_from_string ~certificate:cert ~private_key:key ctx)
     | Cert.Filepath cert, Cert.Filepath key ->
-      Lwt_result.return
-        (load_client_cert ~certificate:cert ~private_key:key ctx)
+      Ok (load_client_cert ~certificate:cert ~private_key:key ctx)
     | _ ->
       let msg =
         Format.asprintf
@@ -253,8 +245,8 @@ let set_verify ~cacert ?capath ~clientcert ctx =
            filepath or pem string"
       in
       Log.err (fun m -> m "%s" msg);
-      Lwt_result.fail (`Connect_error msg))
-  | None -> Lwt_result.return ()
+      Error (`Connect_error msg))
+  | None -> Ok ()
 
 (* Assumes Lwt_unix.connect has already been called. *)
 let connect ~hostname ~config ~alpn_protocols fd =
@@ -281,7 +273,7 @@ let connect ~hostname ~config ~alpn_protocols fd =
         max_tls_version
     in
     Log.err (fun m -> m "%s" msg);
-    Lwt_result.fail (`Connect_error msg))
+    Error (`Connect_error msg))
   else
     match
       Ssl.(
@@ -305,16 +297,16 @@ let connect ~hostname ~config ~alpn_protocols fd =
       Ssl.set_context_alpn_protos ctx alpn_protocols;
       (* Use the server's preferences rather than the client's *)
       Ssl.honor_cipher_order ctx;
-      let**! () =
+      let*! () =
         if not allow_insecure
         then set_verify ~cacert ?capath ~clientcert ctx
         else
           (* Don't bother configuring verify locations if we're not going to be
              verifying the peer. *)
-          Lwt_result.return ()
+          Ok ()
       in
-      let s = Lwt_ssl.embed_uninitialized_socket fd ctx in
-      let ssl_sock = Lwt_ssl.ssl_socket_of_uninitialized_socket s in
+      let s = Eio_ssl.embed_uninitialized_socket fd ctx in
+      let ssl_sock = Eio_ssl.ssl_socket_of_uninitialized_socket s in
       (* If hostname is an IP address, check that instead of the hostname *)
       let ipaddr = Ipaddr.of_string hostname in
       (match ipaddr with
@@ -324,15 +316,13 @@ let connect ~hostname ~config ~alpn_protocols fd =
         (* https://wiki.openssl.org/index.php/Hostname_validation *)
         Ssl.set_hostflags ssl_sock [ No_partial_wildcards ];
         Ssl.set_host ssl_sock hostname);
-      let+ socket_or_error =
-        Lwt.catch
-          (fun () -> Lwt_result.ok (Lwt_ssl.ssl_perform_handshake s))
-          (function
-            | Ssl.Connection_error ssl_error ->
-              let msg = Error.ssl_error_to_string ssl_error in
-              Log.err (fun m -> m "%s" msg);
-              Lwt_result.fail (`Connect_error msg)
-            | _ -> assert false)
+      let socket_or_error =
+        try Ok (Eio_ssl.ssl_perform_handshake s) with
+        | Ssl.Connection_error ssl_error ->
+          let msg = Error.ssl_error_to_string ssl_error in
+          Log.err (fun m -> m "%s" msg);
+          Error (`Connect_error msg)
+        | _ -> assert false
       in
       (match socket_or_error with
       | Ok ssl_socket ->

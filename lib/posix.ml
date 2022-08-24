@@ -44,11 +44,7 @@ let sendfile
   (* Flush everything to the wire before calling `sendfile`, as we're gonna
      bypass the http/af runtime and write bytes to the file descriptor
      directly. *)
-  let sent_ret =
-    Sendfile.sendfile
-      ~src:(Lwt_unix.unix_file_descr src_fd)
-      (Lwt_unix.unix_file_descr dst_fd)
-  in
+  let sent_ret = Sendfile.sendfile ~src:src_fd dst_fd in
   match sent_ret with
   | Ok sent ->
     (* NOTE(anmonteiro): we don't need to

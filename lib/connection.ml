@@ -29,6 +29,7 @@
  * POSSIBILITY OF SUCH DAMAGE.
  *---------------------------------------------------------------------------*)
 
+open Eio.Std
 open Monads.Bindings
 open Util
 module Version = Httpaf.Version
@@ -37,13 +38,14 @@ let src = Logs.Src.create "piaf.connection" ~doc:"Piaf Connection module"
 
 module Log = (val Logs.src_log src : Logs.LOG)
 
-let resolve_host ~port hostname =
-  let+ addresses =
-    Lwt_unix.getaddrinfo
-      hostname
-      (string_of_int port)
-      (* https://www.iana.org/assignments/protocol-numbers/protocol-numbers.xhtml *)
-      Unix.[ AI_CANONNAME; AI_PROTOCOL 6; AI_FAMILY PF_INET ]
+let resolve_host ~port hostname : (_, [> Error.client ]) result =
+  let addresses =
+    Eio_unix.run_in_systhread (fun () ->
+        Unix.getaddrinfo
+          hostname
+          (string_of_int port)
+          (* https://www.iana.org/assignments/protocol-numbers/protocol-numbers.xhtml *)
+          Unix.[ AI_CANONNAME; AI_PROTOCOL 6; AI_FAMILY PF_INET ])
   in
   match addresses with
   | [] ->
@@ -115,46 +117,38 @@ module Connection_info = struct
     match Uri.host uri, Scheme.of_uri uri with
     | Some host, Ok scheme ->
       let port = infer_port ~scheme uri in
-      let++! addresses = resolve_host ~port host in
+      let+! addresses = resolve_host ~port host in
       { scheme; uri; host; port; addresses }
     | None, _ ->
-      Lwt_result.fail
+      Result.error
         (`Msg (Format.asprintf "Missing host part for: %a" Uri.pp_hum uri))
-    | _, (Error _ as error) -> Lwt.return error
+    | _, (Error _ as error) -> error
 end
 
-let connect ~config ~conn_info fd =
+let connect ~clock ~config ~conn_info fd =
   let { Connection_info.addresses; _ } = conn_info in
   (* TODO: try addresses in e.g. a round robin fashion? *)
   let address = List.hd addresses in
-  Lwt.catch
-    (fun () ->
-      Log.debug (fun m ->
-          m "Trying connection to %a" Connection_info.pp_hum conn_info);
-      Lwt_unix.with_timeout config.Config.connect_timeout (fun () ->
-          Lwt_result.ok (Lwt_unix.connect fd address)))
-    (function
-      | Lwt_unix.Timeout ->
-        let msg =
-          Format.asprintf
-            "Connection timed out after %.0f milliseconds"
-            (config.connect_timeout *. 1000.)
-        in
-        Log.err (fun m -> m "%s" msg);
-        Lwt_result.fail (`Connect_error msg)
-      | Unix.Unix_error (ECONNREFUSED, _, _) ->
-        Lwt_result.fail
-          (`Connect_error
-            (Format.asprintf
-               "Failed connecting to %a: connection refused"
-               Connection_info.pp_hum
-               conn_info))
-      | exn ->
-        Lwt_result.fail
-          (`Connect_error
-            (Format.asprintf
-               "FIXME: unhandled connection error (%s)"
-               (Printexc.to_string exn))))
+  Log.debug (fun m ->
+      m "Trying connection to %a" Connection_info.pp_hum conn_info);
+  match
+    Eio.Time.with_timeout clock config.Config.connect_timeout (fun () ->
+        Ok (Unix.connect fd address))
+  with
+  | Ok () -> Ok ()
+  | Error `Timeout | (exception Unix.Unix_error (ECONNREFUSED, _, _)) ->
+    Result.error
+      (`Connect_error
+        (Format.asprintf
+           "Failed connecting to %a: connection refused"
+           Connection_info.pp_hum
+           conn_info))
+  | exception exn ->
+    Result.error
+      (`Connect_error
+        (Format.asprintf
+           "FIXME: unhandled connection error (%s)"
+           (Printexc.to_string exn)))
 
 type t =
   | Conn :
@@ -165,7 +159,8 @@ type t =
       ; handle : 'a
       ; mutable conn_info : Connection_info.t
       ; runtime : Scheme.Runtime.t
-      ; connection_error_received : Error.client Lwt.t
+      ; connection_error_received : Error.client Promise.t
       ; version : Version.t  (** HTTP version that this connection speaks *)
+      ; sw : Eio.Switch.t
       }
       -> t

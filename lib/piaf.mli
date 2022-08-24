@@ -326,6 +326,8 @@ module Error : sig
   val pp_hum : Format.formatter -> t -> unit [@@ocaml.toplevel_printer]
 end
 
+module Stream = Stream
+
 module Body : sig
   type t
 
@@ -339,81 +341,82 @@ module Body : sig
 
   val length : t -> length
   val empty : t
-  val of_stream : ?length:length -> Bigstringaf.t IOVec.t Lwt_stream.t -> t
-  val of_string_stream : ?length:length -> string Lwt_stream.t -> t
+  val of_stream : ?length:length -> Bigstringaf.t IOVec.t Stream.t -> t
+  val of_string_stream : ?length:length -> string Stream.t -> t
   val of_string : string -> t
   val of_bigstring : ?off:int -> ?len:int -> Bigstringaf.t -> t
-  val sendfile : ?length:length -> string -> (t, Error.t) Lwt_result.t
-  val to_string : t -> (string, Error.t) Lwt_result.t
-  val drain : t -> (unit, Error.t) Lwt_result.t
+  val sendfile : ?length:length -> string -> (t, Error.t) result
+  val to_string : t -> (string, Error.t) result
+  val drain : t -> (unit, Error.t) result
   val is_closed : t -> bool
-  val closed : t -> (unit, Error.t) Lwt_result.t
-  val when_closed : t -> ((unit, Error.t) result -> unit) -> unit
+  val closed : t -> (unit, Error.t) result
+  val when_closed : f:((unit, Error.t) result -> unit) -> t -> unit
+  val is_errored : t -> bool
 
   (** {3 Traversal} *)
 
   val fold
-    :  (Bigstringaf.t IOVec.t -> 'a -> 'a)
+    :  f:('a -> Bigstringaf.t IOVec.t -> 'a)
+    -> init:'a
     -> t
-    -> 'a
-    -> ('a, Error.t) Lwt_result.t
+    -> ('a, Error.t) result
 
-  val fold_string
-    :  (string -> 'a -> 'a)
-    -> t
-    -> 'a
-    -> ('a, Error.t) Lwt_result.t
+  (* val fold_string *)
+  (* :  (string -> 'a -> 'a) *)
+  (* -> t *)
+  (* -> 'a *)
+  (* -> ('a, Error.t) Lwt_result.t *)
 
-  val fold_s
-    :  (Bigstringaf.t Faraday.iovec -> 'a -> 'a Lwt.t)
-    -> t
-    -> 'a
-    -> ('a, Error.t) Lwt_result.t
+  (* val fold_s *)
+  (* :  (Bigstringaf.t Faraday.iovec -> 'a -> 'a Lwt.t) *)
+  (* -> t *)
+  (* -> 'a *)
+  (* -> ('a, Error.t) Lwt_result.t *)
 
-  val fold_string_s
-    :  (string -> 'a -> 'a Lwt.t)
-    -> t
-    -> 'a
-    -> ('a, Error.t) Lwt_result.t
+  (* val fold_string_s *)
+  (* :  (string -> 'a -> 'a Lwt.t) *)
+  (* -> t *)
+  (* -> 'a *)
+  (* -> ('a, Error.t) Lwt_result.t *)
 
-  val iter
-    :  (Bigstringaf.t Faraday.iovec -> unit)
-    -> t
-    -> (unit, Error.t) Lwt_result.t
+  (* val iter *)
+  (* :  (Bigstringaf.t Faraday.iovec -> unit) *)
+  (* -> t *)
+  (* -> (unit, Error.t) Lwt_result.t *)
 
-  val iter_string : (string -> unit) -> t -> (unit, Error.t) Lwt_result.t
+  val iter_string : f:(string -> unit) -> t -> (unit, Error.t) result
 
-  val iter_s
-    :  (Bigstringaf.t Faraday.iovec -> unit Lwt.t)
-    -> t
-    -> (unit, Error.t) Lwt_result.t
+  (* val iter_s *)
+  (* :  (Bigstringaf.t Faraday.iovec -> unit Lwt.t) *)
+  (* -> t *)
+  (* -> (unit, Error.t) Lwt_result.t *)
 
-  val iter_string_s
-    :  (string -> unit Lwt.t)
-    -> t
-    -> (unit, Error.t) Lwt_result.t
+  (* val iter_string_s *)
+  (* :  (string -> unit Lwt.t) *)
+  (* -> t *)
+  (* -> (unit, Error.t) Lwt_result.t *)
 
-  val iter_p
-    :  (Bigstringaf.t Faraday.iovec -> unit Lwt.t)
-    -> t
-    -> (unit, Error.t) Lwt_result.t
+  (* val iter_p *)
+  (* :  (Bigstringaf.t Faraday.iovec -> unit Lwt.t) *)
+  (* -> t *)
+  (* -> (unit, Error.t) Lwt_result.t *)
 
-  val iter_string_p
-    :  (string -> unit Lwt.t)
-    -> t
-    -> (unit, Error.t) Lwt_result.t
+  (* val iter_string_p *)
+  (* :  (string -> unit Lwt.t) *)
+  (* -> t *)
+  (* -> (unit, Error.t) Lwt_result.t *)
 
-  val iter_n
-    :  ?max_concurrency:int
-    -> (Bigstringaf.t Faraday.iovec -> unit Lwt.t)
-    -> t
-    -> (unit, Error.t) Lwt_result.t
+  (* val iter_n *)
+  (* :  ?max_concurrency:int *)
+  (* -> (Bigstringaf.t Faraday.iovec -> unit Lwt.t) *)
+  (* -> t *)
+  (* -> (unit, Error.t) Lwt_result.t *)
 
-  val iter_string_n
-    :  ?max_concurrency:int
-    -> (string -> unit Lwt.t)
-    -> t
-    -> (unit, Error.t) Lwt_result.t
+  (* val iter_string_n *)
+  (* :  ?max_concurrency:int *)
+  (* -> (string -> unit Lwt.t) *)
+  (* -> t *)
+  (* -> (unit, Error.t) Lwt_result.t *)
 
   (** {3 Conversion to [Lwt_stream.t]} *)
 
@@ -429,13 +432,11 @@ module Body : sig
       failure that caused the body to not have been fully transferred from the
       peer. *)
 
-  val to_stream
-    :  t
-    -> (Bigstringaf.t IOVec.t Lwt_stream.t * (unit, Error.t) Lwt_result.t) Lwt.t
+  val to_stream : t -> Bigstringaf.t IOVec.t Stream.t
+  (* * (unit, Error.t) result Eio.Promise.t *)
 
-  val to_string_stream
-    :  t
-    -> (string Lwt_stream.t * (unit, Error.t) Lwt_result.t) Lwt.t
+  val to_string_stream : t -> string Stream.t
+  (* * (unit, Error.t) result Eio.Promise.t *)
 end
 
 module Request : sig
@@ -494,14 +495,14 @@ module Response : sig
   val of_string_stream
     :  ?version:Versions.HTTP.t
     -> ?headers:Headers.t
-    -> body:string Lwt_stream.t
+    -> body:string Stream.t
     -> Status.t
     -> t
 
   val of_stream
     :  ?version:Versions.HTTP.t
     -> ?headers:Headers.t
-    -> body:Bigstringaf.t IOVec.t Lwt_stream.t
+    -> body:Bigstringaf.t IOVec.t Stream.t
     -> Status.t
     -> t
 
@@ -515,39 +516,39 @@ module Response : sig
     :  ?version:Versions.HTTP.t
     -> ?headers:Headers.t
     -> string
-    -> (t, Error.t) Lwt_result.t
+    -> (t, Error.t) result
 
   val sendfile
     :  ?version:Versions.HTTP.t
     -> ?headers:Headers.t
     -> string
-    -> (t, Error.t) Lwt_result.t
+    -> (t, Error.t) result
 
   val or_internal_error : (t, Error.t) Result.t -> t
   val persistent_connection : t -> bool
   val pp_hum : Format.formatter -> t -> unit [@@ocaml.toplevel_printer]
 end
 
-module Form : sig
-  module Multipart : sig
-    type t = private
-      { name : string
-      ; filename : string option
-      ; content_type : string
-      ; body : Body.t
-      }
+(* module Form : sig *)
+(* module Multipart : sig *)
+(* type t = private *)
+(* { name : string *)
+(* ; filename : string option *)
+(* ; content_type : string *)
+(* ; body : Body.t *)
+(* } *)
 
-    val stream
-      :  ?max_chunk_size:int
-      -> Request.t
-      -> (t Lwt_stream.t, Error.t) Lwt_result.t
+(* val stream *)
+(* :  ?max_chunk_size:int *)
+(* -> Request.t *)
+(* -> (t Lwt_stream.t, Error.t) Lwt_result.t *)
 
-    val assoc
-      :  ?max_chunk_size:int
-      -> Request.t
-      -> ((string * t) list, Error.t) Lwt_result.t
-  end
-end
+(* val assoc *)
+(* :  ?max_chunk_size:int *)
+(* -> Request.t *)
+(* -> ((string * t) list, Error.t) Lwt_result.t *)
+(* end *)
+(* end *)
 
 (** {2 Client -- Issuing requests} *)
 
@@ -562,7 +563,12 @@ end
 module Client : sig
   type t
 
-  val create : ?config:Config.t -> Uri.t -> (t, Error.t) Lwt_result.t
+  val create
+    :  ?config:Config.t
+    -> sw:Eio.Switch.t
+    -> Eio.Stdenv.t
+    -> Uri.t
+    -> (t, Error.t) result
   (** [create ?config uri] opens a connection to [uri] (initially) that can be
       used to issue multiple requests to the remote endpoint.
 
@@ -574,41 +580,41 @@ module Client : sig
     :  t
     -> ?headers:(string * string) list
     -> string
-    -> (Response.t, Error.t) Lwt_result.t
+    -> (Response.t, Error.t) result
 
   val get
     :  t
     -> ?headers:(string * string) list
     -> string
-    -> (Response.t, Error.t) Lwt_result.t
+    -> (Response.t, Error.t) result
 
   val post
     :  t
     -> ?headers:(string * string) list
     -> ?body:Body.t
     -> string
-    -> (Response.t, Error.t) Lwt_result.t
+    -> (Response.t, Error.t) result
 
   val put
     :  t
     -> ?headers:(string * string) list
     -> ?body:Body.t
     -> string
-    -> (Response.t, Error.t) Lwt_result.t
+    -> (Response.t, Error.t) result
 
   val patch
     :  t
     -> ?headers:(string * string) list
     -> ?body:Body.t
     -> string
-    -> (Response.t, Error.t) Lwt_result.t
+    -> (Response.t, Error.t) result
 
   val delete
     :  t
     -> ?headers:(string * string) list
     -> ?body:Body.t
     -> string
-    -> (Response.t, Error.t) Lwt_result.t
+    -> (Response.t, Error.t) result
 
   val request
     :  t
@@ -616,11 +622,11 @@ module Client : sig
     -> ?body:Body.t
     -> meth:Method.t
     -> string
-    -> (Response.t, Error.t) Lwt_result.t
+    -> (Response.t, Error.t) result
 
-  val send : t -> Request.t -> (Response.t, Error.t) Lwt_result.t
+  val send : t -> Request.t -> (Response.t, Error.t) result
 
-  val shutdown : t -> unit Lwt.t
+  val shutdown : t -> unit
   (** [shutdown t] tears down the connection [t] and frees up all the resources
       associated with it. *)
 
@@ -628,57 +634,71 @@ module Client : sig
     val head
       :  ?config:Config.t
       -> ?headers:(string * string) list
+      -> sw:Eio.Switch.t
+      -> Eio.Stdenv.t
       -> Uri.t
-      -> (Response.t, Error.t) Lwt_result.t
+      -> (Response.t, Error.t) result
 
     val get
       :  ?config:Config.t
       -> ?headers:(string * string) list
+      -> sw:Eio.Switch.t
+      -> Eio.Stdenv.t
       -> Uri.t
-      -> (Response.t, Error.t) Lwt_result.t
+      -> (Response.t, Error.t) result
 
     val post
       :  ?config:Config.t
       -> ?headers:(string * string) list
       -> ?body:Body.t
+      -> sw:Eio.Switch.t
+      -> Eio.Stdenv.t
       -> Uri.t
-      -> (Response.t, Error.t) Lwt_result.t
+      -> (Response.t, Error.t) result
 
     val put
       :  ?config:Config.t
       -> ?headers:(string * string) list
       -> ?body:Body.t
+      -> sw:Eio.Switch.t
+      -> Eio.Stdenv.t
       -> Uri.t
-      -> (Response.t, Error.t) Lwt_result.t
+      -> (Response.t, Error.t) result
 
     val patch
       :  ?config:Config.t
       -> ?headers:(string * string) list
       -> ?body:Body.t
+      -> sw:Eio.Switch.t
+      -> Eio.Stdenv.t
       -> Uri.t
-      -> (Response.t, Error.t) Lwt_result.t
+      -> (Response.t, Error.t) result
 
     val delete
       :  ?config:Config.t
       -> ?headers:(string * string) list
       -> ?body:Body.t
+      -> sw:Eio.Switch.t
+      -> Eio.Stdenv.t
       -> Uri.t
-      -> (Response.t, Error.t) Lwt_result.t
+      -> (Response.t, Error.t) result
 
     val request
       :  ?config:Config.t
       -> ?headers:(string * string) list
       -> ?body:Body.t
+      -> sw:Eio.Switch.t
+      -> Eio.Stdenv.t
       -> meth:Method.t
       -> Uri.t
-      -> (Response.t, Error.t) Lwt_result.t
+      -> (Response.t, Error.t) result
     (** Use another request method. *)
   end
 end
 
 module Server : sig
   module Service : sig
-    type ('req, 'resp) t = 'req -> 'resp Lwt.t
+    type ('req, 'resp) t = 'req -> 'resp
   end
 
   module Middleware : sig
@@ -696,7 +716,7 @@ module Server : sig
 
     type 'ctx t = ('ctx ctx, Response.t) Service.t
 
-    val not_found : 'a -> Response.t Lwt.t
+    val not_found : 'a -> Response.t
   end
 
   module Error_response : sig
@@ -713,15 +733,15 @@ module Server : sig
   val create
     :  ?config:Config.t
     -> ?error_handler:
-         (Unix.sockaddr
+         (Eio.Net.Sockaddr.stream
           -> ?request:Request.t
           -> respond:(headers:Headers.t -> Body.t -> Error_response.t)
           -> Httpaf.Server_connection.error
-          -> Error_response.t Lwt.t)
-    -> Unix.sockaddr Handler.t
-    -> Unix.sockaddr
-    -> Httpaf_lwt_unix.Server.socket
-    -> unit Lwt.t
+          -> Error_response.t)
+    -> Eio.Net.Sockaddr.stream Handler.t
+    -> Eio.Net.Sockaddr.stream
+    -> Eio_unix.socket
+    -> unit
 end
 
 module Cookies : sig

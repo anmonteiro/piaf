@@ -29,8 +29,6 @@
  * POSSIBILITY OF SUCH DAMAGE.
  *---------------------------------------------------------------------------*)
 
-open Monads.Bindings
-
 let make_error_handler real_handler type_ error =
   let error : Error.client =
     match error with
@@ -53,7 +51,7 @@ module Body :
 end
 
 module MakeHTTP2
-    (H2_client : H2_lwt.Client)
+    (H2_client : H2_eio.Client)
     (Runtime_scheme : Scheme.Runtime.SCHEME
                         with type runtime = H2_client.runtime) :
   Http_intf.HTTPCommon
@@ -67,9 +65,10 @@ module MakeHTTP2
   module Client = struct
     include H2_client
 
-    let create_connection ~config ~error_handler fd =
-      let+ t =
+    let create_connection ~config ~error_handler ~sw fd =
+      let t =
         create_connection
+          ~sw
           ~config:(Config.to_http2_config config)
           ~error_handler:(make_error_handler error_handler `Connection)
           fd
@@ -106,12 +105,12 @@ end
 module HTTP : Http_intf.HTTP2 = struct
   module HTTP_2 :
     Http_intf.HTTPCommon
-      with type Client.t = H2_lwt_unix.Client.t
-       and type Client.socket = Lwt_unix.file_descr
-       and type Client.runtime = H2_lwt_unix.Client.runtime
+      with type Client.t = H2_eio.Client.t
+       and type Client.socket = H2_eio.Client.socket
+       and type Client.runtime = H2_eio.Client.runtime
       with type Body.Reader.t = H2.Body.Reader.t
        and type Body.Writer.t = H2.Body.Writer.t =
-    MakeHTTP2 (H2_lwt_unix.Client) (Scheme.Runtime.HTTP)
+    MakeHTTP2 (H2_eio.Client) (Scheme.Runtime.HTTP)
 
   include (HTTP_2 : module type of HTTP_2 with module Client := HTTP_2.Client)
 
@@ -150,13 +149,13 @@ module HTTP : Http_intf.HTTP2 = struct
           (* Perform the runtime upgrade -- stop speaking HTTP/1.1, start
            * speaking HTTP/2 by feeding Gluten the `H2.Client_connection`
            * protocol. *)
-          Gluten_lwt_unix.Client.upgrade
+          Gluten_eio.Client.upgrade
             runtime
             (Gluten.make (module H2.Client_connection) connection);
-          { H2_lwt_unix.Client.connection; runtime })
+          { H2_eio.Client.connection; runtime })
         connection
   end
 end
 
 module HTTPS : Http_intf.HTTPS =
-  MakeHTTP2 (H2_lwt_unix.Client.SSL) (Scheme.Runtime.HTTPS)
+  MakeHTTP2 (H2_eio.Client.SSL) (Scheme.Runtime.HTTPS)

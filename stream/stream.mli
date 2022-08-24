@@ -1,5 +1,5 @@
 (*----------------------------------------------------------------------------
- * Copyright (c) 2019, António Nuno Monteiro
+ * Copyright (c) 2022, António Nuno Monteiro
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -29,43 +29,17 @@
  * POSSIBILITY OF SUCH DAMAGE.
  *---------------------------------------------------------------------------*)
 
-module String = struct
-  (* https://github.com/ocaml/ocaml/blob/34e6149044b54feeceaf24fb0126a477a288e058/stdlib/string.ml#L93-L95 *)
-  let is_space = function
-    | ' ' | '\012' | '\n' | '\r' | '\t' -> true
-    | _ -> false
+type _ t
 
-  let rec find f s i =
-    if i > String.length s - 1
-    then -1
-    else if f (String.unsafe_get s i)
-    then i
-    else find f s (i + 1)
-
-  let trim_left s =
-    if s = ""
-    then s
-    else
-      let idx = find (fun c -> not (is_space c)) s 0 in
-      if idx = -1
-      then s
-      else
-        Bytes.unsafe_to_string
-          (Bytes.sub (Bytes.unsafe_of_string s) idx (String.length s - idx))
-end
-
-module Result = struct
-  include Result
-
-  module Syntax = struct
-    let ( let+ ) result f = map f result
-    let ( let* ) = bind
-
-    let ( and+ ) r1 r2 =
-      match r1, r2 with
-      | Ok x, Ok y -> Ok (x, y)
-      | Ok _, Error e | Error e, Ok _ | Error e, Error _ -> Error e
-
-    let ( and* ) = ( and+ )
-  end
-end
+val empty : unit -> _ t
+val from : f:(unit -> 'a option) -> 'a t
+val create : int -> _ t
+val closed : _ t -> unit Eio.Promise.t
+val when_closed : f:(unit -> unit) -> _ t -> unit
+val is_closed : _ t -> bool
+val take : 'a t -> 'a option
+val of_list : 'a list -> 'a t
+val map : f:('a -> 'b) -> 'a t -> 'b t
+val iter : f:('a -> unit) -> 'a t -> unit
+val fold : f:('acc -> 'a -> 'acc) -> init:'acc -> 'a t -> 'acc
+val junk_old : _ t -> unit

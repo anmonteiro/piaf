@@ -53,10 +53,10 @@ module Multipart = struct
     (* TODO(anmonteiro): validate max content-length from a config, etc. *)
     match Headers.get_exn request.headers "content-type" with
     | content_type when is_valid_content_type content_type ->
-      let* stream, _or_error = Body.to_stream request.body in
-      let kvs, push_to_kvs = Lwt_stream.create () in
-      let emit name stream = push_to_kvs (Some (name, stream)) in
-      let++! multipart =
+      let stream (* , _or_error *) = Body.to_stream request.body in
+      let kvs = Eio.Stream.create 128 in
+      let emit name stream = Eio.Stream.add kvs (Some (name, stream)) in
+      let+! multipart =
         Multipart.parse_multipart_form
           ~content_type
           ~max_chunk_size

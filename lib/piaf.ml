@@ -39,7 +39,9 @@ module IOVec = IOVec
 module Method = Method
 module Request = Request
 module Response = Response
-module Form = Form
+module Stream = Stream
+
+(* module Form = Form *)
 module Scheme = Scheme
 module Status = Status
 module Versions = Versions

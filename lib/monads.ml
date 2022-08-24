@@ -50,39 +50,16 @@ module Result = struct
     | Ok _, Error e | Error e, Ok _ | Error e, Error _ -> Error e
 end
 
-module Lwt_result = struct
-  include Lwt_result
-
-  module Syntax = struct
-    let ( let+ ) x f = map f x
-    let ( let* ) = bind
-  end
-end
-
 module Bindings = struct
-  (* use `let*` / `let+` for Lwt. These are the ones we're going to end up
-   * using the most *)
-  include Lwt.Syntax
-
   (* Option *)
-  open Option
-
-  let ( let*? ) = ( let* )
-  let ( let+? ) = ( let+ )
-  let ( and*? ) = ( and* )
+  let ( let*? ) = Option.( let* )
+  let ( let+? ) = Option.( let+ )
+  let ( and+? ) = Option.( and* )
+  let ( and*? ) = Option.( and* )
 
   (* Result *)
-
-  open Result
-
-  let ( let*! ) = ( let* )
-  let ( let+! ) = ( let+ )
-  let ( and*! ) = ( and* )
-
-  (* Lwt_result *)
-  open Lwt_result.Syntax
-
-  let ( let**! ) = ( let* )
-  let ( let++! ) = ( let+ )
-  let ( and**! ) = ( and* )
+  let ( let*! ) = Result.( let* )
+  let ( let+! ) = Result.( let+ )
+  let ( and+! ) = Result.( and* )
+  let ( and*! ) = Result.( and* )
 end

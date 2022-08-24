@@ -29,6 +29,7 @@
  * POSSIBILITY OF SUCH DAMAGE.
  *---------------------------------------------------------------------------*)
 
+open Eio.Std
 open Monads.Bindings
 
 let src = Logs.Src.create "piaf.body" ~doc:"Piaf Body module"
@@ -61,6 +62,13 @@ end = struct
   let call_if_some t = t
 end
 
+module Unix_fd = struct
+  external is_valid : Unix.file_descr -> bool = "piaf_is_fd_valid"
+
+  let ensure_closed fd =
+    try Unix.close fd with Unix.Unix_error (_, _, _) -> ()
+end
+
 type length =
   [ `Fixed of Int64.t
   | `Chunked
@@ -73,24 +81,24 @@ type contents =
   [ `Empty of Optional_handler.t
   | `String of string
   | `Bigstring of Bigstringaf.t IOVec.t
-  | `Stream of Bigstringaf.t IOVec.t Lwt_stream.t
+  | `Stream of Bigstringaf.t IOVec.t Stream.t
   | `Sendfile of
-    Lwt_unix.file_descr
+    Unix.file_descr
     * (* Waiter and notifier for when the fd closes. *)
-    unit Lwt.t
-    * unit Lwt.u
+    unit Promise.t
+    * unit Promise.u
   ]
 
 type t =
   { length : length
   ; contents : contents
-  ; mutable error_received : Error.t Lwt.t
+  ; mutable error_received : Error.t Promise.t
   ; mutable read_counter : int
   }
 
 (* Never resolves, giving a chance for the normal successful flow to always
  * resolve. *)
-let default_error_received, _ = Lwt.wait ()
+let default_error_received, _ = Promise.create ()
 
 let create ~length contents =
   { length
@@ -106,8 +114,8 @@ let of_stream ?(length = `Chunked) stream = create ~length (`Stream stream)
 
 let of_string_stream ?(length = `Chunked) stream =
   let stream =
-    Lwt_stream.map
-      (fun s ->
+    Stream.map
+      ~f:(fun s ->
         let len = String.length s in
         IOVec.make (Bigstringaf.of_string ~off:0 ~len s) ~off:0 ~len)
       stream
@@ -126,74 +134,60 @@ let of_bigstring ?(off = 0) ?len bstr =
   create ~length (`Bigstring (IOVec.make bstr ~off ~len))
 
 let sendfile ?length path =
-  let**! fd =
-    Lwt.catch
-      (fun () ->
-        let+ fd = Lwt_unix.openfile path [ O_RDONLY ] 0 in
-        Ok fd)
-      (fun exn -> Lwt_result.fail (`Exn exn))
+  let*! fd =
+    Eio_unix.run_in_systhread (fun () ->
+        try Ok (Unix.openfile path [ O_RDONLY ] 0) with
+        | exn -> Result.error (`Exn exn))
   in
-  let+ length =
+  let length =
     match length with
     | None ->
-      let+ { Unix.st_size; _ } = Lwt_unix.fstat fd in
+      let { Unix.st_size; _ } =
+        Eio_unix.run_in_systhread (fun () -> Unix.fstat fd)
+      in
       `Fixed (Int64.of_int st_size)
-    | Some length -> Lwt.return length
+    | Some length -> length
   in
-  let t, u = Lwt.wait () in
+  let t, u = Promise.create () in
   Ok (create ~length (`Sendfile (fd, t, u)))
 
 let or_error t ~stream v =
-  let+ () = Lwt_stream.closed stream in
-  match Lwt.state t.error_received with
-  | Lwt.Return error -> Error error
-  | Lwt.Fail _ | Lwt.Sleep -> Ok v
-
-let ensure_closed fd =
-  match Lwt_unix.state fd with
-  | Opened -> Lwt_unix.close fd
-  | Closed | Aborted _ -> Lwt.return_unit
+  Promise.await (Stream.closed stream);
+  match Promise.peek t.error_received with
+  | Some error -> Error error
+  | None -> Ok v
 
 (* TODO: accept buffer for I/O, so that caller can pool buffers? *)
 let stream_of_fd ?on_close fd =
-  let+ { Unix.st_size = length; _ } = Lwt_unix.fstat fd in
-  let remaining = ref length in
-  let stream =
-    Lwt_stream.from (fun () ->
-        if !remaining = 0
-        then Lwt.return_none
-        else
-          let bytes_to_read = min 0x4000 !remaining in
-          (* TODO: read from config buffer size? *)
-          (* (min config.Config.body_buffer_size !remaining) *)
-          let buf = Bigstringaf.create bytes_to_read in
-          let* bytes_read = Lwt_bytes.read fd buf 0 bytes_to_read in
-          remaining := !remaining - bytes_read;
-          Lwt.return_some (IOVec.make buf ~off:0 ~len:bytes_read))
+  let { Unix.st_size = length; _ } =
+    Eio_unix.run_in_systhread (fun () -> Unix.fstat fd)
   in
-  Lwt.on_success (Lwt_stream.closed stream) (fun () ->
-      Lwt.dont_wait
-        (fun () ->
-          let+ () = ensure_closed fd in
-          Option.iter (fun f -> f ()) on_close)
-        (fun _exn -> Option.iter (fun f -> f ()) on_close));
-  stream
+  let remaining = Atomic.make length in
+  Stream.from ~f:(fun () ->
+      let current = Atomic.get remaining in
+      if current = 0
+      then (
+        Option.iter (fun f -> f ()) on_close;
+        None)
+      else
+        let bytes_to_read = min 0x4000 (Atomic.get remaining) in
+        (* TODO: read from config buffer size? *)
+        (* (min config.Config.body_buffer_size !remaining) *)
+        let buf = Bigstringaf.create bytes_to_read in
+        let bytes_read = Bigstring.read fd buf ~off:0 ~len:bytes_to_read in
+        assert (Atomic.compare_and_set remaining current (current - bytes_read));
+        Some (IOVec.make buf ~off:0 ~len:bytes_to_read))
 
-let to_stream ({ contents; _ } as t) =
-  let+ stream =
-    match contents with
-    | `Empty _ -> Lwt.return (Lwt_stream.of_list [])
-    | `String s ->
-      let len = String.length s in
-      Lwt.return
-        (Lwt_stream.of_list
-           [ IOVec.make (Bigstringaf.of_string ~off:0 ~len s) ~off:0 ~len ])
-    | `Bigstring iovec -> Lwt.return (Lwt_stream.of_list [ iovec ])
-    | `Stream stream -> Lwt.return stream
-    | `Sendfile (fd, _, u) ->
-      stream_of_fd ~on_close:(fun () -> Lwt.wakeup_later u ()) fd
-  in
-  stream, or_error ~stream t ()
+let to_stream { contents; _ } =
+  match contents with
+  | `Empty _ -> Stream.empty ()
+  | `String s ->
+    let len = String.length s in
+    Stream.of_list
+      [ IOVec.make (Bigstringaf.of_string ~off:0 ~len s) ~off:0 ~len ]
+  | `Bigstring iovec -> Stream.of_list [ iovec ]
+  | `Stream stream -> stream
+  | `Sendfile (fd, _, u) -> stream_of_fd ~on_close:(Promise.resolve u) fd
 
 let stream_to_string { length; _ } stream =
   let len =
@@ -204,88 +198,81 @@ let stream_to_string { length; _ } stream =
       0x100
   in
   let result_buffer = Buffer.create len in
-  let+ () =
-    Lwt_stream.iter
-      (fun { IOVec.buffer; off; len } ->
-        let bytes = Bytes.create len in
-        Bigstringaf.blit_to_bytes buffer ~src_off:off ~dst_off:0 ~len bytes;
-        Buffer.add_bytes result_buffer bytes)
-      stream
-  in
+  (* TODO: check stream iteration error. *)
+  Stream.iter
+    ~f:(fun { IOVec.buffer; off; len } ->
+      let bytes = Bytes.create len in
+      Bigstringaf.blit_to_bytes buffer ~src_off:off ~dst_off:0 ~len bytes;
+      Buffer.add_bytes result_buffer bytes)
+    stream;
   Buffer.contents result_buffer
 
 let to_string ({ contents; _ } as t) =
   match contents with
-  | `Empty _ -> Lwt_result.return ""
-  | `String s -> Lwt_result.return s
+  | `Empty _ -> Ok ""
+  | `String s -> Ok s
   | `Bigstring { IOVec.buffer; off; len } ->
-    Lwt_result.return (Bigstringaf.substring ~off ~len buffer)
+    Ok (Bigstringaf.substring ~off ~len buffer)
   | `Stream stream ->
-    let* str = stream_to_string t stream in
+    let str = stream_to_string t stream in
     or_error t ~stream str
   | `Sendfile (fd, _, u) ->
-    let* stream = stream_of_fd ~on_close:(fun () -> Lwt.wakeup_later u ()) fd in
-    let* str = stream_to_string t stream in
+    let stream = stream_of_fd ~on_close:(Promise.resolve u) fd in
+    let str = stream_to_string t stream in
     or_error t ~stream str
 
-let to_string_stream ({ contents; _ } as t) =
-  let+ stream =
-    match contents with
-    | `Empty _ -> Lwt.return (Lwt_stream.of_list [])
-    | `String s -> Lwt.return (Lwt_stream.of_list [ s ])
-    | `Bigstring { IOVec.buffer; off; len } ->
-      Lwt.return (Lwt_stream.of_list [ Bigstringaf.substring ~off ~len buffer ])
-    | `Stream stream ->
-      Lwt.return
-        (Lwt_stream.map
-           (fun { IOVec.buffer; off; len } ->
-             Bigstringaf.substring buffer ~off ~len)
-           stream)
-    | `Sendfile (fd, _, u) ->
-      let+ stream =
-        stream_of_fd ~on_close:(fun () -> Lwt.wakeup_later u ()) fd
-      in
-      Lwt_stream.map
-        (fun { IOVec.buffer; off; len } ->
-          Bigstringaf.substring buffer ~off ~len)
-        stream
-  in
-  stream, or_error ~stream t ()
-
-let drain ({ contents; _ } as t) =
+let to_string_stream { contents; _ } =
   match contents with
-  | `Empty _ | `String _ | `Bigstring _ -> Lwt_result.return ()
+  | `Empty _ -> Stream.of_list []
+  | `String s -> Stream.of_list [ s ]
+  | `Bigstring { IOVec.buffer; off; len } ->
+    Stream.of_list [ Bigstringaf.substring ~off ~len buffer ]
   | `Stream stream ->
-    let* () = Lwt_stream.junk_while (fun _ -> true) stream in
-    or_error t ~stream ()
+    Stream.map
+      ~f:(fun { IOVec.buffer; off; len } ->
+        Bigstringaf.substring buffer ~off ~len)
+      stream
+  | `Sendfile (fd, _, u) ->
+    let stream = stream_of_fd ~on_close:(Promise.resolve u) fd in
+    Stream.map
+      ~f:(fun { IOVec.buffer; off; len } ->
+        Bigstringaf.substring buffer ~off ~len)
+      stream
+
+let drain ({ contents; _ } as _t) =
+  match contents with
+  | `Empty _ | `String _ | `Bigstring _ -> Ok ()
+  | `Stream _stream ->
+    (* let* () = Lwt_stream.junk_while (fun _ -> true) stream in *)
+    (* or_error t ~stream () *)
+    Ok ()
   | `Sendfile (fd, _, _) ->
-    let+ () = ensure_closed fd in
+    Unix_fd.ensure_closed fd;
     Ok ()
 
 let drain_available { contents; _ } =
   match contents with
-  | `Empty _ | `String _ | `Bigstring _ -> Lwt.return_unit
-  | `Stream stream -> Lwt_stream.junk_old stream
-  | `Sendfile (fd, _, _) -> ensure_closed fd
+  | `Empty _ | `String _ | `Bigstring _ -> ()
+  | `Stream stream -> Stream.junk_old stream
+  | `Sendfile (fd, _, _) -> Unix_fd.ensure_closed fd
 
 let is_closed t =
   match t.contents with
   | `Empty _ | `String _ | `Bigstring _ -> true
-  | `Stream stream -> Lwt_stream.is_closed stream
-  | `Sendfile (fd, _, _) ->
-    (match Lwt_unix.state fd with
-    | Opened -> false
-    | Closed | Aborted _ -> true)
+  | `Stream stream -> Stream.is_closed stream
+  | `Sendfile (fd, _, _) -> Unix_fd.is_valid fd
+
+let is_errored t = Promise.is_resolved t.error_received
 
 let closed t =
   match t.contents with
-  | `Empty _ | `String _ | `Bigstring _ -> Lwt_result.return ()
+  | `Empty _ | `String _ | `Bigstring _ -> Ok ()
   | `Stream stream -> or_error t ~stream ()
-  | `Sendfile (_fd, t, _u) ->
-    let+ () = t in
+  | `Sendfile (_fd, p, _u) ->
+    Promise.await p;
     Ok ()
 
-let when_closed t f = Lwt.on_success (closed t) f
+let when_closed ~f t = f (closed t)
 
 (* "Primitive" body types for http/af / h2 compatibility *)
 module type BODY = sig
@@ -330,16 +317,12 @@ let of_raw_body
   let module Body = Http_body.Reader in
   let read_fn t () =
     let t = Lazy.force t in
-    let waiter, wakener = Lwt.task () in
+    let p, u = Promise.create () in
     let on_read_direct buffer ~off ~len =
-      Lwt.wakeup_later wakener (Some (IOVec.make buffer ~off ~len))
+      Promise.resolve u (Some (IOVec.make buffer ~off ~len))
     and on_read_with_yield buffer ~off ~len =
-      Lwt.async (fun () ->
-          let* () = Lwt.pause () in
-          Lwt.wrap2
-            Lwt.wakeup_later
-            wakener
-            (Some (IOVec.make buffer ~off ~len)))
+      Fiber.yield ();
+      Promise.resolve u (Some (IOVec.make buffer ~off ~len))
     in
     t.read_counter <- t.read_counter + 1;
     let on_read =
@@ -354,20 +337,19 @@ let of_raw_body
       ~on_eof:(fun () ->
         Option.iter (fun f -> f t) on_eof;
         Body.close body;
-        Lwt.wakeup_later wakener None)
+        Promise.resolve u None)
       ~on_read;
-    Lwt.choose
-      [ waiter
-      ; Lwt.bind t.error_received (fun _ ->
-            Lwt.cancel waiter;
-            (* `None` closes the stream. The promise `t.error_received` remains
-             * fulfilled, which signals that the stream hasn't closed cleanly.
-             *)
-            Lwt.return_none)
-      ]
+    Fiber.first
+      (fun () -> Promise.await p)
+      (fun () ->
+        (* `None` closes the stream. The promise `t.error_received` remains
+         * fulfilled, which signals that the stream hasn't closed cleanly. *)
+        let _err = Promise.await t.error_received in
+        None)
   in
+
   let rec t =
-    lazy (of_stream ~length:body_length (Lwt_stream.from (read_fn t)))
+    lazy (of_stream ~length:body_length (Stream.from ~f:(read_fn t)))
   in
   Lazy.force t
 
@@ -384,89 +366,80 @@ let stream_write_body
     : type a.
       (module BODY with type Writer.t = a)
       -> a
-      -> Bigstringaf.t IOVec.t Lwt_stream.t
+      -> Bigstringaf.t IOVec.t Stream.t
       -> unit
   =
  fun (module B) body stream ->
   let module Body = B.Writer in
-  Lwt.async (fun () ->
-      let+ () =
-        Lwt_stream.iter_s
-          (fun { IOVec.buffer; off; len } ->
-            (* If the peer left abruptly the connection will be shutdown. Avoid
-             * crashing the server with exceptions related to the writer being
-             * closed. *)
-            if not (Body.is_closed body)
-            then (
-              Body.schedule_bigstring body ~off ~len buffer;
-              let waiter, wakener = Lwt.wait () in
-              Body.flush body (fun () ->
-                  Lwt.wakeup_later wakener ();
-                  Log.debug (fun m -> m "Flushed output chunk of length %d" len));
-              waiter)
-            else Lwt.return_unit)
-          stream
-      in
-      Lwt.on_success (Lwt_stream.closed stream) (fun () ->
-          flush_and_close (module B) body ignore))
+  Stream.iter
+    ~f:(fun { IOVec.buffer; off; len } ->
+      (* If the peer left abruptly the connection will be shutdown. Avoid
+       * crashing the server with exceptions related to the writer being
+       * closed. *)
+      if not (Body.is_closed body)
+      then (
+        Body.schedule_bigstring body ~off ~len buffer;
+        let p, u = Promise.create () in
+        Body.flush body (fun () ->
+            Promise.resolve u ();
+            Log.debug (fun m -> m "Flushed output chunk of length %d" len));
+        Promise.await p)
+      else ())
+    stream;
+  flush_and_close (module B) body ignore
 
 (* Traversal *)
-let fold f t init =
-  let* stream, _ = to_stream t in
-  let* ret = Lwt_stream.fold f stream init in
+let fold ~f ~init t =
+  let stream = to_stream t in
+  let ret = Stream.fold ~f ~init stream in
   or_error t ~stream ret
 
-let fold_string f t init =
-  let* stream, _ = to_string_stream t in
-  let* ret = Lwt_stream.fold f stream init in
-  or_error t ~stream ret
+(* let fold_string f t init = *)
+(* let* stream, _ = to_string_stream t in *)
+(* let* ret = Lwt_stream.fold f stream init in *)
+(* or_error t ~stream ret *)
 
-let fold_s f t init =
-  let* stream, _ = to_stream t in
-  let* ret = Lwt_stream.fold_s f stream init in
-  or_error t ~stream ret
+(* let fold_string_s f t init = *)
+(* let* stream, _ = to_string_stream t in *)
+(* let* ret = Lwt_stream.fold_s f stream init in *)
+(* or_error t ~stream ret *)
 
-let fold_string_s f t init =
-  let* stream, _ = to_string_stream t in
-  let* ret = Lwt_stream.fold_s f stream init in
-  or_error t ~stream ret
+(* let iter f t = *)
+(* let* stream, or_error = to_stream t in *)
+(* let* () = Lwt_stream.iter f stream in *)
+(* or_error *)
 
-let iter f t =
-  let* stream, or_error = to_stream t in
-  let* () = Lwt_stream.iter f stream in
-  or_error
+let iter_string ~f t =
+  let stream = to_string_stream t in
+  Stream.iter ~f stream;
+  or_error t ~stream ()
 
-let iter_string f t =
-  let* stream, or_error = to_string_stream t in
-  let* () = Lwt_stream.iter f stream in
-  or_error
+(* let iter_p f t = *)
+(* let* stream, or_error = to_stream t in *)
+(* let* () = Lwt_stream.iter_p f stream in *)
+(* or_error *)
 
-let iter_p f t =
-  let* stream, or_error = to_stream t in
-  let* () = Lwt_stream.iter_p f stream in
-  or_error
+(* let iter_string_p f t = *)
+(* let* stream, or_error = to_string_stream t in *)
+(* let* () = Lwt_stream.iter_p f stream in *)
+(* or_error *)
 
-let iter_string_p f t =
-  let* stream, or_error = to_string_stream t in
-  let* () = Lwt_stream.iter_p f stream in
-  or_error
+(* let iter_s f t = *)
+(* let* stream, or_error = to_stream t in *)
+(* let* () = Lwt_stream.iter_s f stream in *)
+(* or_error *)
 
-let iter_s f t =
-  let* stream, or_error = to_stream t in
-  let* () = Lwt_stream.iter_s f stream in
-  or_error
+(* let iter_string_s f t = *)
+(* let* stream, or_error = to_string_stream t in *)
+(* let* () = Lwt_stream.iter_s f stream in *)
+(* or_error *)
 
-let iter_string_s f t =
-  let* stream, or_error = to_string_stream t in
-  let* () = Lwt_stream.iter_s f stream in
-  or_error
+(* let iter_n ?max_concurrency f t = *)
+(* let* stream, or_error = to_stream t in *)
+(* let* () = Lwt_stream.iter_n ?max_concurrency f stream in *)
+(* or_error *)
 
-let iter_n ?max_concurrency f t =
-  let* stream, or_error = to_stream t in
-  let* () = Lwt_stream.iter_n ?max_concurrency f stream in
-  or_error
-
-let iter_string_n ?max_concurrency f t =
-  let* stream, or_error = to_string_stream t in
-  let* () = Lwt_stream.iter_n ?max_concurrency f stream in
-  or_error
+(* let iter_string_n ?max_concurrency f t = *)
+(* let* stream, or_error = to_string_stream t in *)
+(* let* () = Lwt_stream.iter_n ?max_concurrency f stream in *)
+(* or_error *)

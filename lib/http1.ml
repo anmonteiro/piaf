@@ -29,7 +29,6 @@
  * POSSIBILITY OF SUCH DAMAGE.
  *---------------------------------------------------------------------------*)
 
-open Monads.Bindings
 module Piaf_body = Body
 
 module type BODY = Body.BODY
@@ -43,7 +42,7 @@ module Body :
 end
 
 module MakeHTTP1
-    (Httpaf_client : Httpaf_lwt.Client)
+    (Httpaf_client : Httpaf_eio.Client)
     (Runtime_scheme : Scheme.Runtime.SCHEME
                         with type runtime = Httpaf_client.runtime) :
   Http_intf.HTTP1
@@ -60,8 +59,10 @@ module MakeHTTP1
     type response_handler = Response.t -> unit
 
     (* Error handler for HTTP/1 connections isn't used *)
-    let create_connection ~config ~error_handler:_ fd =
-      let+ t = create_connection ~config:(Config.to_http1_config config) fd in
+    let create_connection ~config ~error_handler:_ ~sw fd =
+      let t =
+        create_connection ~sw ~config:(Config.to_http1_config config) fd
+      in
       t, Runtime_scheme.make t.runtime
 
     let request
@@ -122,7 +123,7 @@ module MakeHTTP1
 end
 
 module HTTP : Http_intf.HTTP =
-  MakeHTTP1 (Httpaf_lwt_unix.Client) (Scheme.Runtime.HTTP)
+  MakeHTTP1 (Httpaf_eio.Client) (Scheme.Runtime.HTTP)
 
 module HTTPS : Http_intf.HTTPS =
-  MakeHTTP1 (Httpaf_lwt_unix.Client.SSL) (Scheme.Runtime.HTTPS)
+  MakeHTTP1 (Httpaf_eio.Client.SSL) (Scheme.Runtime.HTTPS)

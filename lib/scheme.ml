@@ -47,8 +47,8 @@ let pp_hum formatter scheme = Format.fprintf formatter "%s" (to_string scheme)
 
 module Runtime = struct
   type t =
-    | HTTP : Gluten_lwt_unix.Client.t -> t
-    | HTTPS : Gluten_lwt_unix.Client.SSL.t -> t
+    | HTTP : Gluten_eio.Client.t -> t
+    | HTTPS : Gluten_eio.Client.SSL.t -> t
 
   module type SCHEME = sig
     type runtime
@@ -57,13 +57,13 @@ module Runtime = struct
   end
 
   module HTTP = struct
-    type runtime = Gluten_lwt_unix.Client.t
+    type runtime = Gluten_eio.Client.t
 
     let make x = HTTP x
   end
 
   module HTTPS = struct
-    type runtime = Gluten_lwt_unix.Client.SSL.t
+    type runtime = Gluten_eio.Client.SSL.t
 
     let make x = HTTPS x
   end

@@ -40,8 +40,9 @@ module type Client = sig
   val create_connection
     :  config:Config.t
     -> error_handler:error_handler
+    -> sw:Eio.Switch.t
     -> socket
-    -> (t * Scheme.Runtime.t) Lwt.t
+    -> t * Scheme.Runtime.t
 
   type response_handler = Response.t -> unit
 
@@ -53,7 +54,7 @@ module type Client = sig
     -> Request.t
     -> write_body
 
-  val shutdown : t -> unit Lwt.t
+  val shutdown : t -> unit
   val is_closed : t -> bool
 end
 
@@ -75,13 +76,13 @@ end
 
 module type HTTP =
   HTTPCommon
-    with type Client.socket = Lwt_unix.file_descr
-     and type Client.runtime = Gluten_lwt_unix.Client.t
+    with type Client.socket = Eio.Net.stream_socket
+     and type Client.runtime = Gluten_eio.Client.t
 
 module type HTTPS =
   HTTPCommon
-    with type Client.socket = Lwt_ssl.socket
-     and type Client.runtime = Gluten_lwt_unix.Client.SSL.t
+    with type Client.socket = Eio_ssl.socket
+     and type Client.runtime = Gluten_eio.Client.SSL.t
 
 (* Only needed for h2c upgrades (insecure HTTP/2) *)
 module type HTTP2 = sig
@@ -91,7 +92,7 @@ module type HTTP2 = sig
     include
       Client
         with type write_body := Body.Writer.t
-         and type runtime = Gluten_lwt_unix.Client.t
+         and type runtime = Gluten_eio.Client.t
 
     val create_h2c
       :  config:Config.t
@@ -103,6 +104,6 @@ module type HTTP2 = sig
       -> (t, string) result
   end
 end
-with type Client.socket = Lwt_unix.file_descr
- and type Client.runtime = Gluten_lwt_unix.Client.t
- and type Client.t = H2_lwt_unix.Client.t
+with type Client.socket = Eio.Net.stream_socket
+ and type Client.runtime = Gluten_eio.Client.t
+ and type Client.t = H2_eio.Client.t
