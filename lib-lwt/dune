@@ -1,0 +1,18 @@
+(library
+ (name piaf_lwt)
+ (public_name piaf-lwt)
+ (libraries
+  multipart
+  h2
+  h2-lwt-unix
+  httpaf
+  httpaf-lwt-unix
+  logs
+  logs.lwt
+  lwt
+  lwt_ssl
+  magic-mime
+  ssl
+  uri
+  ipaddr
+  sendfile))
