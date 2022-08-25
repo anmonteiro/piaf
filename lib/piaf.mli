@@ -740,7 +740,7 @@ module Server : sig
           -> Error_response.t)
     -> Eio.Net.Sockaddr.stream Handler.t
     -> Eio.Net.Sockaddr.stream
-    -> Eio_unix.socket
+    -> Eio.Net.stream_socket
     -> unit
 end
 

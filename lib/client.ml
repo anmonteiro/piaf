@@ -142,15 +142,12 @@ let open_connection ~config ~sw ~clock conn_info =
 
   let*! () = Connection.connect ~config ~clock ~conn_info fd in
   Log.info (fun m -> m "Connected to %a" Connection_info.pp_hum conn_info);
-  let socket = Eio_unix.FD.as_socket ~sw ~close_unix:true fd in
+  let socket =
+    (Eio_unix.FD.as_socket ~sw ~close_unix:true fd :> Eio.Net.stream_socket)
+  in
   let result =
     match conn_info.scheme with
-    | Scheme.HTTP ->
-      create_http_connection
-        ~sw
-        ~config
-        ~conn_info
-        (socket :> Eio.Net.stream_socket)
+    | Scheme.HTTP -> create_http_connection ~sw ~config ~conn_info socket
     | HTTPS -> create_https_connection ~sw ~config ~conn_info socket
   in
   match result with

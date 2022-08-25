@@ -225,7 +225,7 @@ let request_handler ~fd handler
   | exn -> exn_handler exn
 
 let create ?config ?(error_handler = default_error_handler) handler
-    : Eio.Net.Sockaddr.stream -> Eio_unix.socket -> unit
+    : Eio.Net.Sockaddr.stream -> Eio.Net.stream_socket -> unit
   =
  fun sockaddr socket ->
   let fd = Option.get @@ Eio_unix.FD.peek_opt socket in
@@ -234,4 +234,4 @@ let create ?config ?(error_handler = default_error_handler) handler
     ~request_handler:(request_handler ~fd handler)
     ~error_handler:(make_error_handler ~fd error_handler)
     sockaddr
-    (socket :> Eio.Net.stream_socket)
+    socket
