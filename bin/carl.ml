@@ -458,7 +458,6 @@ let piaf_config_of_cli
       ; max_tls_version
       ; connect_timeout
       ; body_buffer_size = 0x10000
-      ; flush_headers_immediately = true
       }
 
 let main ({ log_level; urls; _ } as cli) =
