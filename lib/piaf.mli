@@ -719,6 +719,21 @@ module Server : sig
     val not_found : 'a -> Response.t
   end
 
+  module Command : sig
+    type handler = Eio.Net.stream_socket -> Eio.Net.Sockaddr.stream -> unit
+    type server
+
+    val listen
+      :  ?bind_to_address:Eio.Net.Ipaddr.v4v6
+      -> sw:Eio.Switch.t
+      -> network:Eio.Net.t
+      -> port:int
+      -> handler
+      -> server
+
+    val shutdown : server -> unit
+  end
+
   module Error_response : sig
     type t
   end
@@ -739,8 +754,8 @@ module Server : sig
           -> Httpaf.Server_connection.error
           -> Error_response.t)
     -> Eio.Net.Sockaddr.stream Handler.t
-    -> Eio.Net.Sockaddr.stream
     -> Eio.Net.stream_socket
+    -> Eio.Net.Sockaddr.stream
     -> unit
 end
 

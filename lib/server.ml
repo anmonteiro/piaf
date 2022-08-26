@@ -225,13 +225,70 @@ let request_handler ~fd handler
   | exn -> exn_handler exn
 
 let create ?config ?(error_handler = default_error_handler) handler
-    : Eio.Net.Sockaddr.stream -> Eio.Net.stream_socket -> unit
+    : Eio.Net.stream_socket -> Eio.Net.Sockaddr.stream -> unit
   =
- fun sockaddr socket ->
+ fun socket sockaddr ->
   let fd = Option.get @@ Eio_unix.FD.peek_opt socket in
+  let request_handler = request_handler ~fd handler in
+  let error_handler = make_error_handler ~fd error_handler in
   Httpaf_eio.Server.create_connection_handler
     ?config:(Option.map Config.to_http1_config config)
-    ~request_handler:(request_handler ~fd handler)
-    ~error_handler:(make_error_handler ~fd error_handler)
+    ~request_handler
+    ~error_handler
     sockaddr
     socket
+
+module Command = struct
+  let log_connection_error ex =
+    Eio.traceln "Uncaught exception handling client: %a;@." Fmt.exn ex
+
+  exception Server_shutdown
+
+  type handler = Eio.Net.stream_socket -> Eio.Net.Sockaddr.stream -> unit
+
+  type server =
+    { network : Eio.Net.t
+    ; address : Eio.Net.Sockaddr.stream
+    ; handler : handler
+    ; sw : Switch.t
+    }
+
+  let shutdown server = Switch.fail server.sw Server_shutdown
+  let create ~network ~address ~sw handler = { network; address; handler; sw }
+
+  let start ~sw server =
+    let { network; address; handler; _ } = server in
+    let socket =
+      Eio.Net.listen
+        ~reuse_addr:true
+        ~reuse_port:true
+        ~backlog:5
+        ~sw
+        network
+        address
+    in
+    Fiber.fork ~sw (fun () ->
+        while true do
+          (* TODO: maybe run handler in a switch? *)
+          Eio.Net.accept_fork socket ~sw ~on_error:log_connection_error handler
+        done)
+
+  let listen
+      ?(bind_to_address = Eio.Net.Ipaddr.V4.loopback)
+      ~sw
+      ~network
+      ~port
+      handler
+    =
+    let p, u = Promise.create () in
+    Fiber.fork ~sw (fun () ->
+        let address = `Tcp (bind_to_address, port) in
+        try
+          Switch.run (fun sw ->
+              let server = create ~sw ~network ~address handler in
+              start ~sw server;
+              Promise.resolve u server)
+        with
+        | Server_shutdown -> Log.info (fun m -> m "Tearing down server..."));
+    Promise.await p
+end

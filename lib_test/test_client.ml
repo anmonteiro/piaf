@@ -1,4 +1,4 @@
-open Lwt.Syntax
+open Eio.Std
 open Piaf
 
 let ( // ) = Filename.concat
@@ -12,9 +12,14 @@ let response_testable =
 
 let error_testable = Alcotest.of_pp Error.pp_hum
 
-let test_simple_get _ () =
-  let* server, _ = Helper_server.listen ~http_port:8080 () in
-  let* response = Client.Oneshot.get (Uri.of_string "http://localhost:8080") in
+let test_simple_get ~sw env () =
+  let network = Eio.Stdenv.net env in
+  Format.eprintf "ahoy@.";
+  let server, _ = Helper_server.listen ~sw ~network ~http_port:8080 () in
+  Format.eprintf "ahoy2@.";
+  let response =
+    Client.Oneshot.get env ~sw (Uri.of_string "http://localhost:8080")
+  in
   let response = Result.get_ok response in
   Alcotest.check
     response_testable
@@ -23,18 +28,21 @@ let test_simple_get _ () =
        ~headers:Headers.(of_list [ Well_known.content_length, "5" ])
        `OK)
     response;
-  let* body = Body.to_string response.body in
+  let body = Body.to_string response.body in
   Alcotest.(check (result string error_testable))
     "expected body"
     (Ok "GET /")
     body;
   Helper_server.teardown server
 
-let test_redirection _ () =
-  let* server, _ = Helper_server.listen ~http_port:8080 () in
-  let* response =
+let test_redirection ~sw env () =
+  let network = Eio.Stdenv.net env in
+  let server, _ = Helper_server.listen ~sw ~network ~http_port:8080 () in
+  let response =
     Client.Oneshot.get
+      ~sw
       ~config:{ Config.default with follow_redirects = false }
+      env
       (Uri.of_string "http://localhost:8080/redirect")
   in
   let response = Result.get_ok response in
@@ -48,9 +56,11 @@ let test_redirection _ () =
            of_list [ Well_known.location, "/"; Well_known.content_length, "0" ])
        `Found);
   (* Follow redirects true, but no redirects left. *)
-  let* response =
+  let response =
     Client.Oneshot.get
+      ~sw
       ~config:{ Config.default with follow_redirects = true; max_redirects = 0 }
+      env
       (Uri.of_string "http://localhost:8080/redirect")
   in
   Alcotest.(check (result response_testable error_testable))
@@ -58,9 +68,11 @@ let test_redirection _ () =
     response
     (Error (`Connect_error "Maximum (0) redirects followed"));
   (* Successful redirection *)
-  let* response =
+  let response =
     Client.Oneshot.get
+      ~sw
       ~config:{ Config.default with follow_redirects = true; max_redirects = 1 }
+      env
       (Uri.of_string "http://localhost:8080/redirect")
   in
   let response = Result.get_ok response in
@@ -71,19 +83,22 @@ let test_redirection _ () =
        ~headers:Headers.(of_list [ Well_known.content_length, "5" ])
        `OK)
     response;
-  let* body = Body.to_string response.body in
+  let body = Body.to_string response.body in
   Alcotest.(check (result string error_testable))
     "expected body"
     (Ok "GET /")
     body;
   Helper_server.teardown server
 
-let test_redirection_post _ () =
-  let* server, _ = Helper_server.listen ~http_port:8080 () in
+let test_redirection_post ~sw env () =
+  let network = Eio.Stdenv.net env in
+  let server, _ = Helper_server.listen ~sw ~network ~http_port:8080 () in
   (* Request issues `GET` to the actual redirect target *)
-  let* response =
+  let response =
     Client.Oneshot.post
+      ~sw
       ~config:{ Config.default with follow_redirects = true; max_redirects = 1 }
+      env
       (Uri.of_string "http://localhost:8080/redirect")
   in
   let response = Result.get_ok response in
@@ -94,18 +109,20 @@ let test_redirection_post _ () =
        ~headers:Headers.(of_list [ Well_known.content_length, "5" ])
        `OK)
     response;
-  let* body = Body.to_string response.body in
+  let body = Body.to_string response.body in
   Alcotest.(check (result string error_testable))
     "expected body"
     (Ok "GET /")
     body;
   Helper_server.teardown server
 
-let test_https _ () =
-  let* server, _ = Helper_server.listen ~http_port:8080 () in
+let test_https ~sw env () =
+  let network = Eio.Stdenv.net env in
+  let server, _ = Helper_server.listen ~sw ~network ~http_port:8080 () in
   (* HTTP/1.1 *)
-  let* response =
+  let response =
     Client.Oneshot.get
+      ~sw
       ~config:
         { Config.default with
           follow_redirects = true
@@ -113,6 +130,7 @@ let test_https _ () =
         ; allow_insecure = true
         ; max_http_version = Versions.HTTP.v1_1
         }
+      env
       (Uri.of_string "http://localhost:8080/alpn")
   in
   let response = Result.get_ok response in
@@ -123,14 +141,15 @@ let test_https _ () =
        ~headers:Headers.(of_list [ Well_known.content_length, "5" ])
        `OK)
     response;
-  let* body = Body.to_string response.body in
+  let body = Body.to_string response.body in
   Alcotest.(check (result string error_testable))
     "expected body"
     (Ok "/alpn")
     body;
   (* HTTP/2 *)
-  let* response =
+  let response =
     Client.Oneshot.get
+      ~sw
       ~config:
         { Config.default with
           follow_redirects = true
@@ -138,6 +157,7 @@ let test_https _ () =
         ; allow_insecure = true
         ; max_http_version = Versions.HTTP.v2_0
         }
+      env
       (Uri.of_string "http://localhost:8080/alpn")
   in
   let response = Result.get_ok response in
@@ -146,19 +166,21 @@ let test_https _ () =
     "expected response"
     (Response.create ~version:Versions.HTTP.v2_0 `OK)
     response;
-  let* body = Body.to_string response.body in
+  let body = Body.to_string response.body in
   Alcotest.(check (result string error_testable))
     "expected body"
     (Ok "/alpn")
     body;
   (* HTTPS error (server certs are self-signed) *)
-  let* response =
-    Lwt.catch
-      (fun () ->
-        Client.Oneshot.get
-          ~config:{ Config.default with allow_insecure = false }
-          (Uri.of_string "https://localhost:9443"))
-      (fun exn -> Lwt.return_error (`Exn exn))
+  let response =
+    try
+      Client.Oneshot.get
+        ~sw
+        ~config:{ Config.default with allow_insecure = false }
+        env
+        (Uri.of_string "https://localhost:9443")
+    with
+    | exn -> Error (`Exn exn)
   in
   Alcotest.(check (result response_testable error_testable))
     "response error"
@@ -168,11 +190,13 @@ let test_https _ () =
     response;
   Helper_server.teardown server
 
-let test_https_server_certs _ () =
-  let* server, _ = Helper_server.listen ~http_port:8080 () in
+let test_https_server_certs ~sw env () =
+  let network = Eio.Stdenv.net env in
+  let server, _ = Helper_server.listen ~sw ~network ~http_port:8080 () in
   (* Verify server cert from file *)
-  let* response =
+  let response =
     Client.Oneshot.get
+      ~sw
       ~config:
         { Config.default with
           follow_redirects = true
@@ -181,6 +205,7 @@ let test_https_server_certs _ () =
         ; max_http_version = Versions.HTTP.v1_1
         ; cacert = Some (Cert.Filepath (Helper_server.cert_path // "ca.pem"))
         }
+      env
       (Uri.of_string "https://localhost:9443")
   in
   let response = Result.get_ok response in
@@ -198,8 +223,9 @@ let test_https_server_certs _ () =
     really_input_string inchannel (in_channel_length inchannel)
   in
   close_in inchannel;
-  let* response =
+  let response =
     Client.Oneshot.get
+      ~sw
       ~config:
         { Config.default with
           follow_redirects = true
@@ -208,6 +234,7 @@ let test_https_server_certs _ () =
         ; max_http_version = Versions.HTTP.v1_1
         ; cacert = Some (Cert.Certpem certstring)
         }
+      env
       (Uri.of_string "https://localhost:9443")
   in
   let response = Result.get_ok response in
@@ -219,10 +246,12 @@ let test_https_server_certs _ () =
        ~headers:Headers.(of_list [ Well_known.content_length, "1" ])
        `OK)
     response;
-  let* () = Helper_server.teardown server in
+  Helper_server.teardown server;
   (* Verify server cert rsa with SAN from cert string *)
-  let* server, _ =
+  let server, _ =
     Helper_server.listen
+      ~sw
+      ~network
       ~http_port:8080
       ~certfile:"server_rsa_san.pem"
       ~certkey:"server_rsa_san.key"
@@ -233,8 +262,9 @@ let test_https_server_certs _ () =
     really_input_string inchannel (in_channel_length inchannel)
   in
   close_in inchannel;
-  let* response =
+  let response =
     Client.Oneshot.get
+      ~sw
       ~config:
         { Config.default with
           follow_redirects = true
@@ -243,6 +273,7 @@ let test_https_server_certs _ () =
         ; max_http_version = Versions.HTTP.v1_1
         ; cacert = Some (Cert.Certpem certstring)
         }
+      env
       (Uri.of_string "https://localhost:9443")
   in
   let response = Result.get_ok response in
@@ -254,17 +285,20 @@ let test_https_server_certs _ () =
        ~headers:Headers.(of_list [ Well_known.content_length, "1" ])
        `OK)
     response;
-  let* () = Helper_server.teardown server in
+  Helper_server.teardown server;
   (* Verify server SAN IP address *)
-  let* server, _ =
+  let server, _ =
     Helper_server.listen
+      ~sw
+      ~network
       ~http_port:8080
       ~certfile:"server_san_ip.pem"
       ~certkey:"server_san_ip.key"
       ()
   in
-  let* response =
+  let response =
     Client.Oneshot.get
+      ~sw
       ~config:
         { Config.default with
           follow_redirects = true
@@ -273,6 +307,7 @@ let test_https_server_certs _ () =
         ; max_http_version = Versions.HTTP.v1_1
         ; cacert = Some (Cert.Filepath (Helper_server.cert_path // "ca.pem"))
         }
+      env
       (Uri.of_string "https://127.0.0.1:9443")
   in
   let response = Result.get_ok response in
@@ -286,10 +321,11 @@ let test_https_server_certs _ () =
     response;
   Helper_server.teardown server
 
-let test_https_client_certs _ () =
+let test_https_client_certs ~sw env () =
+  let network = Eio.Stdenv.net env in
   (* Client certificate *)
-  let* server, _ =
-    Helper_server.listen ~http_port:8080 ~check_client_cert:true ()
+  let server, _ =
+    Helper_server.listen ~sw ~network ~http_port:8080 ~check_client_cert:true ()
   in
   let inchannel = open_in (Helper_server.cert_path // "client.pem") in
   let clientcert =
@@ -299,8 +335,9 @@ let test_https_client_certs _ () =
   let inchannel = open_in (Helper_server.cert_path // "client.key") in
   let clientkey = really_input_string inchannel (in_channel_length inchannel) in
   close_in inchannel;
-  let* response =
+  let response =
     Client.Oneshot.get
+      ~sw
       ~config:
         { Config.default with
           follow_redirects = true
@@ -310,6 +347,7 @@ let test_https_client_certs _ () =
         ; cacert = Some (Cert.Filepath (Helper_server.cert_path // "ca.pem"))
         ; clientcert = Some (Cert.Certpem clientcert, Cert.Certpem clientkey)
         }
+      env
       (Uri.of_string "https://localhost:9443")
   in
   let response = Result.get_ok response in
@@ -324,8 +362,9 @@ let test_https_client_certs _ () =
   (* Client certificate as file *)
   let clientcert = Helper_server.cert_path // "client.pem" in
   let clientkey = Helper_server.cert_path // "client.key" in
-  let* response =
+  let response =
     Client.Oneshot.get
+      ~sw
       ~config:
         { Config.default with
           follow_redirects = true
@@ -335,6 +374,7 @@ let test_https_client_certs _ () =
         ; cacert = Some (Cert.Filepath (Helper_server.cert_path // "ca.pem"))
         ; clientcert = Some (Cert.Filepath clientcert, Cert.Filepath clientkey)
         }
+      env
       (Uri.of_string "https://localhost:9443")
   in
   let response = Result.get_ok response in
@@ -346,12 +386,15 @@ let test_https_client_certs _ () =
        ~headers:Headers.(of_list [ Well_known.content_length, "1" ])
        `OK)
     response;
-  let* () = Helper_server.teardown server in
+  Helper_server.teardown server;
   (* No client certificate provided *)
-  let* server, error_p = Helper_server.listen ~check_client_cert:true () in
-  let response =
-    let+ _ =
+  let server, error_p =
+    Helper_server.listen ~sw ~network ~check_client_cert:true ()
+  in
+  let response () =
+    let (_ : _ result) =
       Client.Oneshot.get
+        ~sw
         ~config:
           { Config.default with
             follow_redirects = true
@@ -360,23 +403,27 @@ let test_https_client_certs _ () =
           ; max_http_version = Versions.HTTP.v1_1
           ; cacert = Some (Cert.Filepath (Helper_server.cert_path // "ca.pem"))
           }
+        env
         (Uri.of_string "https://localhost:9443")
     in
     Ok ()
   in
-  let* ret = Lwt.choose [ response; error_p ] in
+  let ret = Fiber.first response (fun () -> Promise.await error_p) in
   Alcotest.(check (result unit error_testable))
     "response error"
     (Error (`Exn (Ssl.Accept_error Error_ssl)))
     ret;
   Helper_server.teardown server
 
-let test_h2c _ () =
-  let* server = Helper_server.H2c.listen 9000 in
+let test_h2c ~sw env () =
+  let network = Eio.Stdenv.net env in
+  let server = Helper_server.H2c.listen ~sw ~network 9000 in
   (* Not configured to follow the h2c upgrade *)
-  let* response =
+  let response =
     Client.Oneshot.get
+      ~sw
       ~config:{ Config.default with h2c_upgrade = false }
+      env
       (Uri.of_string "http://localhost:9000/h2c")
   in
   let response = Result.get_ok response in
@@ -391,12 +438,14 @@ let test_h2c _ () =
                [ connection, "Upgrade"; upgrade, "h2c"; content_length, "0" ])
        `Switching_protocols)
     response;
-  let* body = Body.to_string response.body in
+  let body = Body.to_string response.body in
   Alcotest.(check (result string error_testable)) "expected body" (Ok "") body;
   (* Configured to follow the h2c upgrade *)
-  let* response =
+  let response =
     Client.Oneshot.get
+      ~sw
       ~config:{ Config.default with h2c_upgrade = true }
+      env
       (Uri.of_string "http://localhost:9000/h2c")
   in
   let response = Result.get_ok response in
@@ -405,20 +454,22 @@ let test_h2c _ () =
     "expected response"
     (Response.create ~version:Versions.HTTP.v2_0 `OK)
     response;
-  let* body = Body.to_string response.body in
+  let body = Body.to_string response.body in
   Alcotest.(check (result string error_testable))
     "expected body"
     (Ok "/h2c")
     body;
   (* Not configured to allow HTTP/2 connections *)
-  let* response =
+  let response =
     Client.Oneshot.get
+      ~sw
       ~config:
         { Config.default with
           h2c_upgrade = true
         ; (* But no HTTP/2 enabled *)
           max_http_version = Versions.HTTP.v1_1
         }
+      env
       (Uri.of_string "http://localhost:9000/h2c")
   in
   let response = Result.get_ok response in
@@ -433,12 +484,13 @@ let test_h2c _ () =
                [ connection, "Upgrade"; upgrade, "h2c"; content_length, "0" ])
        `Switching_protocols)
     response;
-  let* body = Body.to_string response.body in
+  let body = Body.to_string response.body in
   Alcotest.(check (result string error_testable)) "expected body" (Ok "") body;
   Helper_server.H2c.teardown server
 
-let test_default_headers _ () =
-  let* server, _ = Helper_server.listen ~http_port:8080 () in
+let test_default_headers ~sw env () =
+  let network = Eio.Stdenv.net env in
+  let server, _ = Helper_server.listen ~sw ~network ~http_port:8080 () in
   let default_headers = Headers.[ Well_known.authorization, "Bearer token" ] in
   let expected_response =
     Response.create
@@ -449,24 +501,28 @@ let test_default_headers _ () =
             @ [ "Host", "localhost"; Well_known.content_length, "0" ]))
       `OK
   in
-  let* client =
+  let client =
     Client.create
+      ~sw
       ~config:{ Config.default with default_headers }
+      env
       (Uri.of_string "http://localhost:8080")
   in
   let client = Result.get_ok client in
-  let* response = Client.get client "/echo_headers" in
+  let response = Client.get client "/echo_headers" in
   let response = Result.get_ok response in
   Alcotest.check
     response_testable
     "Expected response"
     expected_response
     response;
-  let* () = Client.shutdown client in
+  Client.shutdown client;
   (* Oneshot *)
-  let* response =
+  let response =
     Client.Oneshot.get
+      ~sw
       ~config:{ Config.default with default_headers }
+      env
       (Uri.of_string "http://localhost:8080/echo_headers")
   in
   let response = Result.get_ok response in
@@ -477,10 +533,24 @@ let test_default_headers _ () =
     response;
   Helper_server.teardown server
 
+let test_case
+    :  string -> Alcotest.speed_level
+    -> (sw:Switch.t -> Eio.Stdenv.t -> unit -> unit)
+    -> string * Alcotest.speed_level * (unit -> unit)
+  =
+ fun desc ty f ->
+  ( desc
+  , ty
+  , fun () ->
+      Eio_main.run (fun env ->
+          Switch.run (fun sw ->
+              Switch.on_release sw (fun () -> Format.eprintf "cenas@.");
+              f ~sw env ())) )
+
 let suite =
   [ ( "client"
     , List.map
-        (fun (desc, ty, f) -> Alcotest_lwt.test_case desc ty f)
+        (fun (desc, ty, f) -> test_case desc ty f)
         [ "simple get request", `Quick, test_simple_get
         ; "redirections", `Quick, test_redirection
         ; ( "redirect POST, request target with GET"
@@ -522,4 +592,4 @@ let () =
     Logs.set_reporter format_reporter
   in
   setup_log Debug;
-  Lwt_main.run (Alcotest_lwt.run "Piaf client tests" suite)
+  Alcotest.run "Piaf client tests" suite

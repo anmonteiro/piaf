@@ -52,10 +52,14 @@ let create capacity =
   ; closed = Promise.create ()
   }
 
+let is_closed { is_closed; _ } = Atomic.get is_closed
+
 let close t =
-  let { closed = _, u; _ } = t in
-  Atomic.set t.is_closed true;
-  Promise.resolve u ()
+  if not (is_closed t)
+  then (
+    let { closed = _, u; _ } = t in
+    Atomic.set t.is_closed true;
+    Promise.resolve u ())
 
 let empty () =
   let t = create 0 in
@@ -68,8 +72,6 @@ let from ~f =
   ; is_closed = Atomic.make false
   ; closed = Promise.create ()
   }
-
-let is_closed { is_closed; _ } = Atomic.get is_closed
 
 let closed t =
   let { closed = p, _; _ } = t in

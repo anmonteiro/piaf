@@ -180,11 +180,11 @@ let shutdown_conn (Connection.Conn { impl; handle; conn_info; _ }) =
 
 let drain_available_body_bytes_and_shutdown conn response_body =
   let (Connection.Conn { sw; _ }) = conn in
-  Log.debug (fun m -> m "Ignoring the response body");
   (* Junk what's available because we're going to close the connection.
    * This is to avoid leaking memory. We're not going to use this
    * response body so it doesn't need to stay around. *)
   Fiber.fork ~sw (fun () ->
+      Log.debug (fun m -> m "Ignoring the response body");
       Body.drain_available response_body;
       shutdown_conn conn)
 

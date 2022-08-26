@@ -34,6 +34,7 @@ type _ t
 val empty : unit -> _ t
 val from : f:(unit -> 'a option) -> 'a t
 val create : int -> _ t
+val close : _ t -> unit
 val closed : _ t -> unit Eio.Promise.t
 val when_closed : f:(unit -> unit) -> _ t -> unit
 val is_closed : _ t -> bool
