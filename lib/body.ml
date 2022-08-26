@@ -239,13 +239,12 @@ let to_string_stream { contents; _ } =
         Bigstringaf.substring buffer ~off ~len)
       stream
 
-let drain ({ contents; _ } as _t) =
+let drain ({ contents; _ } as t) =
   match contents with
   | `Empty _ | `String _ | `Bigstring _ -> Ok ()
-  | `Stream _stream ->
-    (* let* () = Lwt_stream.junk_while (fun _ -> true) stream in *)
-    (* or_error t ~stream () *)
-    Ok ()
+  | `Stream stream ->
+    Stream.drain stream;
+    or_error t ~stream ()
   | `Sendfile (fd, _, _) ->
     Unix_fd.ensure_closed fd;
     Ok ()
@@ -253,7 +252,7 @@ let drain ({ contents; _ } as _t) =
 let drain_available { contents; _ } =
   match contents with
   | `Empty _ | `String _ | `Bigstring _ -> ()
-  | `Stream stream -> Stream.junk_old stream
+  | `Stream stream -> Stream.drain_available stream
   | `Sendfile (fd, _, _) -> Unix_fd.ensure_closed fd
 
 let is_closed t =

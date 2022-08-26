@@ -41,6 +41,12 @@ module Log = (val Logs.src_log src : Logs.LOG)
 let ptoerr p () = Result.error (Promise.await p)
 
 let make_error_handler notify_error ~kind:_ error =
+  let error =
+    match error with
+    | `Exn (Eio_ssl.Exn.Ssl_exception { message; _ }) ->
+      `TLS_error message
+    | error -> error
+  in
   Promise.resolve notify_error error
 
 let create_connection

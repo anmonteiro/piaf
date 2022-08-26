@@ -107,49 +107,36 @@ module ALPN = struct
     let ca = cert_path // "ca.pem" in
     let cert = cert_path // certfile in
     let priv_key = cert_path // certkey in
-    let error_p, wakeup_error = Promise.create () in
 
-    let server =
-      Server.Command.listen ~sw ~network ~port (fun fd client_addr ->
-          let server_ctx = Ssl.create_context Ssl.TLSv1_3 Ssl.Server_context in
-          Ssl.disable_protocols server_ctx [ Ssl.SSLv23; Ssl.TLSv1_1 ];
-          Ssl.load_verify_locations server_ctx ca "";
-          Ssl.use_certificate server_ctx cert priv_key;
-          if check_client_cert
-          then
-            Ssl.set_verify server_ctx [ Ssl.Verify_fail_if_no_peer_cert ] None;
-          let protos = [ "h2"; "http/1.1" ] in
-          Ssl.set_context_alpn_protos server_ctx protos;
-          Ssl.set_context_alpn_select_callback server_ctx (fun client_protos ->
-              first_match client_protos protos);
-          Format.eprintf "fireworks@.";
-          try
-            let ssl_server = Eio_ssl.ssl_accept fd server_ctx in
-            let ret =
-              match Eio_ssl.ssl_socket ssl_server with
-              | None -> ()
-              | Some ssl_socket ->
-                (match Ssl.get_negotiated_alpn_protocol ssl_socket with
-                | Some "http/1.1" -> http1s_handler client_addr ssl_server
-                | Some "h2" -> h2s_handler client_addr ssl_server
-                | None (* Unable to negotiate a protocol *) | Some _ ->
-                  (* Can't really happen - would mean that TLS negotiated a
-                   * protocol that we didn't specify. *)
-                  assert false)
-            in
-            if not (Promise.is_resolved error_p)
-            then (
-              Format.eprintf "fireworks@.";
-              Promise.resolve wakeup_error (Ok ()));
-            ret
-          with
-          | exn ->
-            Format.eprintf "EXN: %s@." (Printexc.to_string exn);
-            if not (Promise.is_resolved error_p)
-            then Promise.resolve wakeup_error (Error (`Exn exn)))
-    in
-
-    server, error_p
+    Server.Command.listen ~sw ~network ~port (fun fd client_addr ->
+        let server_ctx = Ssl.create_context Ssl.TLSv1_3 Ssl.Server_context in
+        Ssl.disable_protocols server_ctx [ Ssl.SSLv23; Ssl.TLSv1_1 ];
+        Ssl.load_verify_locations server_ctx ca "";
+        Ssl.use_certificate server_ctx cert priv_key;
+        if check_client_cert
+        then Ssl.set_verify server_ctx [ Ssl.Verify_fail_if_no_peer_cert ] None;
+        let protos = [ "h2"; "http/1.1" ] in
+        Ssl.set_context_alpn_protos server_ctx protos;
+        Ssl.set_context_alpn_select_callback server_ctx (fun client_protos ->
+            first_match client_protos protos);
+        try
+          let ssl_server = Eio_ssl.ssl_accept fd server_ctx in
+          Format.eprintf "oh wow@.";
+          match Eio_ssl.ssl_socket ssl_server with
+          | None -> ()
+          | Some ssl_socket ->
+            (match Ssl.get_negotiated_alpn_protocol ssl_socket with
+            | Some "http/1.1" -> http1s_handler client_addr ssl_server
+            | Some "h2" -> h2s_handler client_addr ssl_server
+            | None (* Unable to negotiate a protocol *) | Some _ ->
+              (* Can't really happen - would mean that TLS negotiated a
+               * protocol that we didn't specify. *)
+              assert false)
+        with
+        (* | Eio.Cancel.Cancelled _ -> () *)
+        | exn ->
+          Format.eprintf "EXN: %s@." (Printexc.to_string exn);
+          raise exn)
 end
 
 type t = Server.Command.server * Server.Command.server
@@ -174,8 +161,8 @@ let listen
       ~certkey
       https_port
   in
-  let server, (https_server, error_p) = Fiber.pair http_server https_server in
-  (server, https_server), error_p
+  let server, https_server = Fiber.pair http_server https_server in
+  server, https_server
 
 let teardown (http, https) =
   Fiber.both

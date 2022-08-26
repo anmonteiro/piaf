@@ -14,9 +14,7 @@ let error_testable = Alcotest.of_pp Error.pp_hum
 
 let test_simple_get ~sw env () =
   let network = Eio.Stdenv.net env in
-  Format.eprintf "ahoy@.";
-  let server, _ = Helper_server.listen ~sw ~network ~http_port:8080 () in
-  Format.eprintf "ahoy2@.";
+  let server = Helper_server.listen ~sw ~network ~http_port:8080 () in
   let response =
     Client.Oneshot.get env ~sw (Uri.of_string "http://localhost:8080")
   in
@@ -37,7 +35,7 @@ let test_simple_get ~sw env () =
 
 let test_redirection ~sw env () =
   let network = Eio.Stdenv.net env in
-  let server, _ = Helper_server.listen ~sw ~network ~http_port:8080 () in
+  let server = Helper_server.listen ~sw ~network ~http_port:8080 () in
   let response =
     Client.Oneshot.get
       ~sw
@@ -92,7 +90,7 @@ let test_redirection ~sw env () =
 
 let test_redirection_post ~sw env () =
   let network = Eio.Stdenv.net env in
-  let server, _ = Helper_server.listen ~sw ~network ~http_port:8080 () in
+  let server = Helper_server.listen ~sw ~network ~http_port:8080 () in
   (* Request issues `GET` to the actual redirect target *)
   let response =
     Client.Oneshot.post
@@ -118,7 +116,7 @@ let test_redirection_post ~sw env () =
 
 let test_https ~sw env () =
   let network = Eio.Stdenv.net env in
-  let server, _ = Helper_server.listen ~sw ~network ~http_port:8080 () in
+  let server = Helper_server.listen ~sw ~network ~http_port:8080 () in
   (* HTTP/1.1 *)
   let response =
     Client.Oneshot.get
@@ -192,7 +190,7 @@ let test_https ~sw env () =
 
 let test_https_server_certs ~sw env () =
   let network = Eio.Stdenv.net env in
-  let server, _ = Helper_server.listen ~sw ~network ~http_port:8080 () in
+  let server = Helper_server.listen ~sw ~network ~http_port:8080 () in
   (* Verify server cert from file *)
   let response =
     Client.Oneshot.get
@@ -217,6 +215,7 @@ let test_https_server_certs ~sw env () =
        ~headers:Headers.(of_list [ Well_known.content_length, "1" ])
        `OK)
     response;
+  Result.get_ok (Body.drain response.body);
   (* Verify server cert from cert string *)
   let inchannel = open_in (Helper_server.cert_path // "ca.pem") in
   let certstring =
@@ -246,9 +245,11 @@ let test_https_server_certs ~sw env () =
        ~headers:Headers.(of_list [ Well_known.content_length, "1" ])
        `OK)
     response;
+  Result.get_ok (Body.drain response.body);
   Helper_server.teardown server;
+
   (* Verify server cert rsa with SAN from cert string *)
-  let server, _ =
+  let server =
     Helper_server.listen
       ~sw
       ~network
@@ -285,9 +286,10 @@ let test_https_server_certs ~sw env () =
        ~headers:Headers.(of_list [ Well_known.content_length, "1" ])
        `OK)
     response;
+  Result.get_ok (Body.drain response.body);
   Helper_server.teardown server;
   (* Verify server SAN IP address *)
-  let server, _ =
+  let server =
     Helper_server.listen
       ~sw
       ~network
@@ -311,6 +313,7 @@ let test_https_server_certs ~sw env () =
       (Uri.of_string "https://127.0.0.1:9443")
   in
   let response = Result.get_ok response in
+  Result.get_ok (Body.drain response.body);
   Alcotest.check
     response_testable
     "expected response"
@@ -324,7 +327,7 @@ let test_https_server_certs ~sw env () =
 let test_https_client_certs ~sw env () =
   let network = Eio.Stdenv.net env in
   (* Client certificate *)
-  let server, _ =
+  let server =
     Helper_server.listen ~sw ~network ~http_port:8080 ~check_client_cert:true ()
   in
   let inchannel = open_in (Helper_server.cert_path // "client.pem") in
@@ -359,6 +362,7 @@ let test_https_client_certs ~sw env () =
        ~headers:Headers.(of_list [ Well_known.content_length, "1" ])
        `OK)
     response;
+  Result.get_ok (Body.drain response.body);
   (* Client certificate as file *)
   let clientcert = Helper_server.cert_path // "client.pem" in
   let clientkey = Helper_server.cert_path // "client.key" in
@@ -386,33 +390,31 @@ let test_https_client_certs ~sw env () =
        ~headers:Headers.(of_list [ Well_known.content_length, "1" ])
        `OK)
     response;
+  Result.get_ok (Body.drain response.body);
   Helper_server.teardown server;
   (* No client certificate provided *)
-  let server, error_p =
-    Helper_server.listen ~sw ~network ~check_client_cert:true ()
+  let server = Helper_server.listen ~sw ~network ~check_client_cert:true () in
+  let response =
+    Client.Oneshot.get
+      ~sw
+      ~config:
+        { Config.default with
+          follow_redirects = true
+        ; max_redirects = 1
+        ; allow_insecure = false
+        ; max_http_version = Versions.HTTP.v1_1
+        ; cacert = Some (Cert.Filepath (Helper_server.cert_path // "ca.pem"))
+        }
+      env
+      (Uri.of_string "https://localhost:9443")
+    |> Result.map (fun res -> Result.get_ok (Body.drain res.Response.body))
   in
-  let response () =
-    let (_ : _ result) =
-      Client.Oneshot.get
-        ~sw
-        ~config:
-          { Config.default with
-            follow_redirects = true
-          ; max_redirects = 1
-          ; allow_insecure = false
-          ; max_http_version = Versions.HTTP.v1_1
-          ; cacert = Some (Cert.Filepath (Helper_server.cert_path // "ca.pem"))
-          }
-        env
-        (Uri.of_string "https://localhost:9443")
-    in
-    Ok ()
-  in
-  let ret = Fiber.first response (fun () -> Promise.await error_p) in
   Alcotest.(check (result unit error_testable))
     "response error"
-    (Error (`Exn (Ssl.Accept_error Error_ssl)))
-    ret;
+    (Error
+       (`TLS_error
+         "error:0A00045C:SSL routines::tlsv13 alert certificate required"))
+    response;
   Helper_server.teardown server
 
 let test_h2c ~sw env () =
@@ -490,7 +492,7 @@ let test_h2c ~sw env () =
 
 let test_default_headers ~sw env () =
   let network = Eio.Stdenv.net env in
-  let server, _ = Helper_server.listen ~sw ~network ~http_port:8080 () in
+  let server = Helper_server.listen ~sw ~network ~http_port:8080 () in
   let default_headers = Headers.[ Well_known.authorization, "Bearer token" ] in
   let expected_response =
     Response.create
@@ -541,11 +543,7 @@ let test_case
  fun desc ty f ->
   ( desc
   , ty
-  , fun () ->
-      Eio_main.run (fun env ->
-          Switch.run (fun sw ->
-              Switch.on_release sw (fun () -> Format.eprintf "cenas@.");
-              f ~sw env ())) )
+  , fun () -> Eio_main.run (fun env -> Switch.run (fun sw -> f ~sw env ())) )
 
 let suite =
   [ ( "client"

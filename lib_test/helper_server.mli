@@ -11,7 +11,7 @@ val listen
   -> sw:Eio.Switch.t
   -> network:Eio.Net.t
   -> unit
-  -> t * (unit, Piaf.Error.t) result Eio.Promise.t
+  -> t
 
 val teardown : t -> unit
 
