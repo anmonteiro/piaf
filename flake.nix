@@ -16,7 +16,7 @@
       rec {
         packages = pkgs.callPackage ./nix { nix-filter = nix-filter.lib; };
         defaultPackage = packages.native.piaf;
-        devShell = pkgs.callPackage ./shell.nix { };
+        devShell = pkgs.callPackage ./shell.nix { inherit packages; };
         gh-actions = pkgs.callPackage ./nix/gh-actions.nix { };
       });
 }
