@@ -9,7 +9,7 @@ let
       };
     }
     {
-      uses = "cachix/install-nix-action@v14.1";
+      uses = "cachix/install-nix-action@v17";
     }
     {
       uses = "cachix/cachix-action@v10";
