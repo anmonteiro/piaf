@@ -348,7 +348,13 @@ let of_raw_body
   in
 
   let rec t =
-    lazy (of_stream ~length:body_length (Stream.from ~f:(read_fn t)))
+    lazy
+      (let stream =
+         match body_length with
+         | `Fixed 0L -> Stream.empty ()
+         | _ -> Stream.from ~f:(read_fn t)
+       in
+       of_stream ~length:body_length stream)
   in
   Lazy.force t
 
