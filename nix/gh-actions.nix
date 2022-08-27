@@ -49,20 +49,16 @@ let
           };
         };
 
-        jobs = lib.flatten (lib.mapAttrs
-          (os: jobs:
-            builtins.map
-              ({ run, name, ... }@conf:
-                job ({
-                  runs-on = os;
-                  steps = commonSteps cachix
-                    ++ [{ inherit name run; }];
-                } // (if (conf ? ocamlVersions) then {
-                  inherit (conf) ocamlVersions;
-                } else { })))
-              jobs
-          )
-          os);
+        jobs = lib.mapAttrs
+          (os: { run, name, ... }@conf:
+            job ({
+              runs-on = os;
+              steps = commonSteps cachix
+                ++ [{ inherit name run; }];
+            } // (if (conf ? ocamlVersions) then {
+              inherit (conf) ocamlVersions;
+            } else { })))
+          os;
       };
   };
 
@@ -75,16 +71,16 @@ gh-actions.cachixBuild {
     signingKey = "\${{ secrets.CACHIX_SIGNING_KEY }}";
   };
   os = {
-    macos-latest = [{
+    macos-latest = {
       name = "Run nix-build";
       ocamlVersions = [ "4_13" "4_14" "5_00" ];
       run = "nix-build ./nix/ci/test.nix -A native --argstr ocamlVersion \${{ matrix.ocamlVersion }}";
-    }];
-    ubuntu-latest = [{
+    };
+    ubuntu-latest = {
       ocamlVersions = [ "4_13" "4_14" "5_00" ];
       name = "Run nix-build";
       run = "nix-build ./nix/ci/test.nix -A native -A musl64 --argstr ocamlVersion \${{ matrix.ocamlVersion }}";
-    }];
+    };
   };
 
 }
