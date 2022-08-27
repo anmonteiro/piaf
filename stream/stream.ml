@@ -33,21 +33,22 @@ open Eio.Std
 
 type 'a kind =
   | From of (unit -> 'a option)
-  | Push of 'a Eio.Stream.t
+  | Push of
+      { stream : 'a Eio.Stream.t
+      ; capacity : int
+      }
 
 type 'a t =
   { stream : 'a kind
-  ; capacity : int
   ; is_closed : bool Atomic.t
   ; closed : unit Promise.t * unit Promise.u
   }
 
 let unsafe_eio_stream { stream; _ } =
-  match stream with From _ -> assert false | Push stream -> stream
+  match stream with From _ -> assert false | Push { stream; _ } -> stream
 
 let create capacity =
-  { stream = Push (Eio.Stream.create capacity)
-  ; capacity
+  { stream = Push { stream = Eio.Stream.create capacity; capacity }
   ; is_closed = Atomic.make false
   ; closed = Promise.create ()
   }
@@ -67,11 +68,7 @@ let empty () =
   t
 
 let from ~f =
-  { stream = From f
-  ; capacity = 0
-  ; is_closed = Atomic.make false
-  ; closed = Promise.create ()
-  }
+  { stream = From f; is_closed = Atomic.make false; closed = Promise.create () }
 
 let closed t =
   let { closed = p, _; _ } = t in
@@ -94,23 +91,27 @@ let take t =
     | None ->
       close t;
       None)
-  | Push stream -> Some (Eio.Stream.take stream)
+  | Push { capacity = 0; _ } -> None
+  | Push { stream; _ } -> Some (Eio.Stream.take stream)
 
 let take_nonblocking t =
   match t.stream with
   | From _f -> None
-  | Push stream -> Eio.Stream.take_nonblocking stream
+  | Push { stream; _ } -> Eio.Stream.take_nonblocking stream
 
 let map ~f t =
   from ~f:(fun () ->
       match take t with Some item -> Some (f item) | None -> None)
 
 let rec iter ~f t =
-  match take t with
-  | Some item ->
-    f item;
-    iter ~f t
-  | None -> ()
+  match t.stream with
+  | Push { capacity = 0; _ } -> ()
+  | Push _ | From _ ->
+    (match take t with
+    | Some item ->
+      f item;
+      iter ~f t
+    | None -> ())
 
 let fold ~f ~init t =
   let rec loop ~f ~acc t =
