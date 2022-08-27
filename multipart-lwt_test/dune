@@ -1,3 +1,3 @@
 (test
  (name multipart_test)
- (libraries alcotest multipart alcotest-lwt))
+ (libraries alcotest piaf-lwt.multipart alcotest-lwt))

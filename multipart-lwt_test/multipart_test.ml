@@ -50,7 +50,7 @@ let test_simple_boundary _ () =
   let emit name stream = Lwt.wakeup wakener (name, stream) in
   let multipart_result =
     Lwt.bind
-      (Multipart.parse_multipart_form
+      (Multipart_lwt.parse_multipart_form
          ~content_type
          ~max_chunk_size
          ~emit
@@ -77,7 +77,7 @@ let test_simple_boundary _ () =
   let+ multipart_result = multipart_result in
   match multipart_result with
   | Ok t ->
-    let fields = Multipart.result_fields t in
+    let fields = Multipart_lwt.result_fields t in
     Alcotest.(check int) "one field" 1 (List.length fields);
     let name, multipart_fields = List.hd fields in
     Alcotest.(check string) "field name" "picture.png" name;
@@ -88,8 +88,7 @@ let test_simple_boundary _ () =
                           parameters= (parameters (name, "picture.png")); }
 Content-Type[*]: image/iana:png |}
       (Format.asprintf "%a" Multipart_form.Header.pp multipart_fields)
-  | Error (`Msg msg) ->
-    Alcotest.fail msg
+  | Error (`Msg msg) -> Alcotest.fail msg
 
 let test_unaligned_boundary _ () =
   let payload_size = 0x1100 in
@@ -112,7 +111,11 @@ let test_unaligned_boundary _ () =
   let waiter, wakener = Lwt.wait () in
   let emit name stream = Lwt.wakeup wakener (name, stream) in
   let _multipart_result =
-    Multipart.parse_multipart_form ~content_type ~max_chunk_size ~emit stream
+    Multipart_lwt.parse_multipart_form
+      ~content_type
+      ~max_chunk_size
+      ~emit
+      stream
   in
   let* name, stream = waiter in
   Alcotest.(check (option string))
@@ -147,7 +150,7 @@ let test_no_boundary _ () =
   let waiter, wakener = Lwt.wait () in
   let emit name stream = Lwt.wakeup wakener (name, stream) in
   let* multipart_result =
-    Multipart.parse_multipart_form
+    Multipart_lwt.parse_multipart_form
       ~content_type:content_type_no_boundary
       ~max_chunk_size
       ~emit
@@ -184,7 +187,7 @@ let test_no_boundary_unaligned _ () =
   let waiter, wakener = Lwt.wait () in
   let emit name stream = Lwt.wakeup wakener (name, stream) in
   let* multipart_result =
-    Multipart.parse_multipart_form
+    Multipart_lwt.parse_multipart_form
       ~content_type:content_type_no_boundary
       ~max_chunk_size
       ~emit
@@ -220,15 +223,14 @@ let test_no_boundary_but_boundary_expected _ () =
   push None;
   let emit _ _ = assert false in
   let+ multipart_result =
-    Multipart.parse_multipart_form
+    Multipart_lwt.parse_multipart_form
       ~content_type:content_type_no_boundary
       ~max_chunk_size
       ~emit
       stream
   in
   match multipart_result with
-  | Ok _ ->
-    Alcotest.fail "expected failure"
+  | Ok _ -> Alcotest.fail "expected failure"
   | Error _ ->
     Alcotest.(check pass) "failed because boundary was expected" () ()
 

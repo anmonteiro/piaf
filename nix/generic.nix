@@ -69,6 +69,7 @@ rec {
       ] ++ (builtins.map inDirectory [
         "lib"
         "lib_test"
+        "stream"
         "multipart"
         "multipart_test"
       ]);

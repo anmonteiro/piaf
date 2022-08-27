@@ -1,76 +1,82 @@
 {
-  "jobs": {
-    "macos-latest": {
-      "runs-on": "macos-latest",
-      "steps": [
+  "jobs": [
+    {
+      "macos-latest": [
         {
-          "uses": "actions/checkout@v2",
-          "with": {
-            "submodules": "recursive"
+          "runs-on": "macos-latest",
+          "steps": [
+            {
+              "uses": "actions/checkout@v2",
+              "with": {
+                "submodules": "recursive"
+              }
+            },
+            {
+              "uses": "cachix/install-nix-action@v17"
+            },
+            {
+              "uses": "cachix/cachix-action@v10",
+              "with": {
+                "name": "anmonteiro",
+                "signingKey": "${{ secrets.CACHIX_SIGNING_KEY }}"
+              }
+            },
+            {
+              "name": "Run nix-build",
+              "run": "nix-build ./nix/ci/test.nix -A native --argstr ocamlVersion ${{ matrix.ocamlVersion }}"
+            }
+          ],
+          "strategy": {
+            "fail-fast": false,
+            "matrix": {
+              "ocamlVersion": [
+                "4_13",
+                "4_14",
+                "5_00"
+              ]
+            }
           }
-        },
-        {
-          "uses": "cachix/install-nix-action@v17"
-        },
-        {
-          "uses": "cachix/cachix-action@v10",
-          "with": {
-            "name": "anmonteiro",
-            "signingKey": "${{ secrets.CACHIX_SIGNING_KEY }}"
-          }
-        },
-        {
-          "name": "Run nix-build",
-          "run": "nix-build ./nix/ci/test.nix -A native --argstr ocamlVersion ${{ matrix.ocamlVersion }}"
         }
       ],
-      "strategy": {
-        "fail-fast": false,
-        "matrix": {
-          "ocamlVersion": [
-            "4_13",
-            "4_14",
-            "5_00"
-          ]
-        }
-      }
-    },
-    "ubuntu-latest": {
-      "runs-on": "ubuntu-latest",
-      "steps": [
+      "ubuntu-latest": [
         {
-          "uses": "actions/checkout@v2",
-          "with": {
-            "submodules": "recursive"
+          "runs-on": "ubuntu-latest",
+          "steps": [
+            {
+              "uses": "actions/checkout@v2",
+              "with": {
+                "submodules": "recursive"
+              }
+            },
+            {
+              "uses": "cachix/install-nix-action@v17"
+            },
+            {
+              "uses": "cachix/cachix-action@v10",
+              "with": {
+                "name": "anmonteiro",
+                "signingKey": "${{ secrets.CACHIX_SIGNING_KEY }}"
+              }
+            },
+            {
+              "name": "Run nix-build",
+              "run": "nix-build ./nix/ci/test.nix -A native -A musl64 --argstr ocamlVersion ${{ matrix.ocamlVersion }}"
+            }
+          ],
+          "strategy": {
+            "fail-fast": false,
+            "matrix": {
+              "ocamlVersion": [
+                "4_13",
+                "4_14",
+                "5_00"
+              ]
+            }
           }
-        },
-        {
-          "uses": "cachix/install-nix-action@v17"
-        },
-        {
-          "uses": "cachix/cachix-action@v10",
-          "with": {
-            "name": "anmonteiro",
-            "signingKey": "${{ secrets.CACHIX_SIGNING_KEY }}"
-          }
-        },
-        {
-          "name": "Run nix-build",
-          "run": "nix-build ./nix/ci/test.nix -A native -A musl64 --argstr ocamlVersion ${{ matrix.ocamlVersion }}"
         }
-      ],
-      "strategy": {
-        "fail-fast": false,
-        "matrix": {
-          "ocamlVersion": [
-            "4_13",
-            "4_14",
-            "5_00"
-          ]
-        }
-      }
+      ]
     }
-  },
+  ],
   "name": "Build",
   "on": {
     "pull_request": null,
