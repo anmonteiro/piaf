@@ -57,24 +57,24 @@ module Multipart = struct
       let kvs, push_to_kvs = Lwt_stream.create () in
       let emit name stream = push_to_kvs (Some (name, stream)) in
       let++! multipart =
-        Multipart.parse_multipart_form
+        Multipart_lwt.parse_multipart_form
           ~content_type
           ~max_chunk_size
           ~emit
           ~finish:(fun () -> push_to_kvs None)
           stream
       in
-      let multipart_fields = Multipart.result_fields multipart in
+      let multipart_fields = Multipart_lwt.result_fields multipart in
       Lwt_stream.map_s
         (fun (name, stream) ->
           let name = Option.get name in
           let headers = List.assoc name multipart_fields in
-          let content_type = Multipart.content_type headers in
+          let content_type = Multipart_lwt.content_type headers in
           let content_type =
-            Format.asprintf "%a" Multipart.Pp.pp_content_type content_type
+            Format.asprintf "%a" Multipart_lwt.Pp.pp_content_type content_type
           in
           let content_disposition =
-            Option.get (Multipart.content_disposition headers)
+            Option.get (Multipart_lwt.content_disposition headers)
           in
           (* From RFC7578§4.2:
            *

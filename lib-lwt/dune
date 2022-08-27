@@ -2,7 +2,7 @@
  (name piaf_lwt)
  (public_name piaf-lwt)
  (libraries
-  multipart
+  multipart_lwt
   h2
   h2-lwt-unix
   httpaf
