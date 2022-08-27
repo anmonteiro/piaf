@@ -118,5 +118,9 @@ let fold ~f ~init t =
   in
   loop ~f ~acc:init t
 
-let rec junk_old t =
-  match take_nonblocking t with Some _ -> junk_old t | None -> ()
+let drain t = iter ~f:ignore t
+
+let drain_available t =
+  while Option.is_some (take_nonblocking t) do
+    ()
+  done

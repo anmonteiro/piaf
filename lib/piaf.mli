@@ -299,6 +299,7 @@ module Error : sig
   type common =
     [ `Exn of exn
     | `Protocol_error of H2.Error_code.t * string
+    | `TLS_error of string
     | `Msg of string
     ]
 

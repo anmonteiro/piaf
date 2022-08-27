@@ -318,8 +318,8 @@ let connect ~hostname ~config ~alpn_protocols fd =
         Ssl.set_host ssl_sock hostname);
       let socket_or_error =
         try Ok (Eio_ssl.ssl_perform_handshake s) with
-        | Ssl.Connection_error ssl_error ->
-          let msg = Error.ssl_error_to_string ssl_error in
+        | Eio_ssl.Exn.Ssl_exception { message; _ } ->
+          let msg = Format.asprintf "SSL Error: %s" message in
           Log.err (fun m -> m "%s" msg);
           Error (`Connect_error msg)
         | _ -> assert false

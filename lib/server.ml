@@ -239,9 +239,6 @@ let create ?config ?(error_handler = default_error_handler) handler
     socket
 
 module Command = struct
-  let log_connection_error ex =
-    Eio.traceln "Uncaught exception handling client: %a;@." Fmt.exn ex
-
   exception Server_shutdown
 
   type handler = Eio.Net.stream_socket -> Eio.Net.Sockaddr.stream -> unit
@@ -250,11 +247,13 @@ module Command = struct
     { network : Eio.Net.t
     ; address : Eio.Net.Sockaddr.stream
     ; handler : handler
-    ; sw : Switch.t
+    ; resolver : unit -> unit
     }
 
-  let shutdown server = Switch.fail server.sw Server_shutdown
-  let create ~network ~address ~sw handler = { network; address; handler; sw }
+  let shutdown server = server.resolver ()
+
+  let create ~network ~address ~resolver handler =
+    { network; address; handler; resolver }
 
   let start ~sw server =
     let { network; address; handler; _ } = server in
@@ -267,11 +266,15 @@ module Command = struct
         network
         address
     in
-    Fiber.fork ~sw (fun () ->
-        while true do
-          (* TODO: maybe run handler in a switch? *)
-          Eio.Net.accept_fork socket ~sw ~on_error:log_connection_error handler
-        done)
+    while true do
+      Eio.Net.accept_fork
+        socket
+        ~sw
+        ~on_error:(fun exn ->
+          Log.err (fun m ->
+              m "Error in connection handler: %s" (Printexc.to_string exn)))
+        handler
+    done
 
   let listen
       ?(bind_to_address = Eio.Net.Ipaddr.V4.loopback)
@@ -280,15 +283,26 @@ module Command = struct
       ~port
       handler
     =
-    let p, u = Promise.create () in
+    let server_p, server_u = Promise.create () in
+    let released_p, released_u = Promise.create () in
     Fiber.fork ~sw (fun () ->
         let address = `Tcp (bind_to_address, port) in
-        try
-          Switch.run (fun sw ->
-              let server = create ~sw ~network ~address handler in
-              start ~sw server;
-              Promise.resolve u server)
-        with
-        | Server_shutdown -> Log.info (fun m -> m "Tearing down server..."));
-    Promise.await p
+        Fiber.fork_sub
+          ~sw
+          ~on_error:(function
+            | Server_shutdown ->
+              Log.debug (fun m -> m "Server teardown finished")
+            | exn -> raise exn)
+          (fun sw ->
+            Switch.on_release sw (fun () -> Promise.resolve released_u ());
+            let resolver () =
+              Log.debug (fun m -> m "Starting server teardown...");
+              Switch.fail sw Server_shutdown;
+              Promise.await released_p
+            in
+
+            let server = create ~network ~address ~resolver handler in
+            Fiber.fork ~sw (fun () -> start ~sw server);
+            Promise.resolve server_u server));
+    Promise.await server_p
 end

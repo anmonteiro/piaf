@@ -43,4 +43,5 @@ val of_list : 'a list -> 'a t
 val map : f:('a -> 'b) -> 'a t -> 'b t
 val iter : f:('a -> unit) -> 'a t -> unit
 val fold : f:('acc -> 'a -> 'acc) -> init:'acc -> 'a t -> 'acc
-val junk_old : _ t -> unit
+val drain : _ t -> unit
+val drain_available : _ t -> unit
