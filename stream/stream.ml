@@ -47,12 +47,6 @@ type 'a t =
 let unsafe_eio_stream { stream; _ } =
   match stream with From _ -> assert false | Push { stream; _ } -> stream
 
-let create capacity =
-  { stream = Push { stream = Eio.Stream.create capacity; capacity }
-  ; is_closed = Atomic.make false
-  ; closed = Promise.create ()
-  }
-
 let is_closed { is_closed; _ } = Atomic.get is_closed
 
 let close t =
@@ -62,8 +56,22 @@ let close t =
     Atomic.set t.is_closed true;
     Promise.resolve u ())
 
+let push t item =
+  let stream = unsafe_eio_stream t in
+  match item with Some item -> Eio.Stream.add stream item | None -> close t
+
+let create capacity =
+  let stream = Eio.Stream.create capacity in
+  let t =
+    { stream = Push { stream; capacity }
+    ; is_closed = Atomic.make false
+    ; closed = Promise.create ()
+    }
+  in
+  t, push t
+
 let empty () =
-  let t = create 0 in
+  let t, _ = create 0 in
   close t;
   t
 
@@ -79,8 +87,9 @@ let when_closed ~f t =
   f ()
 
 let of_list xs =
-  let stream = create (List.length xs) in
+  let stream, _push = create (List.length xs) in
   List.iter (Eio.Stream.add (unsafe_eio_stream stream)) xs;
+  (* TODO(anmonteiro): should this return a closed stream? *)
   stream
 
 let take t =
@@ -92,7 +101,13 @@ let take t =
       close t;
       None)
   | Push { capacity = 0; _ } -> None
-  | Push { stream; _ } -> Some (Eio.Stream.take stream)
+  | Push { stream; _ } ->
+    Fiber.first
+      (fun () -> Some (Eio.Stream.take stream))
+      (fun () ->
+        let { closed = p, _; _ } = t in
+        Promise.await p;
+        None)
 
 let take_nonblocking t =
   match t.stream with
@@ -105,7 +120,7 @@ let map ~f t =
 
 let rec iter ~f t =
   match t.stream with
-  | Push { capacity = 0; _ } -> ()
+  | Push { capacity = 0; _ } when is_closed t -> ()
   | Push _ | From _ ->
     (match take t with
     | Some item ->
@@ -118,6 +133,11 @@ let fold ~f ~init t =
     match take t with Some item -> loop ~f ~acc:(f acc item) t | None -> acc
   in
   loop ~f ~acc:init t
+
+let to_list t =
+  (* close t; *)
+  let lst = fold ~f:(fun acc item -> item :: acc) ~init:[] t in
+  List.rev lst
 
 let drain t = iter ~f:ignore t
 
