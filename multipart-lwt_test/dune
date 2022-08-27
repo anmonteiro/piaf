@@ -1,0 +1,3 @@
+(test
+ (name multipart_test)
+ (libraries alcotest multipart alcotest-lwt))
