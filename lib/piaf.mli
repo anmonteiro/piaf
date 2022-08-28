@@ -720,44 +720,52 @@ module Server : sig
     val not_found : 'a -> Response.t
   end
 
+  type 'ctx ctx = 'ctx Handler.ctx =
+    { ctx : 'ctx
+    ; request : Request.t
+    }
+
+  type connection_handler =
+    Eio.Net.stream_socket -> Eio.Net.Sockaddr.stream -> unit
+
+  module Error_response : sig
+    type t
+  end
+
+  type error_handler =
+    Eio.Net.Sockaddr.stream
+    -> ?request:Request.t
+    -> respond:(headers:Headers.t -> Body.t -> Error_response.t)
+    -> Httpaf.Server_connection.error
+    -> Error_response.t
+
+  type t
+
+  val create
+    :  ?config:Config.t
+    -> ?error_handler:error_handler
+    -> Eio.Net.Sockaddr.stream Handler.t
+    -> t
+
   module Command : sig
-    type handler = Eio.Net.stream_socket -> Eio.Net.Sockaddr.stream -> unit
-    type server
+    type server := t
+    type t
 
     val listen
       :  ?bind_to_address:Eio.Net.Ipaddr.v4v6
       -> sw:Eio.Switch.t
       -> network:Eio.Net.t
       -> port:int
-      -> handler
       -> server
+      -> t
 
-    val shutdown : server -> unit
+    val shutdown : t -> unit
   end
 
-  module Error_response : sig
-    type t
-  end
-
-  type 'ctx ctx = 'ctx Handler.ctx =
-    { ctx : 'ctx
-    ; request : Request.t
-    }
-
-  type 'ctx t = 'ctx Handler.t
-
-  val create
-    :  ?config:Config.t
-    -> ?error_handler:
-         (Eio.Net.Sockaddr.stream
-          -> ?request:Request.t
-          -> respond:(headers:Headers.t -> Body.t -> Error_response.t)
-          -> Httpaf.Server_connection.error
-          -> Error_response.t)
-    -> Eio.Net.Sockaddr.stream Handler.t
-    -> Eio.Net.stream_socket
-    -> Eio.Net.Sockaddr.stream
-    -> unit
+  val connection_handler : t -> sw:Eio.Switch.t -> connection_handler
+  (** [connection_handler server] returns a connection handler suitable to be
+      passed to e.g. [Eio.Net.accept_fork]. It is generally recommended to use
+      the [Command] module instead. *)
 end
 
 module Cookies : sig

@@ -37,6 +37,10 @@ module Log = (val Logs.src_log src : Logs.LOG)
 module Reqd = Httpaf.Reqd
 module Server_connection = Httpaf.Server_connection
 
+module Error_response = struct
+  type t = unit
+end
+
 module Service = struct
   type ('req, 'resp) t = 'req -> 'resp
 end
@@ -62,11 +66,20 @@ module Handler = struct
       `Not_found
 end
 
-include Handler
+type 'ctx ctx = 'ctx Handler.ctx =
+  { ctx : 'ctx
+  ; request : Request.t
+  }
 
-module Error_response = struct
-  type t = unit
-end
+type connection_handler =
+  Eio.Net.stream_socket -> Eio.Net.Sockaddr.stream -> unit
+
+type error_handler =
+  Eio.Net.Sockaddr.stream
+  -> ?request:Request.t
+  -> respond:(headers:Headers.t -> Body.t -> Error_response.t)
+  -> Httpaf.Server_connection.error
+  -> Error_response.t
 
 let make_error_handler ~fd error_handler
     : Eio.Net.Sockaddr.stream -> Server_connection.error_handler
@@ -139,7 +152,7 @@ let report_exn reqd exn =
         raw_backtrace);
   Reqd.report_exn reqd exn
 
-let request_handler ~fd handler
+let request_handler ~sw ~fd handler
     : Eio.Net.Sockaddr.stream -> Reqd.t Gluten.reqd -> unit
   =
  fun client_addr reqd ->
@@ -161,102 +174,120 @@ let request_handler ~fd handler
   in
   let exn_handler = report_exn reqd in
   let request = Request.of_http1 ~body:request_body request in
-  try
-    let ({ Response.headers; body; _ } as response) =
-      handler { ctx = client_addr; request }
-    in
-    (* XXX(anmonteiro): It's a little weird that, given an actual
-     * response returned from the handler, we decide to completely ignore
-     * it. There's a good justification here, which is that the error
-     * handler will be called. The alternative would be to have the
-     * request handler return a result type, but then we'd be ignoring
-     * the error instead. *)
-    match Reqd.error_code reqd with
-    | Some _ ->
-      (* Already handling an error, don't bother sending the response.
-       * `error_handler` will be called. *)
-      Log.info (fun m ->
-          m
-            "Response returned by handler will not be written, currently \
-             handling error")
-    | None ->
-      let response =
-        { response with
-          headers =
-            Headers.add_length_related_headers
-              ~body_length:(Body.length body)
-              headers
-        }
-      in
-      let http1_response = Response.to_http1 response in
-      (match Body.contents body with
-      | `Empty upgrade_handler ->
-        if Body.Optional_handler.is_none upgrade_handler
-        then
-          (* No upgrade *)
-          Reqd.respond_with_bigstring reqd http1_response Bigstringaf.empty
-        else (
-          (* we created it ourselves *)
-          assert (response.status = `Switching_protocols);
-          Reqd.respond_with_upgrade reqd http1_response.headers (fun () ->
-              Body.Optional_handler.call_if_some upgrade_handler upgrade))
-      | `String s -> Reqd.respond_with_string reqd http1_response s
-      | `Bigstring { IOVec.buffer; off; len } ->
-        let bstr = Bigstringaf.sub ~off ~len buffer in
-        Reqd.respond_with_bigstring reqd http1_response bstr
-      | `Stream stream ->
-        let response_body = Reqd.respond_with_streaming reqd http1_response in
-        Body.stream_write_body (module Http1.Body) response_body stream
-      | `Sendfile (src_fd, _, _) ->
-        let response_body =
-          Reqd.respond_with_streaming
-            ~flush_headers_immediately:true
-            reqd
-            http1_response
+  Fiber.fork ~sw (fun () ->
+      try
+        let ({ Response.headers; body; _ } as response) =
+          handler { ctx = client_addr; request }
         in
-        Http1.Body.Writer.flush response_body (fun () ->
-            Posix.sendfile
-              (module Http1.Body)
-              ~on_exn:exn_handler
-              ~src_fd
-              ~dst_fd:fd
-              response_body))
-  with
-  | exn -> exn_handler exn
+        (* XXX(anmonteiro): It's a little weird that, given an actual
+         * response returned from the handler, we decide to completely ignore
+         * it. There's a good justification here, which is that the error
+         * handler will be called. The alternative would be to have the
+         * request handler return a result type, but then we'd be ignoring
+         * the error instead. *)
+        match Reqd.error_code reqd with
+        | Some _ ->
+          (* Already handling an error, don't bother sending the response.
+           * `error_handler` will be called. *)
+          Log.info (fun m ->
+              m
+                "Response returned by handler will not be written, currently \
+                 handling error")
+        | None ->
+          let response =
+            { response with
+              headers =
+                Headers.add_length_related_headers
+                  ~body_length:(Body.length body)
+                  headers
+            }
+          in
+          let http1_response = Response.to_http1 response in
+          (match Body.contents body with
+          | `Empty upgrade_handler ->
+            if Body.Optional_handler.is_none upgrade_handler
+            then
+              (* No upgrade *)
+              Reqd.respond_with_bigstring reqd http1_response Bigstringaf.empty
+            else (
+              (* we created it ourselves *)
+              assert (response.status = `Switching_protocols);
+              Reqd.respond_with_upgrade reqd http1_response.headers (fun () ->
+                  Body.Optional_handler.call_if_some upgrade_handler upgrade))
+          | `String s -> Reqd.respond_with_string reqd http1_response s
+          | `Bigstring { IOVec.buffer; off; len } ->
+            let bstr = Bigstringaf.sub ~off ~len buffer in
+            Reqd.respond_with_bigstring reqd http1_response bstr
+          | `Stream stream ->
+            let response_body =
+              Reqd.respond_with_streaming reqd http1_response
+            in
+            Body.stream_write_body (module Http1.Body) response_body stream
+          | `Sendfile (src_fd, _, _) ->
+            let response_body =
+              Reqd.respond_with_streaming
+                ~flush_headers_immediately:true
+                reqd
+                http1_response
+            in
+            Http1.Body.Writer.flush response_body (fun () ->
+                Posix.sendfile
+                  (module Http1.Body)
+                  ~on_exn:exn_handler
+                  ~src_fd
+                  ~dst_fd:fd
+                  response_body))
+      with
+      | exn -> exn_handler exn)
 
-let create ?config ?(error_handler = default_error_handler) handler
-    : Eio.Net.stream_socket -> Eio.Net.Sockaddr.stream -> unit
+type t =
+  { config : Httpaf.Config.t
+  ; error_handler : error_handler
+  ; handler : Eio.Net.Sockaddr.stream Handler.t
+  }
+
+let create ?config ?(error_handler = default_error_handler) handler : t =
+  { config =
+      Option.value
+        ~default:Httpaf.Config.default
+        (Option.map Config.to_http1_config config)
+  ; error_handler
+  ; handler
+  }
+
+let connection_handler t
+    : sw:Switch.t -> Eio.Net.stream_socket -> Eio.Net.Sockaddr.stream -> unit
   =
- fun socket sockaddr ->
-  let fd = Option.get @@ Eio_unix.FD.peek_opt socket in
-  let request_handler = request_handler ~fd handler in
-  let error_handler = make_error_handler ~fd error_handler in
-  Httpaf_eio.Server.create_connection_handler
-    ?config:(Option.map Config.to_http1_config config)
-    ~request_handler
-    ~error_handler
-    sockaddr
-    socket
+  let { error_handler; handler; config } = t in
+  fun ~sw socket sockaddr ->
+    let fd = Option.get @@ Eio_unix.FD.peek_opt socket in
+    let request_handler = request_handler ~sw ~fd handler in
+    let error_handler = make_error_handler ~fd error_handler in
+    Httpaf_eio.Server.create_connection_handler
+      ~config
+      ~request_handler
+      ~error_handler
+      sockaddr
+      socket
 
 module Command = struct
   exception Server_shutdown
 
-  type handler = Eio.Net.stream_socket -> Eio.Net.Sockaddr.stream -> unit
-
-  type server =
+  type nonrec t =
     { network : Eio.Net.t
     ; address : Eio.Net.Sockaddr.stream
-    ; handler : handler
+    ; server : t
     ; resolver : unit -> unit
     }
 
+  let create ~network ~address ~resolver server =
+    { network; address; server; resolver }
+
   let shutdown server = server.resolver ()
 
-  let create ~network ~address ~resolver handler =
-    { network; address; handler; resolver }
-
-  let start ~sw server =
-    let { network; address; handler; _ } = server in
+  let start ~sw t =
+    let { network; address; server; _ } = t in
+    let connection_handler = connection_handler server in
     let socket =
       Eio.Net.listen
         ~reuse_addr:true
@@ -273,7 +304,8 @@ module Command = struct
         ~on_error:(fun exn ->
           Log.err (fun m ->
               m "Error in connection handler: %s" (Printexc.to_string exn)))
-        handler
+        (fun socket addr ->
+          Switch.run (fun sw -> connection_handler ~sw socket addr))
     done
 
   let listen
