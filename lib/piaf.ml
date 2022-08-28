@@ -40,8 +40,7 @@ module Method = Method
 module Request = Request
 module Response = Response
 module Stream = Stream
-
-(* module Form = Form *)
+module Form = Form
 module Scheme = Scheme
 module Status = Status
 module Versions = Versions

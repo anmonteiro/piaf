@@ -3,7 +3,6 @@
 (library
  (name piaf)
  (public_name piaf)
- (modules :standard \ form)
  (libraries
   multipart
   h2

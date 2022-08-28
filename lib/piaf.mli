@@ -530,26 +530,26 @@ module Response : sig
   val pp_hum : Format.formatter -> t -> unit [@@ocaml.toplevel_printer]
 end
 
-(* module Form : sig *)
-(* module Multipart : sig *)
-(* type t = private *)
-(* { name : string *)
-(* ; filename : string option *)
-(* ; content_type : string *)
-(* ; body : Body.t *)
-(* } *)
+module Form : sig
+  module Multipart : sig
+    type t = private
+      { name : string
+      ; filename : string option
+      ; content_type : string
+      ; body : Body.t
+      }
 
-(* val stream *)
-(* :  ?max_chunk_size:int *)
-(* -> Request.t *)
-(* -> (t Lwt_stream.t, Error.t) Lwt_result.t *)
+    val stream
+      :  ?max_chunk_size:int
+      -> Request.t
+      -> (t Stream.t, Error.t) result
 
-(* val assoc *)
-(* :  ?max_chunk_size:int *)
-(* -> Request.t *)
-(* -> ((string * t) list, Error.t) Lwt_result.t *)
-(* end *)
-(* end *)
+    val assoc
+      :  ?max_chunk_size:int
+      -> Request.t
+      -> ((string * t) list, Error.t) result
+  end
+end
 
 (** {2 Client -- Issuing requests} *)
 
