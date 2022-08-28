@@ -47,13 +47,17 @@ let uri { scheme; target; headers; version; _ } =
 let create ~scheme ~version ?(headers = Headers.empty) ~meth ~body target =
   { meth; target; version; headers; scheme; body }
 
-let of_http1 ?(body = Body.empty) request =
+let of_http1 ?(body = Body.empty) ~scheme request =
   let { Httpaf.Request.meth; target; version; headers } = request in
+  { meth; target; version; headers = Headers.of_http1 headers; scheme; body }
+
+let of_h2 ?(body = Body.empty) request =
+  let { H2.Request.meth; target; headers; scheme } = request in
   { meth
   ; target
-  ; version
-  ; headers = Headers.of_http1 headers
-  ; scheme = Scheme.HTTP
+  ; version = Versions.HTTP.v2_0
+  ; headers
+  ; scheme = Scheme.of_string_exn scheme
   ; body
   }
 

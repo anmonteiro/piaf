@@ -182,15 +182,17 @@ let send_request
         (match runtime with
         | HTTP runtime ->
           Bodyw.close request_body;
-          let on_exn exn = Promise.resolve notify_error (`Exn exn) in
-          Posix.sendfile
-            (module Http.Body)
-            ~on_exn
-            ~src_fd
-            ~dst_fd:
-              (Option.get
-                 (Eio_unix.FD.peek_opt (Gluten_eio.Client.socket runtime)))
-            request_body
+          (match
+             Posix.sendfile
+               (module Http.Body)
+               ~src_fd
+               ~dst_fd:
+                 (Option.get
+                    (Eio_unix.FD.peek_opt (Gluten_eio.Client.socket runtime)))
+               request_body
+           with
+          | Ok () -> ()
+          | Error exn -> Promise.resolve notify_error (`Exn exn))
         | HTTPS _ ->
           (* can't `sendfile` on an encrypted connection.
            * TODO(anmonteiro): Return error message saying that. *)

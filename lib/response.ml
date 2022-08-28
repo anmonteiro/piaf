@@ -120,6 +120,8 @@ let to_http1 { status; headers; version; _ } =
   in
   Httpaf.Response.create ~version ~headers:http1_headers status
 
+let to_h2 { status; headers; _ } = H2.Response.create ~headers status
+
 let of_h2 ?(body = Body.empty) response =
   let { H2.Response.status; headers } = response in
   (* Remove this header to make the output compatible with HTTP/1. This is the

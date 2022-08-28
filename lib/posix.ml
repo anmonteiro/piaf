@@ -36,7 +36,6 @@ module Log = (val Logs.src_log src : Logs.LOG)
 let sendfile
     (type a)
     (module Bodyw : Body.BODY with type Writer.t = a)
-    ?(on_exn = fun _exn -> ())
     ~src_fd
     ~dst_fd
     raw_write_body
@@ -51,7 +50,8 @@ let sendfile
      * `Gluten.Server.report_write_result` here given that we put
      * bytes in the file descriptor off-band. `report_write_result`
      * just tracks the internal Faraday buffers. *)
-    Log.debug (fun m -> m "`sendfile` wrote %d bytes successfully" sent)
+    Log.debug (fun m -> m "`sendfile` wrote %d bytes successfully" sent);
+    Ok ()
   | Error e ->
     Bodyw.Writer.close raw_write_body;
-    on_exn (Unix.Unix_error (e, "sendfile", "") (* TODO(anmonteiro): log err *))
+    Error (Unix.Unix_error (e, "sendfile", "") (* TODO(anmonteiro): log err *))

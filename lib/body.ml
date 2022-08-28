@@ -419,6 +419,13 @@ let iter_string ~f t =
   Stream.iter ~f stream;
   or_error t ~stream ()
 
+let to_list t =
+  let stream = to_stream t in
+  Stream.to_list stream
+
+let to_string_list t =
+  let stream = to_string_stream t in
+  Stream.to_list stream
 (* let iter_p f t = *)
 (* let* stream, or_error = to_stream t in *)
 (* let* () = Lwt_stream.iter_p f stream in *)

@@ -71,12 +71,7 @@ let create_http_connection ~sw ~config ~conn_info fd =
 
 let create_https_connection ~sw ~config ~conn_info fd =
   let { Connection_info.host; _ } = conn_info in
-  let alpn_protocols =
-    Versions.ALPN.protocols_of_version config.Config.max_http_version
-  in
-  let*! ssl_client =
-    Openssl.connect ~config ~hostname:host ~alpn_protocols fd
-  in
+  let*! ssl_client = Openssl.connect ~config ~hostname:host fd in
   match Eio_ssl.ssl_socket ssl_client with
   | None -> failwith "handshake not established?"
   | Some ssl_socket ->
@@ -84,6 +79,9 @@ let create_https_connection ~sw ~config ~conn_info fd =
       match Ssl.get_negotiated_alpn_protocol ssl_socket with
       | None ->
         Log.warn (fun m ->
+            let alpn_protocols =
+              Versions.ALPN.protocols_of_version config.Config.max_http_version
+            in
             let protos =
               String.concat
                 ", "
@@ -335,7 +333,7 @@ let make_request_info
   let h2_settings = H2.Settings.to_base64 (Config.to_http2_settings config) in
   let canonical_headers =
     (* Important that this doesn't shadow the labeled `headers` argument
-     * above. We need the original headers as seen by the called in order to
+     * above. We need the original headers as issued by the caller in order to
      * reproduce them e.g. when following redirects. *)
     let headers =
       let open Headers in
@@ -343,7 +341,7 @@ let make_request_info
       then
         (Well_known.connection, "Upgrade, HTTP2-Settings")
         :: (Well_known.upgrade, "h2c")
-        :: ("HTTP2-Settings", Stdlib.Result.get_ok h2_settings)
+        :: ("HTTP2-Settings", Result.get_ok h2_settings)
         :: headers
       else headers
     in

@@ -38,6 +38,7 @@ module Headers = Headers
 module IOVec = IOVec
 module Method = Method
 module Request = Request
+module Request_info = Request_info
 module Response = Response
 module Stream = Stream
 module Form = Form

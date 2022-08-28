@@ -42,29 +42,57 @@ let of_uri uri =
 
 let to_port = function HTTPS -> 443 | HTTP -> 80
 let of_port = function 80 -> Some HTTP | 443 -> Some HTTPS | _p -> None
+
+let of_string = function
+  | "http" -> Some HTTP
+  | "https" -> Some HTTPS
+  | _ -> None
+
+let of_string_exn s =
+  match of_string s with
+  | Some scheme -> scheme
+  | None -> failwith (Format.asprintf "Scheme.of_string_exn: %s" s)
+
 let to_string = function HTTP -> "http" | HTTPS -> "https"
 let pp_hum formatter scheme = Format.fprintf formatter "%s" (to_string scheme)
 
 module Runtime = struct
+  type scheme = t
+
   type t =
     | HTTP : Gluten_eio.Client.t -> t
     | HTTPS : Gluten_eio.Client.SSL.t -> t
 
+  module Socket = struct
+    type t =
+      | HTTP : Gluten_eio.Server.socket -> t
+      | HTTPS : Gluten_eio.Server.SSL.socket -> t
+  end
+
   module type SCHEME = sig
     type runtime
+    type socket
 
     val make : runtime -> t
+    val scheme : scheme
+    val socket : socket -> Socket.t
   end
 
   module HTTP = struct
+    type socket = Gluten_eio.Server.socket
     type runtime = Gluten_eio.Client.t
 
     let make x = HTTP x
+    let scheme : scheme = HTTP
+    let socket fd = Socket.HTTP fd
   end
 
   module HTTPS = struct
+    type socket = Gluten_eio.Server.SSL.socket
     type runtime = Gluten_eio.Client.SSL.t
 
     let make x = HTTPS x
+    let scheme : scheme = HTTPS
+    let socket fd = Socket.HTTPS fd
   end
 end

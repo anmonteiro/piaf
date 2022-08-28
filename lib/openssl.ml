@@ -103,11 +103,20 @@ let log_cert_info ~allow_insecure ssl_sock =
         (pp_cert_verify_result ~allow_insecure)
         verify_result)
 
-let load_client_cert_from_string ~certificate ~private_key ctx =
-  Ssl.use_certificate_from_string ctx certificate private_key
-
-let load_client_cert ~certificate ~private_key ctx =
-  Ssl.use_certificate ctx certificate private_key
+let load_cert ~certificate ~private_key ctx =
+  match certificate, private_key with
+  | Cert.Certpem certificate, Cert.Certpem private_key ->
+    Ok (Ssl.use_certificate_from_string ctx certificate private_key)
+  | Cert.Filepath certificate, Cert.Filepath private_key ->
+    Ok (Ssl.use_certificate ctx certificate private_key)
+  | _ ->
+    let msg =
+      Format.asprintf
+        "Incorrect parameters provided for clientcert, both should be a \
+         filepath or pem string"
+    in
+    Log.err (fun m -> m "%s" msg);
+    Error (`Connect_error msg)
 
 let load_peer_ca_cert ~certificate ctx = Ssl.add_cert_to_store ctx certificate
 
@@ -126,14 +135,17 @@ let load_verify_locations ?(cacert = "") ?(capath = "") ctx =
 
 let configure_verify_locations ?cacert ?capath ctx =
   Eio_unix.run_in_systhread (fun () ->
-      match cacert, capath with
-      | Some _, Some _ | Some _, None | None, Some _ ->
-        load_verify_locations ?cacert ?capath ctx
-      | None, None ->
-        (* Use default CA certificates *)
-        if Ssl.set_default_verify_paths ctx
-        then Ok ()
-        else Error (`Connect_error "Failed to set default verify paths"))
+      match cacert with
+      | Some (Cert.Certpem cert) -> Ok (load_peer_ca_cert ~certificate:cert ctx)
+      | Some (Cert.Filepath cacert) -> load_verify_locations ~cacert ?capath ctx
+      | None ->
+        (match capath with
+        | Some capath -> load_verify_locations ~capath ctx
+        | None ->
+          (* Use default CA certificates *)
+          if Ssl.set_default_verify_paths ctx
+          then Ok ()
+          else Error (`Connect_error "Failed to set default verify paths")))
 
 let version_of_ssl = function
   | Ssl.SSLv23 -> Versions.TLS.Any
@@ -211,7 +223,7 @@ module Error = struct
     Error (`Connect_error reason)
 end
 
-let set_verify ~cacert ?capath ~clientcert ctx =
+let set_client_verify ?cacert ?capath ~clientcert ctx =
   (* Fail connecting if peer verification fails:
    * SSL always tries to verify the peer, this only says whether it should
    * fail connecting if the verification fails, or if it should continue
@@ -219,47 +231,118 @@ let set_verify ~cacert ?capath ~clientcert ctx =
    * Ssl.get_verify_result.
    * https://www.openssl.org/docs/man1.1.1/man3/SSL_CTX_set_verify.html *)
   Ssl.set_verify ctx [ Ssl.Verify_peer ] (Some Ssl.client_verify_callback);
+  (* TODO(anmonteiro): enable if Logs.Debug? *)
   Ssl.set_client_verify_callback_verbose false;
   (* Server certificate verification *)
-  let*! () =
-    match cacert with
-    | Some certarg ->
-      (match certarg with
-      | Cert.Filepath path ->
-        configure_verify_locations ctx ~cacert:path ?capath
-      | Certpem cert -> Ok (load_peer_ca_cert ~certificate:cert ctx))
-    | None -> configure_verify_locations ctx ?capath
-  in
+  let*! () = configure_verify_locations ctx ?cacert ?capath in
+
   (* Send client cert if present *)
   match clientcert with
-  | Some certwithkey ->
-    (match certwithkey with
-    | Cert.Certpem cert, Cert.Certpem key ->
-      Ok (load_client_cert_from_string ~certificate:cert ~private_key:key ctx)
-    | Cert.Filepath cert, Cert.Filepath key ->
-      Ok (load_client_cert ~certificate:cert ~private_key:key ctx)
-    | _ ->
-      let msg =
-        Format.asprintf
-          "Incorrect parameters provided for clientcert, both should be a \
-           filepath or pem string"
-      in
-      Log.err (fun m -> m "%s" msg);
-      Error (`Connect_error msg))
+  | Some (certificate, private_key) -> load_cert ~certificate ~private_key ctx
   | None -> Ok ()
 
-(* Assumes Lwt_unix.connect has already been called. *)
-let connect ~hostname ~config ~alpn_protocols fd =
-  let { Config.allow_insecure
+module Client_conf = struct
+  type t =
+    { min_tls_version : Versions.TLS.t
+    ; max_tls_version : Versions.TLS.t
+    ; alpn_protocols : string list
+    ; allow_insecure : bool
+    ; cacert : Cert.t option
+    ; capath : string option
+    ; clientcert : (Cert.t * Cert.t) option
+    }
+
+  let of_config
+      { Config.min_tls_version
+      ; max_tls_version
+      ; max_http_version
+      ; allow_insecure
       ; cacert
       ; capath
       ; clientcert
-      ; min_tls_version
-      ; max_tls_version
       ; _
       }
     =
-    config
+    let alpn_protocols = Versions.ALPN.protocols_of_version max_http_version in
+    { min_tls_version
+    ; max_tls_version
+    ; alpn_protocols
+    ; allow_insecure
+    ; cacert
+    ; capath
+    ; clientcert
+    }
+end
+
+type ctx =
+  { uninitialized_socket : Eio_ssl.uninitialized_socket
+  ; ctx : Ssl.context
+  ; socket : Ssl.socket
+  }
+
+let setup_client_ctx
+    ~config:
+      Client_conf.
+        { min_tls_version
+        ; max_tls_version
+        ; alpn_protocols
+        ; allow_insecure
+        ; cacert
+        ; capath
+        ; clientcert
+        }
+    ~hostname
+    fd
+  =
+  match
+    Ssl.(
+      create_context
+        (Versions.TLS.to_max_version max_tls_version)
+        Client_context)
+  with
+  | exception Ssl.Method_error -> Error.fail_with_too_old_ssl max_tls_version
+  | exception Invalid_argument _ -> Error.fail_with_too_old_ssl max_tls_version
+  | ctx ->
+    let disabled_protocols =
+      List.map
+        version_to_ssl
+        (protocols_to_disable min_tls_version max_tls_version)
+    in
+    Ssl.disable_protocols ctx disabled_protocols;
+    List.iter
+      (fun proto -> Log.info (fun m -> m "ALPN: offering %s" proto))
+      alpn_protocols;
+    Ssl.set_context_alpn_protos ctx alpn_protocols;
+    (* Use the server's preferences rather than the client's *)
+    Ssl.honor_cipher_order ctx;
+    let*! () =
+      if not allow_insecure
+      then set_client_verify ?cacert ?capath ~clientcert ctx
+      else
+        (* Don't bother configuring verify locations if we're not going to be
+           verifying the peer. *)
+        Ok ()
+    in
+
+    let s = Eio_ssl.embed_uninitialized_socket fd ctx in
+    let ssl_sock = Eio_ssl.ssl_socket_of_uninitialized_socket s in
+    (* If hostname is an IP address, check that instead of the hostname *)
+    let ipaddr = Ipaddr.of_string hostname in
+    (match ipaddr with
+    | Ok ipadr -> Ssl.set_ip ssl_sock (Ipaddr.to_string ipadr)
+    | _ ->
+      Ssl.set_client_SNI_hostname ssl_sock hostname;
+      (* https://wiki.openssl.org/index.php/Hostname_validation *)
+      Ssl.set_hostflags ssl_sock [ No_partial_wildcards ];
+      Ssl.set_host ssl_sock hostname);
+    Ok { ctx; uninitialized_socket = s; socket = ssl_sock }
+
+(* Assumes that the file descriptor is connected. *)
+let connect ~hostname ~config fd =
+  let ({ Client_conf.allow_insecure; min_tls_version; max_tls_version; _ } as
+      client_conf)
+    =
+    Client_conf.of_config config
   in
   if Versions.TLS.compare min_tls_version max_tls_version > 0
   then (
@@ -275,76 +358,177 @@ let connect ~hostname ~config ~alpn_protocols fd =
     Log.err (fun m -> m "%s" msg);
     Error (`Connect_error msg))
   else
-    match
-      Ssl.(
-        create_context
-          (Versions.TLS.to_max_version max_tls_version)
-          Client_context)
-    with
-    | exception Ssl.Method_error -> Error.fail_with_too_old_ssl max_tls_version
-    | exception Invalid_argument _ ->
-      Error.fail_with_too_old_ssl max_tls_version
-    | ctx ->
-      let disabled_protocols =
-        List.map
-          version_to_ssl
-          (protocols_to_disable min_tls_version max_tls_version)
-      in
-      Ssl.disable_protocols ctx disabled_protocols;
-      List.iter
-        (fun proto -> Log.info (fun m -> m "ALPN: offering %s" proto))
-        alpn_protocols;
-      Ssl.set_context_alpn_protos ctx alpn_protocols;
-      (* Use the server's preferences rather than the client's *)
-      Ssl.honor_cipher_order ctx;
-      let*! () =
-        if not allow_insecure
-        then set_verify ~cacert ?capath ~clientcert ctx
-        else
-          (* Don't bother configuring verify locations if we're not going to be
-             verifying the peer. *)
-          Ok ()
-      in
-      let s = Eio_ssl.embed_uninitialized_socket fd ctx in
-      let ssl_sock = Eio_ssl.ssl_socket_of_uninitialized_socket s in
-      (* If hostname is an IP address, check that instead of the hostname *)
-      let ipaddr = Ipaddr.of_string hostname in
-      (match ipaddr with
-      | Ok ipadr -> Ssl.set_ip ssl_sock (Ipaddr.to_string ipadr)
-      | _ ->
-        Ssl.set_client_SNI_hostname ssl_sock hostname;
-        (* https://wiki.openssl.org/index.php/Hostname_validation *)
-        Ssl.set_hostflags ssl_sock [ No_partial_wildcards ];
-        Ssl.set_host ssl_sock hostname);
-      let socket_or_error =
-        try Ok (Eio_ssl.ssl_perform_handshake s) with
-        | Eio_ssl.Exn.Ssl_exception { message; _ } ->
-          let msg = Format.asprintf "SSL Error: %s" message in
-          Log.err (fun m -> m "%s" msg);
-          Error (`Connect_error msg)
-        | _ -> assert false
-      in
-      (match socket_or_error with
-      | Ok ssl_socket ->
-        let ssl_version = version_of_ssl (Ssl.version ssl_sock) in
-        let ssl_cipher = Ssl.get_cipher ssl_sock in
-        Log.info (fun m ->
-            m
-              "SSL connection using %a / %s"
-              Versions.TLS.pp_hum
-              ssl_version
-              (Ssl.get_cipher_name ssl_cipher));
-        (* Verification succeeded, or `allow_insecure` is true *)
-        log_cert_info ~allow_insecure ssl_sock;
-        Ok ssl_socket
-      | Error e ->
-        let verify_result = Ssl.get_verify_result ssl_sock in
-        if verify_result <> 0
-        then (
-          (* If we're here, `allow_insecure` better be false, otherwise we
-           * forgot to handle some failure mode. The assert below will make us
-           * remember. *)
-          assert (not allow_insecure);
-          Log.err (fun m ->
-              m "%a" (pp_cert_verify_result ~allow_insecure) verify_result));
-        Error e)
+    let*! { ctx = _; uninitialized_socket = s; socket = ssl_sock } =
+      setup_client_ctx ~config:client_conf ~hostname fd
+    in
+    let socket_or_error =
+      try Ok (Eio_ssl.ssl_perform_handshake s) with
+      | Eio_ssl.Exn.Ssl_exception { message; _ } ->
+        let msg = Format.asprintf "SSL Error: %s" message in
+        Log.err (fun m -> m "%s" msg);
+        Error (`Connect_error msg)
+      | _ -> assert false
+    in
+    match socket_or_error with
+    | Ok ssl_socket ->
+      let ssl_version = version_of_ssl (Ssl.version ssl_sock) in
+      let ssl_cipher = Ssl.get_cipher ssl_sock in
+      Log.info (fun m ->
+          m
+            "SSL connection using %a / %s"
+            Versions.TLS.pp_hum
+            ssl_version
+            (Ssl.get_cipher_name ssl_cipher));
+      (* Verification succeeded, or `allow_insecure` is true *)
+      log_cert_info ~allow_insecure ssl_sock;
+      Ok ssl_socket
+    | Error e ->
+      let verify_result = Ssl.get_verify_result ssl_sock in
+      if verify_result <> 0
+      then (
+        (* If we're here, `allow_insecure` better be false, otherwise we
+         * forgot to handle some failure mode. The assert below will make us
+         * remember. *)
+        assert (not allow_insecure);
+        Log.err (fun m ->
+            m "%a" (pp_cert_verify_result ~allow_insecure) verify_result));
+      Error e
+
+module Server_conf = struct
+  type t =
+    { allow_insecure : bool
+    ; max_http_version : Versions.HTTP.t
+    ; cacert : Cert.t option
+    ; capath : string option
+    ; certificate : Cert.t * Cert.t (* cert, priv_key *)
+    ; clientcert : (Cert.t * Cert.t) option
+    ; min_tls_version : Versions.TLS.t
+    ; max_tls_version : Versions.TLS.t
+    ; accept_timeout : float (* seconds *)
+    }
+
+  let of_server_config = function
+    | { Server_config.certificate = None; _ } -> Error `Need_server_cert
+    | { Server_config.allow_insecure
+      ; max_http_version
+      ; cacert
+      ; capath
+      ; certificate = Some certificate
+      ; clientcert
+      ; min_tls_version
+      ; max_tls_version
+      ; accept_timeout
+      ; _
+      } ->
+      Ok
+        { allow_insecure
+        ; max_http_version
+        ; cacert
+        ; capath
+        ; certificate
+        ; clientcert
+        ; min_tls_version
+        ; max_tls_version
+        ; accept_timeout
+        }
+end
+
+let set_server_verify ?cacert ?capath ~certificate ctx =
+  let certificate, private_key = certificate in
+  let+! () = configure_verify_locations ?cacert ?capath ctx
+  and+! () = load_cert ~certificate ~private_key ctx in
+
+  (* if check_client_cert *)
+  (* then Ssl.set_verify server_ctx [ Ssl.Verify_fail_if_no_peer_cert ] None; *)
+  Ssl.set_verify ctx [ Ssl.Verify_peer ] (Some Ssl.client_verify_callback);
+  (* TODO(anmonteiro): enable if Logs.Debug? *)
+  Ssl.set_client_verify_callback_verbose true
+
+let rec first_match l1 = function
+  | [] -> None
+  | x :: _ when List.mem x l1 -> Some x
+  | _ :: xs -> first_match l1 xs
+
+let setup_server_ctx
+    ~config:
+      Server_conf.
+        { min_tls_version
+        ; max_tls_version
+        ; allow_insecure
+        ; cacert
+        ; capath
+        ; certificate = certificate, private_key
+        ; max_http_version
+        ; _
+        }
+  =
+  let alpn_protocols = Versions.ALPN.protocols_of_version max_http_version in
+  match
+    Ssl.(
+      create_context
+        (Versions.TLS.to_max_version max_tls_version)
+        Server_context)
+  with
+  | exception Ssl.Method_error -> Error.fail_with_too_old_ssl max_tls_version
+  | exception Invalid_argument _ -> Error.fail_with_too_old_ssl max_tls_version
+  | ctx ->
+    let disabled_protocols =
+      List.map
+        version_to_ssl
+        (protocols_to_disable min_tls_version max_tls_version)
+    in
+    Ssl.disable_protocols ctx disabled_protocols;
+    List.iter
+      (fun proto -> Log.info (fun m -> m "ALPN: offering %s" proto))
+      alpn_protocols;
+    Ssl.set_context_alpn_protos ctx alpn_protocols;
+    (* Use the server's preferences rather than the client's *)
+    Ssl.honor_cipher_order ctx;
+
+    Ssl.set_context_alpn_protos ctx alpn_protocols;
+    Ssl.set_context_alpn_select_callback ctx (fun client_protos ->
+        first_match client_protos alpn_protocols);
+
+    let+! () =
+      if not allow_insecure
+      then
+        set_server_verify
+          ?cacert
+          ?capath
+          ~certificate:(certificate, private_key)
+          ctx
+      else
+        (* Don't bother configuring verify locations if we're not going to be
+           verifying the peer. *)
+        Ok ()
+    in
+    ctx
+
+(* assumes an `accept`ed socket *)
+let get_negotiated_alpn_protocol ssl_server =
+  match Eio_ssl.ssl_socket ssl_server with
+  | None -> assert false
+  | Some ssl_socket ->
+    (match Ssl.get_negotiated_alpn_protocol ssl_socket with
+    | Some "http/1.1" -> Versions.ALPN.HTTP_1_1
+    | Some "h2" -> Versions.ALPN.HTTP_2
+    | None (* Unable to negotiate a protocol *) | Some _ ->
+      (* Can't really happen - would mean that TLS negotiated a
+       * protocol that we didn't specify. *)
+      (* TODO(anmonteiro): LOG ERROR *)
+      assert false)
+
+type connection_handler = Eio_ssl.socket -> Eio.Net.Sockaddr.stream -> unit
+
+(* TODO(anmonteiro): if we wanna support multiple hostnames, this is how to do
+   SNI: https://stackoverflow.com/a/5113466/3417023 *)
+let accept ~(config : Server_conf.t) ~fd handler =
+  let+! ctx = setup_server_ctx ~config in
+  try
+    let ssl_server = Eio_ssl.ssl_accept fd ctx in
+    let alpn_version = get_negotiated_alpn_protocol ssl_server in
+    handler alpn_version
+  with
+  | exn ->
+    Format.eprintf "EXN: %s@." (Printexc.to_string exn);
+    raise exn

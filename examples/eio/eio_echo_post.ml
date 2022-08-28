@@ -24,7 +24,11 @@ let main port =
   Eio_main.run (fun env ->
       let network = Eio.Stdenv.net env in
       Switch.run (fun sw ->
-          let server = Server.create request_handler in
+          let server =
+            Server.create
+              ~config:{ Server.Config.default with h2c_upgrade = true }
+              request_handler
+          in
           let _command = Server.Command.start ~sw ~port ~network server in
           ()
           (* Eio.Time.sleep (Eio.Stdenv.clock env) 5.; *)

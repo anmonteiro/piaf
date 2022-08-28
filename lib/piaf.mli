@@ -354,6 +354,11 @@ module Body : sig
   val when_closed : f:((unit, Error.t) result -> unit) -> t -> unit
   val is_errored : t -> bool
 
+  (** {2 Destruction} *)
+
+  val to_list : t -> Bigstringaf.t IOVec.t list
+  val to_string_list : t -> string list
+
   (** {3 Traversal} *)
 
   val fold
@@ -697,7 +702,57 @@ module Client : sig
   end
 end
 
+module Request_info : sig
+  type t =
+    { scheme : Scheme.t
+    ; version : Versions.ALPN.t
+    ; client_address : Eio.Net.Sockaddr.stream
+    }
+end
+
 module Server : sig
+  module Config : sig
+    type t =
+      { allow_insecure : bool
+            (** Wether to allow insecure server connections when using SSL *)
+      ; max_http_version : Versions.HTTP.t
+            (** Use this as the highest HTTP version when sending requests *)
+      ; h2c_upgrade : bool
+            (** Send an upgrade to `h2c` (HTTP/2 over TCP) request to the
+                server. `http2_prior_knowledge` below ignores this option. *)
+      ; certificate :
+          (Cert.t * Cert.t) option (* Server certificate and private key *)
+      ; cacert : Cert.t option
+            (** Either the certificates string or path to a file with
+                certificates to verify peer. Both should be in PEM format *)
+      ; capath : string option
+            (** The path to a directory which contains CA certificates in PEM
+                format *)
+      ; clientcert : (Cert.t * Cert.t) option
+            (** Client certificate in PEM format and private key *)
+      ; min_tls_version : Versions.TLS.t
+      ; max_tls_version : Versions.TLS.t
+      ; tcp_nodelay : bool
+      ; accept_timeout : float (* seconds *)
+      ; (* Buffer sizes *)
+        buffer_size : int
+            (** Buffer size used for requests and responses. Defaults to 16384
+                bytes *)
+      ; body_buffer_size : int
+            (** Buffer size used for request and response bodies. *)
+      ; enable_http2_server_push : bool
+            (* ; max_concurrent_streams : int ; initial_window_size : int *)
+            (** TODO(anmonteiro): these are HTTP/2 specific and we're probably
+                OK with the defaults *)
+      ; flush_headers_immediately : bool
+            (** Specifies whether to flush message headers to the transport
+                immediately, or if Piaf should wait for the first body bytes to
+                be written. Defaults to [false]. *)
+      }
+
+    val default : t
+  end
+
   module Service : sig
     type ('req, 'resp) t = 'req -> 'resp
   end
@@ -725,9 +780,6 @@ module Server : sig
     ; request : Request.t
     }
 
-  type connection_handler =
-    sw:Eio.Switch.t -> Eio.Net.stream_socket -> Eio.Net.Sockaddr.stream -> unit
-
   module Error_response : sig
     type t
   end
@@ -736,7 +788,7 @@ module Server : sig
     Eio.Net.Sockaddr.stream
     -> ?request:Request.t
     -> respond:(headers:Headers.t -> Body.t -> Error_response.t)
-    -> Httpaf.Server_connection.error
+    -> Error.server
     -> Error_response.t
 
   type t
@@ -744,10 +796,16 @@ module Server : sig
   val create
     :  ?config:Config.t
     -> ?error_handler:error_handler
-    -> Eio.Net.Sockaddr.stream Handler.t
+    -> Request_info.t Handler.t
     -> t
 
   module Command : sig
+    type connection_handler =
+      sw:Eio.Switch.t
+      -> Eio.Net.stream_socket
+      -> Eio.Net.Sockaddr.stream
+      -> unit
+
     type server := t
     type t
 
@@ -773,7 +831,7 @@ module Server : sig
         which starts a server for a Piaf handler. *)
   end
 
-  val connection_handler : t -> connection_handler
+  val connection_handler : t -> Versions.ALPN.t -> Command.connection_handler
   (** [connection_handler server] returns a connection handler suitable to be
       passed to e.g. [Eio.Net.accept_fork]. It is generally recommended to use
       the [Command] module instead. *)
