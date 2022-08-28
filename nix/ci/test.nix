@@ -33,7 +33,7 @@ let
     stdenv.mkDerivation {
       name = "piaf-tests";
       src = with nix-filter; filter {
-        root = ./..;
+        root = ./../..;
         include = [ ".ocamlformat" "piaf.opam" "piaf-lwt.opam" "dune-project" "dune" ] ++ (builtins.map inDirectory [
           "lib"
           "lib_test"

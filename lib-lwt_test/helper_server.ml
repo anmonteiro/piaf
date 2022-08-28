@@ -2,7 +2,9 @@ open Lwt.Infix
 open Piaf_lwt
 
 let ( // ) = Filename.concat
-let cert_path = Option.get Cert_sites.sourceroot // "lib_test" // "certificates"
+
+let cert_path =
+  Option.get Cert_sites.sourceroot // "lib-lwt_test" // "certificates"
 
 let request_handler { Server.request; _ } =
   let response_body =
