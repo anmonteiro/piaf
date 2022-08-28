@@ -38,13 +38,12 @@ let src = Logs.Src.create "piaf.http" ~doc:"Piaf HTTP module"
 
 module Log = (val Logs.src_log src : Logs.LOG)
 
-let ptoerr p () = Result.error (Promise.await p)
+let ptoerr p () = Error (Promise.await p)
 
 let make_error_handler notify_error ~kind:_ error =
   let error =
     match error with
-    | `Exn (Eio_ssl.Exn.Ssl_exception { message; _ }) ->
-      `TLS_error message
+    | `Exn (Eio_ssl.Exn.Ssl_exception { message; _ }) -> `TLS_error message
     | error -> error
   in
   Promise.resolve notify_error error
@@ -91,14 +90,10 @@ let flush_and_close
           m "Request body has been completely and successfully uploaded"))
 
 let handle_response
-    :  Response.t Promise.t -> Error.client Promise.t -> Error.client Promise.t
-    -> (Response.t, Error.client) result
+    :  sw:Switch.t -> Response.t Promise.t -> Error.client Promise.t
+    -> Error.client Promise.t -> (Response.t, Error.client) result
   =
- fun response_p response_error_p connection_error_p ->
-  (* TODO(anmonteiro): how to use `any` without canceling? *)
-  (* Use `Lwt.choose` specifically so that we don't cancel the
-   * `connection_error_p` promise. We want it to stick around for subsequent
-   * requests on the connection. *)
+ fun ~sw response_p response_error_p connection_error_p ->
   let result =
     Fiber.any
       [ (fun () -> Ok (Promise.await response_p))
@@ -114,9 +109,17 @@ let handle_response
           Response.pp_hum
           response);
 
-    (* FIXME(anmonteiro) *)
-    let error_p, _error_u = Promise.create () in
-    (* (Lwt.choose [ connection_error_p; response_error_p ] :> Error.t Lwt.t) *)
+    let error_p, error_u = Promise.create () in
+    Fiber.fork ~sw (fun () ->
+        match
+          Fiber.any
+            [ (fun () -> Error (Promise.await response_error_p :> Error.t))
+            ; (fun () -> Error (Promise.await connection_error_p :> Error.t))
+            ; (fun () -> Body.closed response.body)
+            ]
+        with
+        | Ok () -> ()
+        | Error error -> Promise.resolve error_u error);
     Body.embed_error_received response.body error_p;
     Ok response
   | Error _ as error ->
@@ -192,7 +195,7 @@ let send_request
           (* can't `sendfile` on an encrypted connection.
            * TODO(anmonteiro): Return error message saying that. *)
           assert false));
-  handle_response response_received error_received connection_error_received
+  handle_response ~sw response_received error_received connection_error_received
 
 let can't_upgrade msg =
   Error (`Protocol_error (H2.Error_code.HTTP_1_1_Required, msg))
@@ -233,6 +236,7 @@ let create_h2c_connection
        * that was sent as part of the upgrade. *)
       let result =
         handle_response
+          ~sw
           response_received
           response_error_received
           connection_error_received
