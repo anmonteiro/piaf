@@ -197,13 +197,15 @@ module H2c = struct
       in
       upgrade (Gluten.make (module H2.Server_connection) connection)
     in
-    let request_handler { Server.request; ctx = client_addr } =
+    let request_handler
+        { Server.request; ctx = { Request_info.client_address; _ } }
+      =
       let headers =
         Headers.(
           of_list
             [ Well_known.connection, "Upgrade"; Well_known.upgrade, "h2c" ])
       in
-      Response.upgrade ~headers (upgrade_handler client_addr request)
+      Response.upgrade ~headers (upgrade_handler client_address request)
     in
     Server.create request_handler
 
