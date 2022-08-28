@@ -30,7 +30,7 @@ let connection_handler = Server.create request_handler
 
 module HTTP = struct
   let listen ~sw ~network port =
-    Server.Command.listen ~sw ~port ~network connection_handler
+    Server.Command.start ~sw ~port ~network connection_handler
 end
 
 module ALPN = struct
@@ -106,7 +106,7 @@ module ALPN = struct
     let cert = cert_path // certfile in
     let priv_key = cert_path // certkey in
 
-    Server.Command.listen ~sw ~network ~port (fun fd client_addr ->
+    Server.Command.listen ~sw ~network ~port (fun ~sw:_ fd client_addr ->
         let server_ctx = Ssl.create_context Ssl.TLSv1_3 Ssl.Server_context in
         Ssl.disable_protocols server_ctx [ Ssl.SSLv23; Ssl.TLSv1_1 ];
         Ssl.load_verify_locations server_ctx ca "";
@@ -137,7 +137,7 @@ module ALPN = struct
           raise exn)
 end
 
-type t = Server.Command.server * Server.Command.server
+type t = Server.Command.t * Server.Command.t
 
 let listen
     ?(http_port = 8080)
@@ -168,7 +168,7 @@ let teardown (http, https) =
     (fun () -> Server.Command.shutdown https)
 
 module H2c = struct
-  type t = Server.Command.server
+  type t = Server.Command.t
 
   let h2c_connection_handler
       :  Eio.Net.Sockaddr.stream -> Httpaf.Request.t
@@ -208,7 +208,7 @@ module H2c = struct
     Server.create request_handler
 
   let listen ~sw ~network port =
-    Server.Command.listen ~sw ~network ~port connection_handler
+    Server.Command.start ~sw ~network ~port connection_handler
 
   let teardown = Server.Command.shutdown
 end

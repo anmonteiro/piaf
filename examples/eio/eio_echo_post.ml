@@ -25,7 +25,7 @@ let main port =
       let network = Eio.Stdenv.net env in
       Switch.run (fun sw ->
           let server = Server.create request_handler in
-          let _command = Server.Command.listen ~sw ~port ~network server in
+          let _command = Server.Command.start ~sw ~port ~network server in
           ()
           (* Eio.Time.sleep (Eio.Stdenv.clock env) 5.; *)
           (* Server.Command.shutdown command *)))

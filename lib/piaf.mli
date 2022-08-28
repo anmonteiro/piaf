@@ -726,7 +726,7 @@ module Server : sig
     }
 
   type connection_handler =
-    Eio.Net.stream_socket -> Eio.Net.Sockaddr.stream -> unit
+    sw:Eio.Switch.t -> Eio.Net.stream_socket -> Eio.Net.Sockaddr.stream -> unit
 
   module Error_response : sig
     type t
@@ -751,7 +751,7 @@ module Server : sig
     type server := t
     type t
 
-    val listen
+    val start
       :  ?bind_to_address:Eio.Net.Ipaddr.v4v6
       -> sw:Eio.Switch.t
       -> network:Eio.Net.t
@@ -760,9 +760,20 @@ module Server : sig
       -> t
 
     val shutdown : t -> unit
+
+    val listen
+      :  ?bind_to_address:Eio.Net.Ipaddr.v4v6
+      -> sw:Eio.Switch.t
+      -> network:Eio.Net.t
+      -> port:int
+      -> connection_handler
+      -> t
+    (** [listen ~sw ?bind_to_address ~network ~port connection_handler] starts a
+        server for [connection_handler]. It is preferred to use [start] instead,
+        which starts a server for a Piaf handler. *)
   end
 
-  val connection_handler : t -> sw:Eio.Switch.t -> connection_handler
+  val connection_handler : t -> connection_handler
   (** [connection_handler server] returns a connection handler suitable to be
       passed to e.g. [Eio.Net.accept_fork]. It is generally recommended to use
       the [Command] module instead. *)

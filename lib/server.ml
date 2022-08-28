@@ -72,7 +72,7 @@ type 'ctx ctx = 'ctx Handler.ctx =
   }
 
 type connection_handler =
-  Eio.Net.stream_socket -> Eio.Net.Sockaddr.stream -> unit
+  sw:Switch.t -> Eio.Net.stream_socket -> Eio.Net.Sockaddr.stream -> unit
 
 type error_handler =
   Eio.Net.Sockaddr.stream
@@ -255,9 +255,7 @@ let create ?config ?(error_handler = default_error_handler) handler : t =
   ; handler
   }
 
-let connection_handler t
-    : sw:Switch.t -> Eio.Net.stream_socket -> Eio.Net.Sockaddr.stream -> unit
-  =
+let connection_handler t : connection_handler =
   let { error_handler; handler; config } = t in
   fun ~sw socket sockaddr ->
     let fd = Option.get @@ Eio_unix.FD.peek_opt socket in
@@ -276,46 +274,20 @@ module Command = struct
   type nonrec t =
     { network : Eio.Net.t
     ; address : Eio.Net.Sockaddr.stream
-    ; server : t
     ; resolver : unit -> unit
     }
 
-  let create ~network ~address ~resolver server =
-    { network; address; server; resolver }
-
-  let shutdown server = server.resolver ()
-
-  let start ~sw t =
-    let { network; address; server; _ } = t in
-    let connection_handler = connection_handler server in
-    let socket =
-      Eio.Net.listen
-        ~reuse_addr:true
-        ~reuse_port:true
-        ~backlog:5
-        ~sw
-        network
-        address
-    in
-    while true do
-      Eio.Net.accept_fork
-        socket
-        ~sw
-        ~on_error:(fun exn ->
-          Log.err (fun m ->
-              m "Error in connection handler: %s" (Printexc.to_string exn)))
-        (fun socket addr ->
-          Switch.run (fun sw -> connection_handler ~sw socket addr))
-    done
+  let create ~network ~address ~resolver = { network; address; resolver }
+  let shutdown t = t.resolver ()
 
   let listen
       ?(bind_to_address = Eio.Net.Ipaddr.V4.loopback)
       ~sw
       ~network
       ~port
-      handler
+      connection_handler
     =
-    let server_p, server_u = Promise.create () in
+    let command_p, command_u = Promise.create () in
     let released_p, released_u = Promise.create () in
     Fiber.fork ~sw (fun () ->
         let address = `Tcp (bind_to_address, port) in
@@ -333,8 +305,33 @@ module Command = struct
               Promise.await released_p
             in
 
-            let server = create ~network ~address ~resolver handler in
-            Fiber.fork ~sw (fun () -> start ~sw server);
-            Promise.resolve server_u server));
-    Promise.await server_p
+            let command = create ~network ~address ~resolver in
+            Fiber.fork ~sw (fun () ->
+                let socket =
+                  Eio.Net.listen
+                    ~reuse_addr:true
+                    ~reuse_port:true
+                    ~backlog:5
+                    ~sw
+                    network
+                    address
+                in
+                while true do
+                  Eio.Net.accept_fork
+                    socket
+                    ~sw
+                    ~on_error:(fun exn ->
+                      Log.err (fun m ->
+                          m
+                            "Error in connection handler: %s"
+                            (Printexc.to_string exn)))
+                    (fun socket addr ->
+                      Switch.run (fun sw -> connection_handler ~sw socket addr))
+                done);
+            Promise.resolve command_u command));
+    Promise.await command_p
+
+  let start ?bind_to_address ~sw ~network ~port server =
+    let connection_handler = connection_handler server in
+    listen ?bind_to_address ~sw ~network ~port connection_handler
 end
