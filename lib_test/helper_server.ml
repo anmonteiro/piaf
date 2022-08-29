@@ -11,8 +11,8 @@ let request_handler { Server.request; _ } =
   match Astring.String.cuts ~empty:false ~sep:"/" request.target with
   | [] -> (Response.of_string ~body:response_body) `OK
   | [ "redirect" ] ->
-    Format.eprintf "got redirect request?@.";
-    (Response.create ~headers:Headers.(of_list [ Well_known.location, "/" ]))
+    Response.create
+      ~headers:Headers.(of_list [ Well_known.location, "/" ])
       `Found
   | "alpn" :: _ ->
     (Response.create
@@ -122,7 +122,6 @@ module ALPN = struct
             first_match client_protos protos);
         try
           let ssl_server = Eio_ssl.ssl_accept fd server_ctx in
-          Format.eprintf "oh wow@.";
           match Eio_ssl.ssl_socket ssl_server with
           | None -> ()
           | Some ssl_socket ->

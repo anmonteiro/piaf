@@ -214,16 +214,15 @@ let handle_error
     | `Stream stream ->
       Piaf_body.stream_write_body (module Http.Body) response_body stream
     | `Sendfile (src_fd, _, _) ->
-      Writer.flush response_body (fun () ->
-          match fd with
-          | HTTP fd ->
-            do_sendfile
-              (module Http)
-              ~src_fd
-              ~fd
-              ~report_exn:(fun _exn -> ())
-              response_body
-          | HTTPS _ -> assert false)
+      (match fd with
+      | HTTP fd ->
+        do_sendfile
+          (module Http)
+          ~src_fd
+          ~fd
+          ~report_exn:(fun _exn -> ())
+          response_body
+      | HTTPS _ -> assert false)
   in
   try
     Log.info (fun m ->
