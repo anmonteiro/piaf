@@ -712,26 +712,41 @@ end
 
 module Server : sig
   module Config : sig
+    module HTTPS : sig
+      type t =
+        { port : int
+        ; certificate : Cert.t * Cert.t (* Server certificate and private key *)
+        ; cacert : Cert.t option
+              (** Either the certificates string or path to a file with
+                  certificates to verify peer. Both should be in PEM format *)
+        ; capath : string option
+              (** The path to a directory which contains CA certificates in PEM
+                  format *)
+        ; min_tls_version : Versions.TLS.t
+        ; max_tls_version : Versions.TLS.t
+        ; allow_insecure : bool
+              (** Wether to allow insecure server connections *)
+        ; enforce_client_cert : bool
+        }
+
+      val create
+        :  ?port:int
+        -> ?cacert:Cert.t
+        -> ?capath:string
+        -> ?allow_insecure:bool
+        -> ?enforce_client_cert:bool
+        -> Cert.t * Cert.t
+        -> t
+    end
+
     type t =
-      { allow_insecure : bool
-            (** Wether to allow insecure server connections when using SSL *)
+      { port : int
       ; max_http_version : Versions.HTTP.t
             (** Use this as the highest HTTP version when sending requests *)
+      ; https : HTTPS.t option
       ; h2c_upgrade : bool
             (** Send an upgrade to `h2c` (HTTP/2 over TCP) request to the
                 server. `http2_prior_knowledge` below ignores this option. *)
-      ; certificate :
-          (Cert.t * Cert.t) option (* Server certificate and private key *)
-      ; cacert : Cert.t option
-            (** Either the certificates string or path to a file with
-                certificates to verify peer. Both should be in PEM format *)
-      ; capath : string option
-            (** The path to a directory which contains CA certificates in PEM
-                format *)
-      ; clientcert : (Cert.t * Cert.t) option
-            (** Client certificate in PEM format and private key *)
-      ; min_tls_version : Versions.TLS.t
-      ; max_tls_version : Versions.TLS.t
       ; tcp_nodelay : bool
       ; accept_timeout : float (* seconds *)
       ; (* Buffer sizes *)
@@ -750,7 +765,17 @@ module Server : sig
                 be written. Defaults to [false]. *)
       }
 
-    val default : t
+    val create
+      :  ?max_http_version:Httpaf.Version.t
+      -> ?https:HTTPS.t
+      -> ?h2c_upgrade:bool
+      -> ?tcp_nodelay:bool
+      -> ?accept_timeout:float
+      -> ?buffer_size:int
+      -> ?body_buffer_size:int
+      -> ?flush_headers_immediately:bool
+      -> int
+      -> t
   end
 
   module Service : sig
@@ -794,8 +819,8 @@ module Server : sig
   type t
 
   val create
-    :  ?config:Config.t
-    -> ?error_handler:error_handler
+    :  ?error_handler:error_handler
+    -> config:Config.t
     -> Request_info.t Handler.t
     -> t
 
@@ -812,8 +837,7 @@ module Server : sig
     val start
       :  ?bind_to_address:Eio.Net.Ipaddr.v4v6
       -> sw:Eio.Switch.t
-      -> network:Eio.Net.t
-      -> port:int
+      -> Eio.Stdenv.t
       -> server
       -> t
 
@@ -831,10 +855,16 @@ module Server : sig
         which starts a server for a Piaf handler. *)
   end
 
-  val connection_handler : t -> Versions.ALPN.t -> Command.connection_handler
-  (** [connection_handler server] returns a connection handler suitable to be
-      passed to e.g. [Eio.Net.accept_fork]. It is generally recommended to use
-      the [Command] module instead. *)
+  val http_connection_handler : t -> Command.connection_handler
+  (** [connection_handler server] returns an HTTP/1.1 connection handler
+      suitable to be passed to e.g. [Eio.Net.accept_fork]. It is generally
+      recommended to use the [Command] module instead. *)
+
+  (* val https_connection_handler : t -> Command.connection_handler *)
+  (** [connection_handler server] returns an HTTPS connection handler suitable
+      to be passed to e.g. [Eio.Net.accept_fork], which can speak both HTTP/1
+      and HTTP/2, according to its configuration. It is generally recommended to
+      use the [Command] module instead. *)
 end
 
 module Cookies : sig

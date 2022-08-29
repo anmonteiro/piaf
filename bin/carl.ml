@@ -505,7 +505,7 @@ module CLI = struct
   let cert =
     let doc = "Client certificate file path" in
     let docv = "file" in
-    Arg.(value & opt (some string) None & info [ "cert" ] ~doc ~docv)
+    Arg.(value & opt (some string) None & info [ "E"; "cert" ] ~doc ~docv)
 
   let compressed =
     let doc = "Request compressed response" in

@@ -54,11 +54,8 @@ type t =
   ; handler : Request_info.t Handler.t
   }
 
-let create ?config ?(error_handler = default_error_handler) handler : t =
-  { config = Option.value ~default:Config.default config
-  ; error_handler
-  ; handler
-  }
+let create ?(error_handler = default_error_handler) ~config handler : t =
+  { config; error_handler; handler }
 
 let is_requesting_h2c_upgrade ~config ~version ~scheme headers =
   match version, config.Config.max_http_version, config.h2c_upgrade, scheme with
@@ -116,15 +113,11 @@ let do_h2c_upgrade ~sw ~fd ~request_body server =
   in
   request_handler
 
-let connection_handler t version : _ connection_handler =
+module Http : Http_intf.HTTP = Http1.HTTP
+
+let http_connection_handler t : _ connection_handler =
   let { error_handler; handler; config } = t in
-  let (module Http) =
-    match version with
-    | Versions.ALPN.HTTP_1_0 | Versions.ALPN.HTTP_1_1 ->
-      (module Http1.HTTP : Http_intf.HTTP)
-    | Versions.ALPN.HTTP_2 -> (module Http2.HTTP : Http_intf.HTTP)
-  in
-  fun ~sw fd addr ->
+  fun ~sw socket client_address ->
     let request_handler
         ({ request; ctx = { Request_info.client_address = _; scheme; _ } } as
         ctx)
@@ -139,16 +132,40 @@ let connection_handler t version : _ connection_handler =
       | false -> handler ctx
       | true ->
         let request_body = Body.to_list request.body in
-        do_h2c_upgrade ~sw ~fd:(HTTP fd) ~request_body t ctx
+        do_h2c_upgrade ~sw ~fd:(HTTP socket) ~request_body t ctx
     in
 
-    let connection_handler =
-      Http.Server.create_connection_handler
+    Http.Server.create_connection_handler
+      ~config
+      ~error_handler
+      ~request_handler
+      ~sw
+      socket
+      client_address
+
+let https_connection_handler ~https ~clock t : _ connection_handler =
+  let { error_handler; handler; config } = t in
+  let ssl_config = Openssl.Server_conf.of_server_config ~https config in
+  fun ~sw socket client_address ->
+    match Openssl.accept ~clock ~config:ssl_config ~fd:socket with
+    | Error (`Exn exn) -> Format.eprintf "EXN: %s@." (Printexc.to_string exn)
+    | Error (`Connect_error string) ->
+      Format.eprintf "CONNECT ERROR: %s@." string
+    | Ok { Openssl.socket = ssl_server; alpn_version } ->
+      let (module Https) =
+        match alpn_version with
+        | Versions.ALPN.HTTP_1_0 | Versions.ALPN.HTTP_1_1 ->
+          (module Http1.HTTPS : Http_intf.HTTPS)
+        | Versions.ALPN.HTTP_2 -> (module Http2.HTTPS : Http_intf.HTTPS)
+      in
+
+      Https.Server.create_connection_handler
         ~config
         ~error_handler
-        ~request_handler
-    in
-    connection_handler ~sw fd addr
+        ~request_handler:handler
+        ~sw
+        ssl_server
+        client_address
 
 module Command = struct
   exception Server_shutdown
@@ -158,11 +175,14 @@ module Command = struct
 
   type nonrec t =
     { network : Eio.Net.t
-    ; address : Eio.Net.Sockaddr.stream
+    ; http_address : Eio.Net.Sockaddr.stream
     ; resolver : unit -> unit
+    ; https_address : Eio.Net.Sockaddr.stream option
     }
 
-  let create ~network ~address ~resolver = { network; address; resolver }
+  let create ~network ~address ~resolver =
+    { network; http_address = address; resolver; https_address = None }
+
   let shutdown t = t.resolver ()
 
   let listen
@@ -185,7 +205,8 @@ module Command = struct
           (fun sw ->
             Switch.on_release sw (fun () -> Promise.resolve released_u ());
             let resolver () =
-              Log.debug (fun m -> m "Starting server teardown...");
+              Log.debug (fun m ->
+                  m "Starting server teardown on port %d..." port);
               Switch.fail sw Server_shutdown;
               Promise.await released_p
             in
@@ -217,8 +238,32 @@ module Command = struct
             Promise.resolve command_u command));
     Promise.await command_p
 
-  let start ?bind_to_address ~sw ~network ~port server =
+  let start ?bind_to_address ~sw env server =
+    let { config; _ } = server in
+    let network = Eio.Stdenv.net env in
+    let clock = Eio.Stdenv.clock env in
     (* let { config; error_handler; handler } = server in *)
-    let connection_handler = connection_handler server Versions.ALPN.HTTP_1_1 in
-    listen ?bind_to_address ~sw ~network ~port connection_handler
+    (* TODO(anmonteiro): config option to listen only in HTTPS?  *)
+    let connection_handler = http_connection_handler server in
+    let ({ resolver = http_resolver; _ } as command) =
+      listen ?bind_to_address ~sw ~network ~port:config.port connection_handler
+    in
+    match config.https with
+    | None -> command
+    | Some https ->
+      let connection_handler =
+        https_connection_handler
+          ~clock
+          ~https
+          { server with config = { server.config with https = Some https } }
+      in
+      let { resolver = https_resolver; _ } =
+        listen ?bind_to_address ~sw ~network ~port:https.port connection_handler
+      in
+      { command with
+        resolver =
+          (fun () ->
+            http_resolver ();
+            https_resolver ())
+      }
 end

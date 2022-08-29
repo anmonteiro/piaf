@@ -21,15 +21,26 @@ let request_handler { Server.ctx = _; request } =
     Response.of_string ~headers `Method_not_allowed ~body:""
 
 let main port =
+  let config =
+    let ( // ) = Filename.concat in
+    let cert_path = "lib_test" // "certificates" in
+    let ca = cert_path // "ca.pem" in
+    let cert = cert_path // "server.pem" in
+    let priv_key = cert_path // "server.key" in
+    Server.Config.(
+      create
+        ~h2c_upgrade:true
+        ~https:
+          (HTTPS.create
+             ~cacert:(Filepath ca) (* ~allow_insecure:true *)
+             (* ~enforce_client_cert:true *)
+             (Filepath cert, Filepath priv_key))
+        port)
+  in
   Eio_main.run (fun env ->
-      let network = Eio.Stdenv.net env in
       Switch.run (fun sw ->
-          let server =
-            Server.create
-              ~config:{ Server.Config.default with h2c_upgrade = true }
-              request_handler
-          in
-          let _command = Server.Command.start ~sw ~port ~network server in
+          let server = Server.create ~config request_handler in
+          let _command = Server.Command.start ~sw env server in
           ()
           (* Eio.Time.sleep (Eio.Stdenv.clock env) 5.; *)
           (* Server.Command.shutdown command *)))

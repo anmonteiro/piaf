@@ -401,48 +401,49 @@ module Server_conf = struct
     ; cacert : Cert.t option
     ; capath : string option
     ; certificate : Cert.t * Cert.t (* cert, priv_key *)
-    ; clientcert : (Cert.t * Cert.t) option
+    ; enforce_client_cert : bool
     ; min_tls_version : Versions.TLS.t
     ; max_tls_version : Versions.TLS.t
     ; accept_timeout : float (* seconds *)
     }
 
-  let of_server_config = function
-    | { Server_config.certificate = None; _ } -> Error `Need_server_cert
-    | { Server_config.allow_insecure
-      ; max_http_version
-      ; cacert
-      ; capath
-      ; certificate = Some certificate
-      ; clientcert
-      ; min_tls_version
-      ; max_tls_version
-      ; accept_timeout
-      ; _
-      } ->
-      Ok
-        { allow_insecure
-        ; max_http_version
+  let of_server_config
+      ~https:
+        { Server_config.HTTPS.allow_insecure
         ; cacert
         ; capath
         ; certificate
-        ; clientcert
+        ; enforce_client_cert
         ; min_tls_version
         ; max_tls_version
-        ; accept_timeout
+        ; _
         }
+    = function
+    | { Server_config.max_http_version; accept_timeout; _ } ->
+      { allow_insecure
+      ; max_http_version
+      ; cacert
+      ; capath
+      ; certificate
+      ; enforce_client_cert
+      ; min_tls_version
+      ; max_tls_version
+      ; accept_timeout
+      }
 end
 
-let set_server_verify ?cacert ?capath ~certificate ctx =
-  let certificate, private_key = certificate in
-  let+! () = configure_verify_locations ?cacert ?capath ctx
-  and+! () = load_cert ~certificate ~private_key ctx in
-
-  (* if check_client_cert *)
-  (* then Ssl.set_verify server_ctx [ Ssl.Verify_fail_if_no_peer_cert ] None; *)
-  Ssl.set_verify ctx [ Ssl.Verify_peer ] (Some Ssl.client_verify_callback);
+let set_server_verify ~enforce_client_cert ctx =
   (* TODO(anmonteiro): enable if Logs.Debug? *)
-  Ssl.set_client_verify_callback_verbose true
+  Ssl.set_client_verify_callback_verbose true;
+  let flag =
+    if enforce_client_cert
+    then Ssl.Verify_fail_if_no_peer_cert
+    else Ssl.Verify_peer
+  in
+  Ssl.set_verify
+    ctx
+    [ flag ]
+    (if enforce_client_cert then None else Some Ssl.client_verify_callback)
 
 let rec first_match l1 = function
   | [] -> None
@@ -459,6 +460,7 @@ let setup_server_ctx
         ; capath
         ; certificate = certificate, private_key
         ; max_http_version
+        ; enforce_client_cert
         ; _
         }
   =
@@ -489,19 +491,12 @@ let setup_server_ctx
     Ssl.set_context_alpn_select_callback ctx (fun client_protos ->
         first_match client_protos alpn_protocols);
 
-    let+! () =
-      if not allow_insecure
-      then
-        set_server_verify
-          ?cacert
-          ?capath
-          ~certificate:(certificate, private_key)
-          ctx
-      else
-        (* Don't bother configuring verify locations if we're not going to be
-           verifying the peer. *)
-        Ok ()
-    in
+    let+! () = load_cert ~certificate ~private_key ctx
+    and+! () = configure_verify_locations ?cacert ?capath ctx in
+    if not allow_insecure
+       (* Don't bother configuring verify locations if we're not going to be
+          verifying the peer. *)
+    then set_server_verify ~enforce_client_cert ctx;
     ctx
 
 (* assumes an `accept`ed socket *)
@@ -520,15 +515,25 @@ let get_negotiated_alpn_protocol ssl_server =
 
 type connection_handler = Eio_ssl.socket -> Eio.Net.Sockaddr.stream -> unit
 
+type accept =
+  { socket : Eio_ssl.socket
+  ; alpn_version : Versions.ALPN.t
+  }
+
 (* TODO(anmonteiro): if we wanna support multiple hostnames, this is how to do
    SNI: https://stackoverflow.com/a/5113466/3417023 *)
-let accept ~(config : Server_conf.t) ~fd handler =
-  let+! ctx = setup_server_ctx ~config in
-  try
-    let ssl_server = Eio_ssl.ssl_accept fd ctx in
-    let alpn_version = get_negotiated_alpn_protocol ssl_server in
-    handler alpn_version
+let accept ~clock ~(config : Server_conf.t) ~fd =
+  let*! ctx = setup_server_ctx ~config in
+  match
+    Eio.Time.with_timeout clock config.accept_timeout (fun () ->
+        Ok (Eio_ssl.ssl_accept fd ctx))
   with
-  | exn ->
-    Format.eprintf "EXN: %s@." (Printexc.to_string exn);
-    raise exn
+  | Ok ssl_server ->
+    let alpn_version = get_negotiated_alpn_protocol ssl_server in
+    Ok { socket = ssl_server; alpn_version }
+  | Error `Timeout ->
+    Result.error
+      (`Connect_error
+        (Format.asprintf
+           "Failed to accept SSL connection from in a reasonable amount of time"))
+  | exception exn -> Error (`Exn exn)

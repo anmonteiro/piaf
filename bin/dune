@@ -1,6 +1,6 @@
 (executable
  (name carl)
- (modules carl)
+ (modules carl util)
  (libraries piaf cmdliner logs fmt logs.fmt fmt.tty camlzip ezgzip))
 
 (executable

@@ -2,25 +2,49 @@ let src = Logs.Src.create "piaf.server_config" ~doc:"Piaf Server_config module"
 
 module Log = (val Logs.src_log src : Logs.LOG)
 
+module HTTPS = struct
+  type t =
+    { port : int
+    ; certificate : Cert.t * Cert.t (* Server certificate and private key *)
+    ; cacert : Cert.t option
+          (** Either the certificates string or path to a file with certificates
+              to verify peer. Both should be in PEM format *)
+    ; capath : string option
+          (** The path to a directory which contains CA certificates in PEM
+              format *)
+    ; min_tls_version : Versions.TLS.t
+    ; max_tls_version : Versions.TLS.t
+    ; allow_insecure : bool  (** Wether to allow insecure server connections *)
+    ; enforce_client_cert : bool
+    }
+
+  let create
+      ?(port = 9443)
+      ?cacert
+      ?capath
+      ?(allow_insecure = false)
+      ?(enforce_client_cert = false)
+      certificate
+    =
+    { port
+    ; allow_insecure
+    ; enforce_client_cert
+    ; certificate
+    ; cacert
+    ; capath
+    ; min_tls_version = TLSv1_0
+    ; max_tls_version = TLSv1_3
+    }
+end
+
 type t =
-  { allow_insecure : bool
-        (** Wether to allow insecure server connections when using SSL *)
+  { port : int
   ; max_http_version : Versions.HTTP.t
         (** Use this as the highest HTTP version when sending requests *)
+  ; https : HTTPS.t option
   ; h2c_upgrade : bool
         (** Send an upgrade to `h2c` (HTTP/2 over TCP) request to the server.
             `http2_prior_knowledge` below ignores this option. *)
-  ; certificate :
-      (Cert.t * Cert.t) option (* Server certificate and private key *)
-  ; cacert : Cert.t option
-        (** Either the certificates string or path to a file with certificates
-            to verify peer. Both should be in PEM format *)
-  ; capath : string option
-        (** The path to a directory which contains CA certificates in PEM format *)
-  ; clientcert : (Cert.t * Cert.t) option
-        (** Client certificate in PEM format and private key *)
-  ; min_tls_version : Versions.TLS.t
-  ; max_tls_version : Versions.TLS.t
   ; tcp_nodelay : bool
   ; accept_timeout : float (* seconds *)
   ; (* Buffer sizes *)
@@ -38,23 +62,28 @@ type t =
             written. Defaults to [false]. *)
   }
 
-let default =
-  { allow_insecure = false
-  ; max_http_version = Versions.HTTP.v2_0
-  ; h2c_upgrade = false
-  ; cacert = None
-  ; capath = None
-  ; certificate = None
-  ; clientcert = None
-  ; min_tls_version = TLSv1_0
-  ; max_tls_version = TLSv1_3
-  ; tcp_nodelay = true
-  ; accept_timeout = 30.
-  ; buffer_size = 0x4000
-  ; body_buffer_size = 0x1000
+let create
+    ?(max_http_version = Versions.HTTP.v2_0)
+    ?https
+    ?(h2c_upgrade = false)
+    ?(tcp_nodelay = true)
+    ?(accept_timeout = 30.)
+    ?(buffer_size = 0x4000)
+    ?(body_buffer_size = 0x1000)
+    ?(flush_headers_immediately = false)
+    port
+  =
+  { port
+  ; max_http_version
+  ; https
+  ; h2c_upgrade
+  ; tcp_nodelay
+  ; accept_timeout
+  ; buffer_size
+  ; body_buffer_size
   ; (* TODO: we don't really support push yet. *)
     enable_http2_server_push = false
-  ; flush_headers_immediately = false
+  ; flush_headers_immediately
   }
 
 let to_http1_config { body_buffer_size; buffer_size; _ } =
