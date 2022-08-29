@@ -78,7 +78,7 @@ type cli =
   ; head : bool
   ; headers : (string * string) list
   ; include_ : bool
-  ; max_http_version : Versions.HTTP.t
+  ; max_http_version : Versions.ALPN.t
   ; h2c_upgrade : bool
   ; http2_prior_knowledge : bool
   ; tcp_nodelay : bool
@@ -750,13 +750,12 @@ module CLI = struct
     ; headers
     ; include_
     ; max_http_version =
-        (let open Versions.HTTP in
-        match use_http_2, use_http_1_1, use_http_1_0 with
+        (match use_http_2, use_http_1_1, use_http_1_0 with
         | true, _, _ | false, false, false ->
           (* Default to the highest supported if no override specified. *)
-          v2_0
-        | false, true, _ -> v1_1
-        | false, false, true -> v1_0)
+          Versions.ALPN.HTTP_2
+        | false, true, _ -> HTTP_1_1
+        | false, false, true -> HTTP_1_0)
     ; h2c_upgrade = use_http_2
     ; http2_prior_knowledge
     ; cacert
