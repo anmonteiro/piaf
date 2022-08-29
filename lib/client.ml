@@ -57,13 +57,15 @@ let create_http_connection ~sw ~config ~conn_info fd =
       , config.h2c_upgrade )
     with
     | true, _, _ -> (module Http2.HTTP : Http_intf.HTTP), Versions.HTTP.v2_0
-    | false, { Versions.HTTP.major = 2; _ }, true ->
+    | false, HTTP_2, true ->
       (module Http1.HTTP : Http_intf.HTTP), Versions.HTTP.v1_1
     | false, _, _ ->
       let version =
-        if Versions.HTTP.(compare config.max_http_version v2_0) >= 0
+        if Versions.HTTP.(
+             compare (Versions.ALPN.to_version config.max_http_version) v2_0)
+           >= 0
         then Versions.HTTP.v1_1
-        else config.max_http_version
+        else Versions.ALPN.to_version config.max_http_version
       in
       (module Http1.HTTP : Http_intf.HTTP), version
   in
@@ -98,9 +100,13 @@ let create_https_connection ~sw ~config ~conn_info fd =
           then (module Http2.HTTPS : Http_intf.HTTPS), Versions.HTTP.v2_0
           else
             ( (module Http1.HTTPS : Http_intf.HTTPS)
-            , if Versions.HTTP.(compare config.max_http_version v2_0) >= 0
+            , if Versions.HTTP.(
+                   compare
+                     (Versions.ALPN.to_version config.max_http_version)
+                     v2_0)
+                 >= 0
               then Versions.HTTP.v1_1
-              else config.max_http_version )
+              else Versions.ALPN.to_version config.max_http_version )
         in
         Log.info (fun m -> m "Defaulting to %a" Versions.HTTP.pp_hum version);
         impl, version
@@ -282,7 +288,7 @@ let rec return_response
     , { Versions.HTTP.major = 1; minor = 1 }
     , `Switching_protocols
     , { Config.h2c_upgrade = true
-      ; max_http_version = { Versions.HTTP.major = 2; minor = 0 }
+      ; max_http_version = HTTP_2
       ; http2_prior_knowledge = false
       ; _
       } ) ->
@@ -317,7 +323,9 @@ let is_h2c_upgrade ~config ~version ~scheme =
     , scheme )
   with
   | false, cur_version, max_version, true, Scheme.HTTP ->
-    Versions.HTTP.(equal max_version v2_0 && equal cur_version v1_1)
+    Versions.HTTP.(
+      equal (Versions.ALPN.to_version max_version) v2_0
+      && equal cur_version v1_1)
   | _ -> false
 
 let make_request_info

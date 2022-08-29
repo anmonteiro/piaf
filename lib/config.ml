@@ -47,7 +47,7 @@ type t =
         (** max redirects to follow. Could probably be rolled up into one option *)
   ; allow_insecure : bool
         (** Wether to allow insecure server connections when using SSL *)
-  ; max_http_version : Versions.HTTP.t
+  ; max_http_version : Versions.ALPN.t
         (** Use this as the highest HTTP version when sending requests *)
   ; h2c_upgrade : bool
         (** Send an upgrade to `h2c` (HTTP/2 over TCP) request to the server.
@@ -88,7 +88,7 @@ let default =
   { follow_redirects = false
   ; max_redirects = 10
   ; allow_insecure = false
-  ; max_http_version = Versions.HTTP.v2_0
+  ; max_http_version = Versions.ALPN.HTTP_2
   ; http2_prior_knowledge = false
   ; h2c_upgrade = false
   ; cacert = None

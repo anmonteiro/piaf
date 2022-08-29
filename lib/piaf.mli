@@ -257,7 +257,7 @@ module Config : sig
               option *)
     ; allow_insecure : bool
           (** Wether to allow insecure server connections when using SSL *)
-    ; max_http_version : Versions.HTTP.t
+    ; max_http_version : Versions.ALPN.t
           (** Use this as the highest HTTP version when sending requests *)
     ; h2c_upgrade : bool
           (** Send an upgrade to `h2c` (HTTP/2 over TCP) request to the server.
@@ -733,6 +733,8 @@ module Server : sig
         :  ?port:int
         -> ?cacert:Cert.t
         -> ?capath:string
+        -> ?min_tls_version:Versions.TLS.t
+        -> ?max_tls_version:Versions.TLS.t
         -> ?allow_insecure:bool
         -> ?enforce_client_cert:bool
         -> Cert.t * Cert.t
@@ -741,7 +743,7 @@ module Server : sig
 
     type t =
       { port : int
-      ; max_http_version : Versions.HTTP.t
+      ; max_http_version : Versions.ALPN.t
             (** Use this as the highest HTTP version when sending requests *)
       ; https : HTTPS.t option
       ; h2c_upgrade : bool
@@ -766,7 +768,7 @@ module Server : sig
       }
 
     val create
-      :  ?max_http_version:Httpaf.Version.t
+      :  ?max_http_version:Versions.ALPN.t
       -> ?https:HTTPS.t
       -> ?h2c_upgrade:bool
       -> ?tcp_nodelay:bool

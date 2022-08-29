@@ -26,11 +26,14 @@ let request_handler { Server.request; _ } =
   | [ "echo_headers" ] -> (Response.create ~headers:request.headers) `OK
   | _ -> assert false
 
-let connection_handler = Server.create request_handler
-
 module HTTP = struct
   let listen ~sw ~network port =
-    Server.Command.start ~sw ~port ~network connection_handler
+    Server.Command.listen
+      ~sw
+      ~port
+      ~network
+      (Server.http_connection_handler
+         (Server.create ~config:(Server.Config.create port) request_handler))
 end
 
 module ALPN = struct
@@ -197,20 +200,21 @@ module H2c = struct
       in
       upgrade (Gluten.make (module H2.Server_connection) connection)
     in
-    let request_handler
-        { Server.request; ctx = { Request_info.client_address; _ } }
-      =
+    fun { Server.request; ctx = { Request_info.client_address; _ } } ->
       let headers =
         Headers.(
           of_list
             [ Well_known.connection, "Upgrade"; Well_known.upgrade, "h2c" ])
       in
       Response.upgrade ~headers (upgrade_handler client_address request)
-    in
-    Server.create request_handler
 
   let listen ~sw ~network port =
-    Server.Command.start ~sw ~network ~port connection_handler
+    Server.Command.listen
+      ~sw
+      ~network
+      ~port
+      (Server.http_connection_handler
+         (Server.create ~config:(Server.Config.create port) connection_handler))
 
   let teardown = Server.Command.shutdown
 end

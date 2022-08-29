@@ -22,6 +22,8 @@ module HTTPS = struct
       ?(port = 9443)
       ?cacert
       ?capath
+      ?(min_tls_version = Versions.TLS.TLSv1_1)
+      ?(max_tls_version = Versions.TLS.TLSv1_3)
       ?(allow_insecure = false)
       ?(enforce_client_cert = false)
       certificate
@@ -32,14 +34,14 @@ module HTTPS = struct
     ; certificate
     ; cacert
     ; capath
-    ; min_tls_version = TLSv1_0
-    ; max_tls_version = TLSv1_3
+    ; min_tls_version
+    ; max_tls_version
     }
 end
 
 type t =
   { port : int
-  ; max_http_version : Versions.HTTP.t
+  ; max_http_version : Versions.ALPN.t
         (** Use this as the highest HTTP version when sending requests *)
   ; https : HTTPS.t option
   ; h2c_upgrade : bool
@@ -63,7 +65,7 @@ type t =
   }
 
 let create
-    ?(max_http_version = Versions.HTTP.v2_0)
+    ?(max_http_version = Versions.ALPN.HTTP_1_1)
     ?https
     ?(h2c_upgrade = false)
     ?(tcp_nodelay = true)

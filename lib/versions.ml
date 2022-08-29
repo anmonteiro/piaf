@@ -128,10 +128,10 @@ module ALPN = struct
 
   let versions_desc = HTTP.[ v2_0; v1_1; v1_0 ]
 
-  let protocols_of_version (max_version : HTTP.t) =
+  let protocols_of_version (max_version : t) =
     let wanted =
       drop_while
-        (fun version -> HTTP.compare version max_version > 0)
+        (fun version -> HTTP.compare version (to_version max_version) > 0)
         versions_desc
     in
     List.map

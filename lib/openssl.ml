@@ -397,7 +397,7 @@ let connect ~hostname ~config fd =
 module Server_conf = struct
   type t =
     { allow_insecure : bool
-    ; max_http_version : Versions.HTTP.t
+    ; max_http_version : Versions.ALPN.t
     ; cacert : Cert.t option
     ; capath : string option
     ; certificate : Cert.t * Cert.t (* cert, priv_key *)

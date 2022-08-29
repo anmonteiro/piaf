@@ -60,7 +60,9 @@ let create ?(error_handler = default_error_handler) ~config handler : t =
 let is_requesting_h2c_upgrade ~config ~version ~scheme headers =
   match version, config.Config.max_http_version, config.h2c_upgrade, scheme with
   | cur_version, max_version, true, Scheme.HTTP ->
-    if Versions.HTTP.(equal max_version v2_0 && equal cur_version v1_1)
+    if Versions.HTTP.(
+         equal (Versions.ALPN.to_version max_version) v2_0
+         && equal cur_version v1_1)
     then
       match
         Headers.(
@@ -73,9 +75,6 @@ let is_requesting_h2c_upgrade ~config ~version ~scheme headers =
             let normalized = String.(trim (lowercase_ascii segment)) in
             String.equal normalized Headers.Well_known.upgrade)
           connection_segments
-      (* (Well_known.connection, "Upgrade, HTTP2-Settings") *)
-      (* :: (Well_known.upgrade, "h2c") *)
-      (* :: ("HTTP2-Settings", Stdlib.Result.get_ok h2_settings) *)
       | _ -> false
     else false
   | _ -> false
