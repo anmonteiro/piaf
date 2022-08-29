@@ -7,6 +7,23 @@ module Log = (val Logs.src_log src : Logs.LOG)
 
 type upgrade = Gluten.impl -> unit
 
+let report_exn
+    : type reqd.
+      (module Http_intf.HTTPServerCommon with type Reqd.t = reqd)
+      -> reqd
+      -> exn
+      -> unit
+  =
+ fun (module Http) reqd exn ->
+  Log.err (fun m ->
+      let raw_backtrace = Printexc.get_raw_backtrace () in
+      m
+        "Exception while handling request: %s.@]@;<0 2>@[<v 0>%a@]"
+        (Printexc.to_string exn)
+        Util.Backtrace.pp_hum
+        raw_backtrace);
+  Http.Reqd.report_exn reqd exn
+
 type t =
   | Descriptor :
       { impl : (module Http_intf.HTTPServerCommon with type Reqd.t = 'reqd)
@@ -46,6 +63,26 @@ let create_descriptor
     ; client_address
     }
 
+let do_sendfile
+    : type writer.
+      (module Http_intf.HTTPServerCommon with type Body.Writer.t = writer)
+      -> src_fd:Unix.file_descr
+      -> fd:Eio.Flow.two_way
+      -> report_exn:(exn -> unit)
+      -> writer
+      -> unit
+  =
+ fun (module Http) ~src_fd ~fd ~report_exn response_body ->
+  let fd = Option.get (Eio_unix.FD.peek_opt fd) in
+  Http.Body.Writer.flush response_body (fun () ->
+      match
+        Posix.sendfile (module Http.Body) ~src_fd ~dst_fd:fd response_body
+      with
+      | Ok () -> Http.Body.Writer.close response_body
+      | Error exn ->
+        Http.Body.Writer.close response_body;
+        report_exn exn)
+
 let handle_request : sw:Switch.t -> t -> Request.t -> unit =
  fun ~sw
      (Descriptor
@@ -60,7 +97,7 @@ let handle_request : sw:Switch.t -> t -> Request.t -> unit =
        ; _
        })
      request ->
-  let exn_handler = Server_common.report_exn (module Http) reqd in
+  let report_exn = report_exn (module Http) reqd in
   Fiber.fork ~sw (fun () ->
       try
         let ({ Response.headers; body; _ } as response) =
@@ -123,28 +160,18 @@ let handle_request : sw:Switch.t -> t -> Request.t -> unit =
           | `Sendfile (src_fd, _, _) ->
             (match handle with
             | HTTP fd ->
-              let fd = Option.get (Eio_unix.FD.peek_opt fd) in
               let response_body =
                 Http.Reqd.respond_with_streaming
                   ~flush_headers_immediately:true
                   reqd
                   response
               in
-              Http.Body.Writer.flush response_body (fun () ->
-                  match
-                    Posix.sendfile
-                      (module Http.Body)
-                      ~src_fd
-                      ~dst_fd:fd
-                      response_body
-                  with
-                  | Ok () -> ()
-                  | Error exn -> exn_handler exn)
+              do_sendfile (module Http) ~src_fd ~fd ~report_exn response_body
             | HTTPS _ ->
               (* TODO(anmonteiro): can't sendfile on an encrypted connection *)
               assert false))
       with
-      | exn -> exn_handler exn)
+      | exn -> report_exn exn)
 
 let handle_error
     : type writer reqd.
@@ -190,16 +217,12 @@ let handle_error
       Writer.flush response_body (fun () ->
           match fd with
           | HTTP fd ->
-            let fd = Option.get (Eio_unix.FD.peek_opt fd) in
-            (match
-               Posix.sendfile
-                 (module Http.Body)
-                 ~src_fd
-                 ~dst_fd:fd
-                 response_body
-             with
-            | Ok () -> ()
-            | Error _exn -> () (* exn_handler exn *))
+            do_sendfile
+              (module Http)
+              ~src_fd
+              ~fd
+              ~report_exn:(fun _exn -> ())
+              response_body
           | HTTPS _ -> assert false)
   in
   try
