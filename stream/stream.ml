@@ -128,6 +128,18 @@ let rec iter ~f t =
       iter ~f t
     | None -> ())
 
+let rec iter_p ~sw ~f t =
+  match t.stream with
+  | Push { capacity = 0; _ } when is_closed t -> ()
+  | Push _ | From _ ->
+    (match take t with
+    | Some item ->
+      let result = Fiber.fork_promise ~sw (fun () -> f item)
+      and rest = Fiber.fork_promise ~sw (fun () -> iter_p ~sw ~f t) in
+      Promise.await_exn result;
+      Promise.await_exn rest
+    | None -> ())
+
 let fold ~f ~init t =
   let rec loop ~f ~acc t =
     match take t with Some item -> loop ~f ~acc:(f acc item) t | None -> acc

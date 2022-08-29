@@ -367,51 +367,27 @@ module Body : sig
     -> t
     -> ('a, Error.t) result
 
-  (* val fold_string *)
-  (* :  (string -> 'a -> 'a) *)
-  (* -> t *)
-  (* -> 'a *)
-  (* -> ('a, Error.t) Lwt_result.t *)
+  val fold_string
+    :  f:('a -> string -> 'a)
+    -> init:'a
+    -> t
+    -> ('a, Error.t) result
 
-  (* val fold_s *)
-  (* :  (Bigstringaf.t Faraday.iovec -> 'a -> 'a Lwt.t) *)
-  (* -> t *)
-  (* -> 'a *)
-  (* -> ('a, Error.t) Lwt_result.t *)
+  val iter : f:(Bigstringaf.t IOVec.t -> unit) -> t -> (unit, Error.t) result
 
-  (* val fold_string_s *)
-  (* :  (string -> 'a -> 'a Lwt.t) *)
-  (* -> t *)
-  (* -> 'a *)
-  (* -> ('a, Error.t) Lwt_result.t *)
-
-  (* val iter *)
-  (* :  (Bigstringaf.t Faraday.iovec -> unit) *)
-  (* -> t *)
-  (* -> (unit, Error.t) Lwt_result.t *)
+  val iter_p
+    :  sw:Eio.Switch.t
+    -> f:(Bigstringaf.t IOVec.t -> unit)
+    -> t
+    -> (unit, Error.t) result
 
   val iter_string : f:(string -> unit) -> t -> (unit, Error.t) result
 
-  (* val iter_s *)
-  (* :  (Bigstringaf.t Faraday.iovec -> unit Lwt.t) *)
-  (* -> t *)
-  (* -> (unit, Error.t) Lwt_result.t *)
-
-  (* val iter_string_s *)
-  (* :  (string -> unit Lwt.t) *)
-  (* -> t *)
-  (* -> (unit, Error.t) Lwt_result.t *)
-
-  (* val iter_p *)
-  (* :  (Bigstringaf.t Faraday.iovec -> unit Lwt.t) *)
-  (* -> t *)
-  (* -> (unit, Error.t) Lwt_result.t *)
-
-  (* val iter_string_p *)
-  (* :  (string -> unit Lwt.t) *)
-  (* -> t *)
-  (* -> (unit, Error.t) Lwt_result.t *)
-
+  val iter_string_p
+    :  sw:Eio.Switch.t
+    -> f:(string -> unit)
+    -> t
+    -> (unit, Error.t) result
   (* val iter_n *)
   (* :  ?max_concurrency:int *)
   (* -> (Bigstringaf.t Faraday.iovec -> unit Lwt.t) *)

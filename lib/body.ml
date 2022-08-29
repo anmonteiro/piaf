@@ -151,12 +151,6 @@ let sendfile ?length path =
   let t, u = Promise.create () in
   Ok (create ~length (`Sendfile (fd, t, u)))
 
-let or_error t ~stream v =
-  Promise.await (Stream.closed stream);
-  match Promise.peek t.error_received with
-  | Some error -> Error error
-  | None -> Ok v
-
 (* TODO: accept buffer for I/O, so that caller can pool buffers? *)
 let stream_of_fd ?on_close fd =
   let { Unix.st_size = length; _ } =
@@ -206,6 +200,12 @@ let stream_to_string { length; _ } stream =
       Buffer.add_bytes result_buffer bytes)
     stream;
   Buffer.contents result_buffer
+
+let or_error t ~stream v =
+  Promise.await (Stream.closed stream);
+  match Promise.peek t.error_received with
+  | Some error -> Error error
+  | None -> Ok v
 
 let to_string ({ contents; _ } as t) =
   match contents with
@@ -399,24 +399,29 @@ let fold ~f ~init t =
   let ret = Stream.fold ~f ~init stream in
   or_error t ~stream ret
 
-(* let fold_string f t init = *)
-(* let* stream, _ = to_string_stream t in *)
-(* let* ret = Lwt_stream.fold f stream init in *)
-(* or_error t ~stream ret *)
+let fold_string ~f ~init t =
+  let stream = to_string_stream t in
+  let ret = Stream.fold ~f ~init stream in
+  or_error t ~stream ret
 
-(* let fold_string_s f t init = *)
-(* let* stream, _ = to_string_stream t in *)
-(* let* ret = Lwt_stream.fold_s f stream init in *)
-(* or_error t ~stream ret *)
-
-(* let iter f t = *)
-(* let* stream, or_error = to_stream t in *)
-(* let* () = Lwt_stream.iter f stream in *)
-(* or_error *)
+let iter ~f t =
+  let stream = to_stream t in
+  Stream.iter ~f stream;
+  or_error t ~stream ()
 
 let iter_string ~f t =
   let stream = to_string_stream t in
   Stream.iter ~f stream;
+  or_error t ~stream ()
+
+let iter_p ~sw ~f t =
+  let stream = to_stream t in
+  Stream.iter_p ~sw ~f stream;
+  or_error t ~stream ()
+
+let iter_string_p ~sw ~f t =
+  let stream = to_string_stream t in
+  Stream.iter_p ~sw ~f stream;
   or_error t ~stream ()
 
 let to_list t =
@@ -426,15 +431,6 @@ let to_list t =
 let to_string_list t =
   let stream = to_string_stream t in
   Stream.to_list stream
-(* let iter_p f t = *)
-(* let* stream, or_error = to_stream t in *)
-(* let* () = Lwt_stream.iter_p f stream in *)
-(* or_error *)
-
-(* let iter_string_p f t = *)
-(* let* stream, or_error = to_string_stream t in *)
-(* let* () = Lwt_stream.iter_p f stream in *)
-(* or_error *)
 
 (* let iter_s f t = *)
 (* let* stream, or_error = to_stream t in *)
