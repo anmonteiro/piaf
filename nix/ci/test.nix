@@ -22,10 +22,13 @@ let
   nix-filter = import "${nix-filter-src}";
 
   inherit (pkgs) lib stdenv fetchTarball ocamlPackages callPackage;
-  piafPkgs = callPackage ./.. {
+  native = (callPackage ./.. {
     doCheck = true;
     inherit nix-filter;
-  };
+  }).native;
+  musl = (callPackage ./.. {
+    inherit nix-filter;
+  }).musl64;
 
   test = pkg:
     let piafDrvs = lib.filterAttrs (_: value: lib.isDerivation value) pkg;
@@ -73,6 +76,6 @@ let
     };
 in
 {
-  native = test piafPkgs.native;
-  musl64 = test piafPkgs.musl64;
+  native = test native;
+  musl64 = test musl;
 }
