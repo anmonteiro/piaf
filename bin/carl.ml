@@ -158,7 +158,8 @@ let print_string ~cli formatter s =
     Logs.warn (fun m -> m "%s" msg);
     Error (`Msg msg))
   else (
-    Format.fprintf formatter "%s@." s;
+    Format.fprintf formatter "%s" s;
+    Format.pp_print_flush formatter ();
     ok)
 
 module Size = struct
@@ -293,7 +294,7 @@ let handle_response
            report_progess ~first:true ~cli running_total total_len;
            let chunk = Bigstringaf.substring buffer ~off ~len in
            let* () = print_string ~cli formatter chunk in
-           let+ _ret =
+           let+ (_ret : int64) =
              Body.fold
                ~f:(fun running_total { Piaf.IOVec.buffer; off; len } ->
                  let new_total = Int64.(add (of_int len) running_total) in
@@ -311,7 +312,7 @@ let handle_response
         | exn -> Error (`Exn exn))
   in
   (match cli.output with
-  | Stdout | Channel "-" -> ()
+  | Stdout | Channel "-" -> Format.pp_print_newline formatter ()
   | Channel _ ->
     Eio_unix.run_in_systhread (fun () ->
         Unix.close (Option.get (Eio_unix.FD.peek_opt channel))));
