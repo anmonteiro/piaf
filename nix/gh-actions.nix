@@ -1,28 +1,21 @@
 { lib }:
 
 let
-  commonSteps =
-    { signingKey
-    , endpoint ? "s3://overlays?endpoint=https://7a53c28e9b7a91239f9ed42da04276bc.r2.cloudflarestorage.com"
-    , awsAccessKeyId
-    , awsSecretAccessKey
-    }: [
-      {
-        uses = "actions/checkout@v2";
-        "with" = {
-          "submodules" = "recursive";
-        };
-      }
-      {
-        uses = "cachix/install-nix-action@v17";
-      }
-      {
-        uses = "ulrikstrid/nix-s3-action@fork";
-        "with" = {
-          inherit endpoint signingKey awsAccessKeyId awsSecretAccessKey;
-        };
-      }
-    ];
+  commonSteps = [
+    {
+      uses = "actions/checkout@v2";
+      "with" = {
+        "submodules" = "recursive";
+      };
+    }
+    {
+      uses = "cachix/install-nix-action@v17";
+      "with" = {
+        extra-substituters = "https://anmonteiro.nix-cache.workers.dev";
+        extra-trusted-public-keys = "ocaml.nix-cache.com-1:/xI2h2+56rwFfKyyFVbkJSeGqSIYMC/Je+7XXqGKDIY=";
+      };
+    }
+  ];
 
   job =
     { steps
@@ -43,7 +36,7 @@ let
     };
 
   gh-actions = {
-    cachedBuild = { name, branches ? [ "master" ], os, cache }:
+    cachedBuild = { name, branches ? [ "master" ], os }:
       lib.generators.toYAML { } {
         inherit name;
         on = {
@@ -57,8 +50,7 @@ let
           (os: { run, name, ... }@conf:
             job ({
               runs-on = os;
-              steps = commonSteps cache
-                ++ [{ inherit name run; }];
+              steps = commonSteps ++ [{ inherit name run; }];
             } // (if (conf ? ocamlVersions) then {
               inherit (conf) ocamlVersions;
             } else { })))
@@ -70,11 +62,6 @@ in
 
 gh-actions.cachedBuild {
   name = "Build";
-  cache = {
-    signingKey = "\${{ secrets.NIX_CACHE_SIGNING_KEY }}";
-    awsAccessKeyId = "\${{ secrets.NIX_CACHE_KEY_ID }}";
-    awsSecretAccessKey = "\${{ secrets.NIX_CACHE_SECRET_KEY }}";
-  };
   os = {
     macos-latest = {
       name = "Run nix-build";

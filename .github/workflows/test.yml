@@ -10,15 +10,10 @@
           }
         },
         {
-          "uses": "cachix/install-nix-action@v17"
-        },
-        {
-          "uses": "ulrikstrid/nix-s3-action@fork",
+          "uses": "cachix/install-nix-action@v17",
           "with": {
-            "awsAccessKeyId": "${{ secrets.NIX_CACHE_KEY_ID }}",
-            "awsSecretAccessKey": "${{ secrets.NIX_CACHE_SECRET_KEY }}",
-            "endpoint": "s3://overlays?endpoint=https://7a53c28e9b7a91239f9ed42da04276bc.r2.cloudflarestorage.com",
-            "signingKey": "${{ secrets.NIX_CACHE_SIGNING_KEY }}"
+            "extra-substituters": "https://anmonteiro.nix-cache.workers.dev",
+            "extra-trusted-public-keys": "ocaml.nix-cache.com-1:/xI2h2+56rwFfKyyFVbkJSeGqSIYMC/Je+7XXqGKDIY="
           }
         },
         {
@@ -47,15 +42,10 @@
           }
         },
         {
-          "uses": "cachix/install-nix-action@v17"
-        },
-        {
-          "uses": "ulrikstrid/nix-s3-action@fork",
+          "uses": "cachix/install-nix-action@v17",
           "with": {
-            "awsAccessKeyId": "${{ secrets.NIX_CACHE_KEY_ID }}",
-            "awsSecretAccessKey": "${{ secrets.NIX_CACHE_SECRET_KEY }}",
-            "endpoint": "s3://overlays?endpoint=https://7a53c28e9b7a91239f9ed42da04276bc.r2.cloudflarestorage.com",
-            "signingKey": "${{ secrets.NIX_CACHE_SIGNING_KEY }}"
+            "extra-substituters": "https://anmonteiro.nix-cache.workers.dev",
+            "extra-trusted-public-keys": "ocaml.nix-cache.com-1:/xI2h2+56rwFfKyyFVbkJSeGqSIYMC/Je+7XXqGKDIY="
           }
         },
         {
