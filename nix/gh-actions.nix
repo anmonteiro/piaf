@@ -11,10 +11,11 @@ let
     {
       uses = "cachix/install-nix-action@v17";
       "with" = {
-        extra_nix_config = {
-          extra-substituters = "https://anmonteiro.nix-cache.workers.dev";
-          extra-trusted-public-keys = "ocaml.nix-cache.com-1:/xI2h2+56rwFfKyyFVbkJSeGqSIYMC/Je+7XXqGKDIY=";
-        };
+        extra_nix_config = ''
+          extra-substituters = "https://anmonteiro.nix-cache.workers.dev"
+
+          extra-trusted-public-keys = "ocaml.nix-cache.com-1:/xI2h2+56rwFfKyyFVbkJSeGqSIYMC/Je+7XXqGKDIY="
+        '';
       };
     }
   ];
