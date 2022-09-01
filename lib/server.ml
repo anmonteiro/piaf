@@ -241,8 +241,7 @@ module Command = struct
     let { config; _ } = server in
     let network = Eio.Stdenv.net env in
     let clock = Eio.Stdenv.clock env in
-    (* let { config; error_handler; handler } = server in *)
-    (* TODO(anmonteiro): config option to listen only in HTTPS?  *)
+    (* TODO(anmonteiro): config option to listen only in HTTPS? *)
     let connection_handler = http_connection_handler server in
     let ({ resolver = http_resolver; _ } as command) =
       listen ?bind_to_address ~sw ~network ~port:config.port connection_handler

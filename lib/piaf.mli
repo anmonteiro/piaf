@@ -41,6 +41,8 @@ module IOVec : sig
   val lengthv : _ t list -> int
   val shift : 'a t -> int -> 'a t
   val shiftv : 'a t list -> int -> 'a t list
+  val of_string : string -> off:int -> len:int -> Bigstringaf.t t
+  val of_bytes : bytes -> off:int -> len:int -> Bigstringaf.t t
   val pp_hum : Format.formatter -> _ t -> unit [@@ocaml.toplevel_printer]
 end
 

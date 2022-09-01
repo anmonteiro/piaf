@@ -32,3 +32,11 @@
 include H2.IOVec
 
 let make buffer ~off ~len = { buffer; off; len }
+
+let of_string s ~off ~len =
+  { buffer = Bigstringaf.of_string s ~off ~len; off; len }
+
+let of_bytes bytes ~off ~len =
+  let buffer = Bigstringaf.create len in
+  Bigstringaf.blit_from_bytes bytes ~src_off:off buffer ~dst_off:0 ~len;
+  { buffer; off; len }
