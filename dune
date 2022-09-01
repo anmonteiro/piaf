@@ -10,6 +10,7 @@
 
 (rule
  (target test.yml)
+ (alias gh-actions)
  (mode
   (promote
    (into .github/workflows)))
