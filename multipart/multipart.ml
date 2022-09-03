@@ -29,8 +29,6 @@
  * POSSIBILITY OF SUCH DAMAGE.
  *---------------------------------------------------------------------------*)
 
-open Lwt.Infix
-
 module List = struct
   include List
 
@@ -273,7 +271,7 @@ let extract_parts ~emit ~finish ~max_chunk_size ~content_type stream =
   (* min chunk size is 1KB. *)
   let max_chunk_size = max max_chunk_size 0x400 in
   let emitters header =
-    let stream, push = Lwt_stream.create () in
+    let stream, push = Stream.create 128 in
     let key = name_of_header header in
     emit key stream;
     push, key
@@ -310,11 +308,10 @@ let extract_parts ~emit ~finish ~max_chunk_size ~content_type stream =
       Ok v
   in
   let rec parse state =
-    Lwt_stream.get stream >>= fun t ->
-    match t with
+    match Stream.take stream with
     | None ->
       (* Stream ended. Still need to check `error`. *)
-      Lwt.return (on_eof state)
+      on_eof state
     | Some { Faraday.buffer; off; len } ->
       (match state with
       | Partial { continue; committed } ->
@@ -322,7 +319,7 @@ let extract_parts ~emit ~finish ~max_chunk_size ~content_type stream =
         if committed = 0 then Qe.compress ke;
         Qe.N.push ke ~blit ~length:Bigstringaf.length ~off ~len buffer;
         if Qe.capacity ke > max_capacity
-        then Lwt.return_error "POST buffer has grown too much"
+        then Error "POST buffer has grown too much"
         else if not (Qe.is_empty ke)
         then
           (* XXX(anmonteiro): It's OK to only read the first slice of the
@@ -336,22 +333,20 @@ let extract_parts ~emit ~finish ~max_chunk_size ~content_type stream =
           parse next_state
         else parse state
       | Fail (pos, marks, msg) ->
-        Lwt.return_error
+        Error
           (Format.asprintf
              "multipart parser failed on position %d. Error: %s ([%s])"
              pos
              msg
              (String.concat "; " marks))
-      | Done (_, v) -> Lwt.return_ok v)
+      | Done (_, v) -> Ok v)
   in
-  parse state >|= function
+  match parse state with
   | Ok t ->
     (* Both headers and the Hash Table are indexed by the `name` in *
        `content-disposition`*)
     Ok t
-  | Error msg ->
-    Lwt.async (fun () -> Lwt_stream.junk_while (fun _ -> true) stream);
-    Error (`Msg msg)
+  | Error msg -> Error (`Msg msg)
 
 type t = string option Multipart_form.t
 
@@ -365,4 +360,4 @@ let parse_multipart_form
   match parse_content_type content_type with
   | Ok content_type ->
     extract_parts ~emit ~finish ~max_chunk_size ~content_type stream
-  | Error e -> Lwt.return_error e
+  | Error e -> Error e

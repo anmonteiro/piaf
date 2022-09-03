@@ -41,6 +41,8 @@ module IOVec : sig
   val lengthv : _ t list -> int
   val shift : 'a t -> int -> 'a t
   val shiftv : 'a t list -> int -> 'a t list
+  val of_string : string -> off:int -> len:int -> Bigstringaf.t t
+  val of_bytes : bytes -> off:int -> len:int -> Bigstringaf.t t
   val pp_hum : Format.formatter -> _ t -> unit [@@ocaml.toplevel_printer]
 end
 
@@ -257,7 +259,7 @@ module Config : sig
               option *)
     ; allow_insecure : bool
           (** Wether to allow insecure server connections when using SSL *)
-    ; max_http_version : Versions.HTTP.t
+    ; max_http_version : Versions.ALPN.t
           (** Use this as the highest HTTP version when sending requests *)
     ; h2c_upgrade : bool
           (** Send an upgrade to `h2c` (HTTP/2 over TCP) request to the server.
@@ -299,6 +301,7 @@ module Error : sig
   type common =
     [ `Exn of exn
     | `Protocol_error of H2.Error_code.t * string
+    | `TLS_error of string
     | `Msg of string
     ]
 
@@ -326,6 +329,8 @@ module Error : sig
   val pp_hum : Format.formatter -> t -> unit [@@ocaml.toplevel_printer]
 end
 
+module Stream = Stream
+
 module Body : sig
   type t
 
@@ -339,81 +344,63 @@ module Body : sig
 
   val length : t -> length
   val empty : t
-  val of_stream : ?length:length -> Bigstringaf.t IOVec.t Lwt_stream.t -> t
-  val of_string_stream : ?length:length -> string Lwt_stream.t -> t
+  val of_stream : ?length:length -> Bigstringaf.t IOVec.t Stream.t -> t
+  val of_string_stream : ?length:length -> string Stream.t -> t
   val of_string : string -> t
   val of_bigstring : ?off:int -> ?len:int -> Bigstringaf.t -> t
-  val sendfile : ?length:length -> string -> (t, Error.t) Lwt_result.t
-  val to_string : t -> (string, Error.t) Lwt_result.t
-  val drain : t -> (unit, Error.t) Lwt_result.t
+  val sendfile : ?length:length -> string -> (t, Error.t) result
+  val to_string : t -> (string, Error.t) result
+  val drain : t -> (unit, Error.t) result
   val is_closed : t -> bool
-  val closed : t -> (unit, Error.t) Lwt_result.t
-  val when_closed : t -> ((unit, Error.t) result -> unit) -> unit
+  val closed : t -> (unit, Error.t) result
+  val when_closed : f:((unit, Error.t) result -> unit) -> t -> unit
+  val is_errored : t -> bool
+
+  (** {2 Destruction} *)
+
+  val to_list : t -> Bigstringaf.t IOVec.t list
+  val to_string_list : t -> string list
 
   (** {3 Traversal} *)
 
   val fold
-    :  (Bigstringaf.t IOVec.t -> 'a -> 'a)
+    :  f:('a -> Bigstringaf.t IOVec.t -> 'a)
+    -> init:'a
     -> t
-    -> 'a
-    -> ('a, Error.t) Lwt_result.t
+    -> ('a, Error.t) result
 
   val fold_string
-    :  (string -> 'a -> 'a)
+    :  f:('a -> string -> 'a)
+    -> init:'a
     -> t
-    -> 'a
-    -> ('a, Error.t) Lwt_result.t
+    -> ('a, Error.t) result
 
-  val fold_s
-    :  (Bigstringaf.t Faraday.iovec -> 'a -> 'a Lwt.t)
-    -> t
-    -> 'a
-    -> ('a, Error.t) Lwt_result.t
-
-  val fold_string_s
-    :  (string -> 'a -> 'a Lwt.t)
-    -> t
-    -> 'a
-    -> ('a, Error.t) Lwt_result.t
-
-  val iter
-    :  (Bigstringaf.t Faraday.iovec -> unit)
-    -> t
-    -> (unit, Error.t) Lwt_result.t
-
-  val iter_string : (string -> unit) -> t -> (unit, Error.t) Lwt_result.t
-
-  val iter_s
-    :  (Bigstringaf.t Faraday.iovec -> unit Lwt.t)
-    -> t
-    -> (unit, Error.t) Lwt_result.t
-
-  val iter_string_s
-    :  (string -> unit Lwt.t)
-    -> t
-    -> (unit, Error.t) Lwt_result.t
+  val iter : f:(Bigstringaf.t IOVec.t -> unit) -> t -> (unit, Error.t) result
 
   val iter_p
-    :  (Bigstringaf.t Faraday.iovec -> unit Lwt.t)
+    :  sw:Eio.Switch.t
+    -> f:(Bigstringaf.t IOVec.t -> unit)
     -> t
-    -> (unit, Error.t) Lwt_result.t
+    -> (unit, Error.t) result
+
+  val iter_string : f:(string -> unit) -> t -> (unit, Error.t) result
 
   val iter_string_p
-    :  (string -> unit Lwt.t)
+    :  sw:Eio.Switch.t
+    -> f:(string -> unit)
     -> t
-    -> (unit, Error.t) Lwt_result.t
+    -> (unit, Error.t) result
+  (* val iter_n *)
+  (* :  ?max_concurrency:int *)
+  (* -> (Bigstringaf.t Faraday.iovec -> unit Lwt.t) *)
+  (* -> t *)
+  (* -> (unit, Error.t) Lwt_result.t *)
 
-  val iter_n
-    :  ?max_concurrency:int
-    -> (Bigstringaf.t Faraday.iovec -> unit Lwt.t)
-    -> t
-    -> (unit, Error.t) Lwt_result.t
-
-  val iter_string_n
-    :  ?max_concurrency:int
-    -> (string -> unit Lwt.t)
-    -> t
-    -> (unit, Error.t) Lwt_result.t
+  (* val iter_string_n *)
+  (* :  ?max_concurrency:int *)
+  (* -> (string -> unit Lwt.t) *)
+  (* -> t *)
+  (* -> (unit, Error.t) Lwt_result.t *)
 
   (** {3 Conversion to [Lwt_stream.t]} *)
 
@@ -429,13 +416,11 @@ module Body : sig
       failure that caused the body to not have been fully transferred from the
       peer. *)
 
-  val to_stream
-    :  t
-    -> (Bigstringaf.t IOVec.t Lwt_stream.t * (unit, Error.t) Lwt_result.t) Lwt.t
+  val to_stream : t -> Bigstringaf.t IOVec.t Stream.t
+  (* * (unit, Error.t) result Eio.Promise.t *)
 
-  val to_string_stream
-    :  t
-    -> (string Lwt_stream.t * (unit, Error.t) Lwt_result.t) Lwt.t
+  val to_string_stream : t -> string Stream.t
+  (* * (unit, Error.t) result Eio.Promise.t *)
 end
 
 module Request : sig
@@ -494,14 +479,14 @@ module Response : sig
   val of_string_stream
     :  ?version:Versions.HTTP.t
     -> ?headers:Headers.t
-    -> body:string Lwt_stream.t
+    -> body:string Stream.t
     -> Status.t
     -> t
 
   val of_stream
     :  ?version:Versions.HTTP.t
     -> ?headers:Headers.t
-    -> body:Bigstringaf.t IOVec.t Lwt_stream.t
+    -> body:Bigstringaf.t IOVec.t Stream.t
     -> Status.t
     -> t
 
@@ -515,13 +500,13 @@ module Response : sig
     :  ?version:Versions.HTTP.t
     -> ?headers:Headers.t
     -> string
-    -> (t, Error.t) Lwt_result.t
+    -> (t, Error.t) result
 
   val sendfile
     :  ?version:Versions.HTTP.t
     -> ?headers:Headers.t
     -> string
-    -> (t, Error.t) Lwt_result.t
+    -> (t, Error.t) result
 
   val or_internal_error : (t, Error.t) Result.t -> t
   val persistent_connection : t -> bool
@@ -540,12 +525,12 @@ module Form : sig
     val stream
       :  ?max_chunk_size:int
       -> Request.t
-      -> (t Lwt_stream.t, Error.t) Lwt_result.t
+      -> (t Stream.t, Error.t) result
 
     val assoc
       :  ?max_chunk_size:int
       -> Request.t
-      -> ((string * t) list, Error.t) Lwt_result.t
+      -> ((string * t) list, Error.t) result
   end
 end
 
@@ -562,7 +547,12 @@ end
 module Client : sig
   type t
 
-  val create : ?config:Config.t -> Uri.t -> (t, Error.t) Lwt_result.t
+  val create
+    :  ?config:Config.t
+    -> sw:Eio.Switch.t
+    -> Eio.Stdenv.t
+    -> Uri.t
+    -> (t, Error.t) result
   (** [create ?config uri] opens a connection to [uri] (initially) that can be
       used to issue multiple requests to the remote endpoint.
 
@@ -574,41 +564,41 @@ module Client : sig
     :  t
     -> ?headers:(string * string) list
     -> string
-    -> (Response.t, Error.t) Lwt_result.t
+    -> (Response.t, Error.t) result
 
   val get
     :  t
     -> ?headers:(string * string) list
     -> string
-    -> (Response.t, Error.t) Lwt_result.t
+    -> (Response.t, Error.t) result
 
   val post
     :  t
     -> ?headers:(string * string) list
     -> ?body:Body.t
     -> string
-    -> (Response.t, Error.t) Lwt_result.t
+    -> (Response.t, Error.t) result
 
   val put
     :  t
     -> ?headers:(string * string) list
     -> ?body:Body.t
     -> string
-    -> (Response.t, Error.t) Lwt_result.t
+    -> (Response.t, Error.t) result
 
   val patch
     :  t
     -> ?headers:(string * string) list
     -> ?body:Body.t
     -> string
-    -> (Response.t, Error.t) Lwt_result.t
+    -> (Response.t, Error.t) result
 
   val delete
     :  t
     -> ?headers:(string * string) list
     -> ?body:Body.t
     -> string
-    -> (Response.t, Error.t) Lwt_result.t
+    -> (Response.t, Error.t) result
 
   val request
     :  t
@@ -616,11 +606,11 @@ module Client : sig
     -> ?body:Body.t
     -> meth:Method.t
     -> string
-    -> (Response.t, Error.t) Lwt_result.t
+    -> (Response.t, Error.t) result
 
-  val send : t -> Request.t -> (Response.t, Error.t) Lwt_result.t
+  val send : t -> Request.t -> (Response.t, Error.t) result
 
-  val shutdown : t -> unit Lwt.t
+  val shutdown : t -> unit
   (** [shutdown t] tears down the connection [t] and frees up all the resources
       associated with it. *)
 
@@ -628,57 +618,148 @@ module Client : sig
     val head
       :  ?config:Config.t
       -> ?headers:(string * string) list
+      -> sw:Eio.Switch.t
+      -> Eio.Stdenv.t
       -> Uri.t
-      -> (Response.t, Error.t) Lwt_result.t
+      -> (Response.t, Error.t) result
 
     val get
       :  ?config:Config.t
       -> ?headers:(string * string) list
+      -> sw:Eio.Switch.t
+      -> Eio.Stdenv.t
       -> Uri.t
-      -> (Response.t, Error.t) Lwt_result.t
+      -> (Response.t, Error.t) result
 
     val post
       :  ?config:Config.t
       -> ?headers:(string * string) list
       -> ?body:Body.t
+      -> sw:Eio.Switch.t
+      -> Eio.Stdenv.t
       -> Uri.t
-      -> (Response.t, Error.t) Lwt_result.t
+      -> (Response.t, Error.t) result
 
     val put
       :  ?config:Config.t
       -> ?headers:(string * string) list
       -> ?body:Body.t
+      -> sw:Eio.Switch.t
+      -> Eio.Stdenv.t
       -> Uri.t
-      -> (Response.t, Error.t) Lwt_result.t
+      -> (Response.t, Error.t) result
 
     val patch
       :  ?config:Config.t
       -> ?headers:(string * string) list
       -> ?body:Body.t
+      -> sw:Eio.Switch.t
+      -> Eio.Stdenv.t
       -> Uri.t
-      -> (Response.t, Error.t) Lwt_result.t
+      -> (Response.t, Error.t) result
 
     val delete
       :  ?config:Config.t
       -> ?headers:(string * string) list
       -> ?body:Body.t
+      -> sw:Eio.Switch.t
+      -> Eio.Stdenv.t
       -> Uri.t
-      -> (Response.t, Error.t) Lwt_result.t
+      -> (Response.t, Error.t) result
 
     val request
       :  ?config:Config.t
       -> ?headers:(string * string) list
       -> ?body:Body.t
+      -> sw:Eio.Switch.t
+      -> Eio.Stdenv.t
       -> meth:Method.t
       -> Uri.t
-      -> (Response.t, Error.t) Lwt_result.t
+      -> (Response.t, Error.t) result
     (** Use another request method. *)
   end
 end
 
+module Request_info : sig
+  type t =
+    { scheme : Scheme.t
+    ; version : Versions.ALPN.t
+    ; client_address : Eio.Net.Sockaddr.stream
+    }
+end
+
 module Server : sig
+  module Config : sig
+    module HTTPS : sig
+      type t =
+        { port : int
+        ; certificate : Cert.t * Cert.t (* Server certificate and private key *)
+        ; cacert : Cert.t option
+              (** Either the certificates string or path to a file with
+                  certificates to verify peer. Both should be in PEM format *)
+        ; capath : string option
+              (** The path to a directory which contains CA certificates in PEM
+                  format *)
+        ; min_tls_version : Versions.TLS.t
+        ; max_tls_version : Versions.TLS.t
+        ; allow_insecure : bool
+              (** Wether to allow insecure server connections *)
+        ; enforce_client_cert : bool
+        }
+
+      val create
+        :  ?port:int
+        -> ?cacert:Cert.t
+        -> ?capath:string
+        -> ?min_tls_version:Versions.TLS.t
+        -> ?max_tls_version:Versions.TLS.t
+        -> ?allow_insecure:bool
+        -> ?enforce_client_cert:bool
+        -> Cert.t * Cert.t
+        -> t
+    end
+
+    type t =
+      { port : int
+      ; max_http_version : Versions.ALPN.t
+            (** Use this as the highest HTTP version when sending requests *)
+      ; https : HTTPS.t option
+      ; h2c_upgrade : bool
+            (** Send an upgrade to `h2c` (HTTP/2 over TCP) request to the
+                server. `http2_prior_knowledge` below ignores this option. *)
+      ; tcp_nodelay : bool
+      ; accept_timeout : float (* seconds *)
+      ; (* Buffer sizes *)
+        buffer_size : int
+            (** Buffer size used for requests and responses. Defaults to 16384
+                bytes *)
+      ; body_buffer_size : int
+            (** Buffer size used for request and response bodies. *)
+      ; enable_http2_server_push : bool
+            (* ; max_concurrent_streams : int ; initial_window_size : int *)
+            (** TODO(anmonteiro): these are HTTP/2 specific and we're probably
+                OK with the defaults *)
+      ; flush_headers_immediately : bool
+            (** Specifies whether to flush message headers to the transport
+                immediately, or if Piaf should wait for the first body bytes to
+                be written. Defaults to [false]. *)
+      }
+
+    val create
+      :  ?max_http_version:Versions.ALPN.t
+      -> ?https:HTTPS.t
+      -> ?h2c_upgrade:bool
+      -> ?tcp_nodelay:bool
+      -> ?accept_timeout:float
+      -> ?buffer_size:int
+      -> ?body_buffer_size:int
+      -> ?flush_headers_immediately:bool
+      -> int
+      -> t
+  end
+
   module Service : sig
-    type ('req, 'resp) t = 'req -> 'resp Lwt.t
+    type ('req, 'resp) t = 'req -> 'resp
   end
 
   module Middleware : sig
@@ -696,11 +777,7 @@ module Server : sig
 
     type 'ctx t = ('ctx ctx, Response.t) Service.t
 
-    val not_found : 'a -> Response.t Lwt.t
-  end
-
-  module Error_response : sig
-    type t
+    val not_found : 'a -> Response.t
   end
 
   type 'ctx ctx = 'ctx Handler.ctx =
@@ -708,20 +785,66 @@ module Server : sig
     ; request : Request.t
     }
 
-  type 'ctx t = 'ctx Handler.t
+  module Error_response : sig
+    type t
+  end
+
+  type error_handler =
+    Eio.Net.Sockaddr.stream
+    -> ?request:Request.t
+    -> respond:(headers:Headers.t -> Body.t -> Error_response.t)
+    -> Error.server
+    -> Error_response.t
+
+  type t
 
   val create
-    :  ?config:Config.t
-    -> ?error_handler:
-         (Unix.sockaddr
-          -> ?request:Request.t
-          -> respond:(headers:Headers.t -> Body.t -> Error_response.t)
-          -> Httpaf.Server_connection.error
-          -> Error_response.t Lwt.t)
-    -> Unix.sockaddr Handler.t
-    -> Unix.sockaddr
-    -> Httpaf_lwt_unix.Server.socket
-    -> unit Lwt.t
+    :  ?error_handler:error_handler
+    -> config:Config.t
+    -> Request_info.t Handler.t
+    -> t
+
+  module Command : sig
+    type connection_handler =
+      sw:Eio.Switch.t
+      -> Eio.Net.stream_socket
+      -> Eio.Net.Sockaddr.stream
+      -> unit
+
+    type server := t
+    type t
+
+    val start
+      :  ?bind_to_address:Eio.Net.Ipaddr.v4v6
+      -> sw:Eio.Switch.t
+      -> Eio.Stdenv.t
+      -> server
+      -> t
+
+    val shutdown : t -> unit
+
+    val listen
+      :  ?bind_to_address:Eio.Net.Ipaddr.v4v6
+      -> sw:Eio.Switch.t
+      -> network:Eio.Net.t
+      -> port:int
+      -> connection_handler
+      -> t
+    (** [listen ~sw ?bind_to_address ~network ~port connection_handler] starts a
+        server for [connection_handler]. It is preferred to use [start] instead,
+        which starts a server for a Piaf handler. *)
+  end
+
+  val http_connection_handler : t -> Command.connection_handler
+  (** [connection_handler server] returns an HTTP/1.1 connection handler
+      suitable to be passed to e.g. [Eio.Net.accept_fork]. It is generally
+      recommended to use the [Command] module instead. *)
+
+  (* val https_connection_handler : t -> Command.connection_handler *)
+  (** [connection_handler server] returns an HTTPS connection handler suitable
+      to be passed to e.g. [Eio.Net.accept_fork], which can speak both HTTP/1
+      and HTTP/2, according to its configuration. It is generally recommended to
+      use the [Command] module instead. *)
 end
 
 module Cookies : sig

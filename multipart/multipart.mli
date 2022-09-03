@@ -70,7 +70,7 @@ val content_type : Multipart_form.Header.t -> Multipart_form.Content_type.t
 val parse_multipart_form
   :  content_type:string
   -> max_chunk_size:int
-  -> emit:(string option -> Bigstringaf.t Faraday.iovec Lwt_stream.t -> unit)
+  -> emit:(string option -> Bigstringaf.t Faraday.iovec Stream.t -> unit)
   -> ?finish:(unit -> unit)
-  -> Bigstringaf.t Faraday.iovec Lwt_stream.t
-  -> (t, [> `Msg of string ]) result Lwt.t
+  -> Bigstringaf.t Faraday.iovec Stream.t
+  -> (t, [> `Msg of string ]) result

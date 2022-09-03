@@ -32,35 +32,41 @@
 (* This module uses the interfaces in `s.ml` to abstract over HTTP/1 and HTTP/2
  * and their respective insecure / secure versions. *)
 
-open Monads.Bindings
+open Eio.Std
 
 let src = Logs.Src.create "piaf.http" ~doc:"Piaf HTTP module"
 
 module Log = (val Logs.src_log src : Logs.LOG)
 
-let make_error_handler notify_error ~kind:_ error =
-  Lwt.wakeup notify_error error
+let ptoerr p () = Error (Promise.await p)
 
-let lwterr e = Lwt.map (fun e -> Error e) e
+let make_error_handler notify_error ~kind:_ error =
+  let error =
+    match error with
+    | `Exn (Eio_ssl.Exn.Ssl_exception { message; _ }) -> `TLS_error message
+    | error -> error
+  in
+  Promise.resolve notify_error error
 
 let create_connection
     : type a r.
       (module Http_intf.HTTPCommon
          with type Client.socket = a
           and type Client.runtime = r)
+      -> sw:Eio.Switch.t
       -> config:Config.t
       -> conn_info:Connection.Connection_info.t
       -> version:Versions.HTTP.t
       -> a
-      -> (Connection.t, Error.client) result Lwt.t
+      -> (Connection.t, Error.client) result
   =
- fun (module Http_impl) ~config ~conn_info ~version socket ->
+ fun (module Http_impl) ~sw ~config ~conn_info ~version socket ->
   let connection_error_received, notify_connection_error_received =
-    Lwt.wait ()
+    Promise.create ()
   in
   let error_handler = make_error_handler notify_connection_error_received in
-  let* handle, runtime =
-    Http_impl.Client.create_connection ~config ~error_handler socket
+  let handle, runtime =
+    Http_impl.Client.create_connection ~config ~error_handler ~sw socket
   in
   let conn =
     Connection.Conn
@@ -70,9 +76,10 @@ let create_connection
       ; runtime
       ; connection_error_received
       ; version
+      ; sw
       }
   in
-  Lwt.choose [ Lwt_result.return conn; lwterr connection_error_received ]
+  Fiber.first (Fun.const (Ok conn)) (ptoerr connection_error_received)
 
 let flush_and_close
     : type a. (module Body.BODY with type Writer.t = a) -> a -> unit
@@ -83,18 +90,15 @@ let flush_and_close
           m "Request body has been completely and successfully uploaded"))
 
 let handle_response
-    :  Response.t Lwt.t -> Error.client Lwt.t -> Error.client Lwt.t
-    -> (Response.t, Error.client) result Lwt.t
+    :  sw:Switch.t -> Response.t Promise.t -> Error.client Promise.t
+    -> Error.client Promise.t -> (Response.t, Error.client) result
   =
- fun response_p response_error_p connection_error_p ->
-  (* Use `Lwt.choose` specifically so that we don't cancel the
-   * `connection_error_p` promise. We want it to stick around for subsequent
-   * requests on the connection. *)
-  let+ result =
-    Lwt.choose
-      [ Lwt_result.ok response_p
-      ; lwterr response_error_p
-      ; lwterr connection_error_p
+ fun ~sw response_p response_error_p connection_error_p ->
+  let result =
+    Fiber.any
+      [ (fun () -> Ok (Promise.await response_p))
+      ; ptoerr response_error_p
+      ; ptoerr connection_error_p
       ]
   in
   match result with
@@ -104,9 +108,19 @@ let handle_response
           "@[<v 0>Received response:@]@]@;<0 2>@[<v 0>%a@]"
           Response.pp_hum
           response);
-    Body.embed_error_received
-      response.body
-      (Lwt.choose [ connection_error_p; response_error_p ] :> Error.t Lwt.t);
+
+    let error_p, error_u = Promise.create () in
+    Fiber.fork ~sw (fun () ->
+        match
+          Fiber.any
+            [ (fun () -> Error (Promise.await response_error_p :> Error.t))
+            ; (fun () -> Error (Promise.await connection_error_p :> Error.t))
+            ; (fun () -> Body.closed response.body)
+            ]
+        with
+        | Ok () -> ()
+        | Error error -> Promise.resolve error_u error);
+    Body.embed_error_received response.body error_p;
     Ok response
   | Error _ as error ->
     (* TODO: Close the connection if we receive a connection error *)
@@ -114,19 +128,25 @@ let handle_response
 
 let send_request
     :  Connection.t -> config:Config.t -> body:Body.t -> Request.t
-    -> (Response.t, 'err) Lwt_result.t
+    -> (Response.t, 'err) Result.t
   =
  fun conn ~config ~body request ->
   let (Connection.Conn
-        { impl = (module Http); handle; connection_error_received; runtime; _ })
+        { impl = (module Http)
+        ; handle
+        ; connection_error_received
+        ; runtime
+        ; sw
+        ; _
+        })
     =
     conn
   in
   let module Client = Http.Client in
   let module Bodyw = Http.Body.Writer in
-  let response_received, notify_response = Lwt.wait () in
-  let response_handler response = Lwt.wakeup_later notify_response response in
-  let error_received, notify_error = Lwt.wait () in
+  let response_received, notify_response = Promise.create () in
+  let response_handler response = Promise.resolve notify_response response in
+  let error_received, notify_error = Promise.create () in
   let error_handler = make_error_handler notify_error in
   Log.info (fun m ->
       m "@[<v 0>Sending request:@]@]@;<0 2>@[<v 0>%a@]@." Request.pp_hum request);
@@ -143,56 +163,63 @@ let send_request
       ~response_handler
       request
   in
-  Lwt.async (fun () ->
+  Fiber.fork ~sw (fun () ->
       match body.contents with
-      | `Empty _ -> Lwt.wrap1 Bodyw.close request_body
+      | `Empty _ -> Bodyw.close request_body
       | `String s ->
         Bodyw.write_string request_body s;
-        Lwt.wrap2 flush_and_close (module Http.Body) request_body
+        flush_and_close (module Http.Body) request_body
       | `Bigstring { IOVec.buffer; off; len } ->
         Bodyw.schedule_bigstring request_body ~off ~len buffer;
-        Lwt.wrap2 flush_and_close (module Http.Body) request_body
+        flush_and_close (module Http.Body) request_body
       | `Stream stream ->
-        Lwt.on_success (Lwt_stream.closed stream) (fun () ->
-            flush_and_close (module Http.Body) request_body);
-        Lwt.wrap3 Body.stream_write_body (module Http.Body) request_body stream
+        Fiber.fork ~sw (fun () ->
+            Stream.when_closed
+              ~f:(fun () -> flush_and_close (module Http.Body) request_body)
+              stream);
+        Body.stream_write_body (module Http.Body) request_body stream
       | `Sendfile (src_fd, _, _) ->
         (match runtime with
         | HTTP runtime ->
           Bodyw.close request_body;
-          let on_exn exn = Lwt.wakeup notify_error (`Exn exn) in
-          Posix.sendfile
-            (module Http.Body)
-            ~on_exn
-            ~src_fd
-            ~dst_fd:(Gluten_lwt_unix.Client.socket runtime)
-            request_body;
-          Lwt.return_unit
+          (match
+             Posix.sendfile
+               (module Http.Body)
+               ~src_fd
+               ~dst_fd:
+                 (Option.get
+                    (Eio_unix.FD.peek_opt (Gluten_eio.Client.socket runtime)))
+               request_body
+           with
+          | Ok () -> ()
+          | Error exn -> Promise.resolve notify_error (`Exn exn))
         | HTTPS _ ->
           (* can't `sendfile` on an encrypted connection.
            * TODO(anmonteiro): Return error message saying that. *)
           assert false));
-  handle_response response_received error_received connection_error_received
+  handle_response ~sw response_received error_received connection_error_received
 
 let can't_upgrade msg =
-  Lwt_result.fail (`Protocol_error (H2.Error_code.HTTP_1_1_Required, msg))
+  Error (`Protocol_error (H2.Error_code.HTTP_1_1_Required, msg))
 
 let create_h2c_connection
     :  config:Config.t -> conn_info:Connection.Connection_info.t
-    -> http_request:Request.t -> Scheme.Runtime.t
-    -> (Connection.t * Response.t, Error.client) result Lwt.t
+    -> http_request:Request.t -> sw:Eio.Switch.t -> Scheme.Runtime.t
+    -> (Connection.t * Response.t, Error.client) result
   =
- fun ~config ~conn_info ~http_request runtime ->
+ fun ~config ~conn_info ~http_request ~sw runtime ->
   match runtime with
   | HTTP http_runtime ->
     let (module Http2) = (module Http2.HTTP : Http_intf.HTTP2) in
-    let response_received, notify_response_received = Lwt.wait () in
+    let response_received, notify_response_received = Promise.create () in
     let response_handler response =
-      Lwt.wakeup_later notify_response_received response
+      Promise.resolve notify_response_received response
     in
-    let connection_error_received, notify_error_received = Lwt.wait () in
+    let connection_error_received, notify_error_received = Promise.create () in
     let error_handler = make_error_handler notify_error_received in
-    let response_error_received, notify_response_error_received = Lwt.wait () in
+    let response_error_received, notify_response_error_received =
+      Promise.create ()
+    in
     let response_error_handler =
       make_error_handler notify_response_error_received
     in
@@ -209,8 +236,9 @@ let create_h2c_connection
       Log.info (fun m -> m "Connection state changed (HTTP/2 confirmed)");
       (* Doesn't write the body by design. The server holds on to the HTTP/1.1 body
        * that was sent as part of the upgrade. *)
-      let+ result =
+      let result =
         handle_response
+          ~sw
           response_received
           response_error_received
           connection_error_received
@@ -225,6 +253,7 @@ let create_h2c_connection
             ; runtime
             ; connection_error_received
             ; version = Versions.HTTP.v2_0
+            ; sw
             }
         in
         Ok (connection, response)
@@ -236,8 +265,7 @@ let create_h2c_connection
        communicating over HTTPS"
 
 let shutdown
-    : type t.
-      (module Http_intf.HTTPCommon with type Client.t = t) -> t -> unit Lwt.t
+    : type t. (module Http_intf.HTTPCommon with type Client.t = t) -> t -> unit
   =
  fun (module Http) conn -> Http.Client.shutdown conn
 

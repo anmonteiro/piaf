@@ -1,0 +1,4 @@
+(library
+ (name multipart_lwt)
+ (public_name piaf-lwt.multipart)
+ (libraries faraday ke multipart_form lwt))

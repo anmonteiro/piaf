@@ -53,10 +53,10 @@ module Multipart = struct
     (* TODO(anmonteiro): validate max content-length from a config, etc. *)
     match Headers.get_exn request.headers "content-type" with
     | content_type when is_valid_content_type content_type ->
-      let* stream, _or_error = Body.to_stream request.body in
-      let kvs, push_to_kvs = Lwt_stream.create () in
+      let stream (* , _or_error *) = Body.to_stream request.body in
+      let kvs, push_to_kvs = Stream.create 128 in
       let emit name stream = push_to_kvs (Some (name, stream)) in
-      let++! multipart =
+      let+! multipart =
         Multipart.parse_multipart_form
           ~content_type
           ~max_chunk_size
@@ -65,8 +65,8 @@ module Multipart = struct
           stream
       in
       let multipart_fields = Multipart.result_fields multipart in
-      Lwt_stream.map_s
-        (fun (name, stream) ->
+      Stream.map
+        ~f:(fun (name, stream) ->
           let name = Option.get name in
           let headers = List.assoc name multipart_fields in
           let content_type = Multipart.content_type headers in
@@ -84,30 +84,29 @@ module Multipart = struct
           let filename =
             Multipart_form.Content_disposition.filename content_disposition
           in
-          Lwt.return
-            { name
-            ; filename =
-                (* From RFC2183§2.3:
-                 *
-                 *   The receiving MUA SHOULD NOT respect any directory path
-                 *   information that may seem to be present in the filename
-                 *   parameter. The filename should be treated as a terminal
-                 *   component only. *)
-                Option.map Filename.basename filename
-            ; content_type
-            ; body = Body.of_stream stream
-            })
+          { name
+          ; filename =
+              (* From RFC2183§2.3:
+               *
+               *   The receiving MUA SHOULD NOT respect any directory path
+               *   information that may seem to be present in the filename
+               *   parameter. The filename should be treated as a terminal
+               *   component only. *)
+              Option.map Filename.basename filename
+          ; content_type
+          ; body = Body.of_stream stream
+          })
         kvs
     | _ | (exception Failure _) ->
-      Lwt.return_error
-        (`Msg "Wrong or missing `content-type` header for multipart upload")
+      Error (`Msg "Wrong or missing `content-type` header for multipart upload")
 
   let assoc ?max_chunk_size (request : Request.t) =
-    let**! field_stream = stream ?max_chunk_size request in
-    let* result =
-      Lwt_stream.fold (fun t acc -> (t.name, t) :: acc) field_stream []
+    let*! field_stream = stream ?max_chunk_size request in
+    let result =
+      Stream.fold ~f:(fun acc t -> (t.name, t) :: acc) ~init:[] field_stream
     in
-    let* _stream, or_error = Body.to_stream request.body in
-    let+ or_error_result = or_error in
-    Result.map (fun () -> result) or_error_result
+    Ok result
+  (* let* _stream = Body.to_stream request.body in *)
+  (* let+ or_error_result = or_error in *)
+  (* Result.map (fun () -> result) or_error_result *)
 end

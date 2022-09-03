@@ -1,8 +1,7 @@
-open Lwt.Syntax
 open Piaf
 
-let test_copy_file _ () =
-  let+ response = Response.copy_file "./test_response.ml" in
+let test_copy_file () =
+  let response = Response.copy_file "./test_response.ml" in
   Alcotest.(check string)
     "expected status 200"
     "200"
@@ -12,8 +11,8 @@ let test_copy_file _ () =
     (Headers.of_list [ Headers.Well_known.content_type, "text/x-ocaml" ])
     (Result.get_ok response).headers
 
-let test_copy_file_nonexistent _ () =
-  let+ response = Response.copy_file "./does_not_exist.ml" in
+let test_copy_file_nonexistent () =
+  let response = Response.copy_file "./does_not_exist.ml" in
   Alcotest.(
     check
       (result (Alcotest.of_pp Response.pp_hum) (Alcotest.of_pp Error.pp_hum)))
@@ -21,8 +20,8 @@ let test_copy_file_nonexistent _ () =
     (Error (`Exn (Unix.Unix_error (Unix.ENOENT, "open", "./does_not_exist.ml"))))
     response
 
-let test_sendfile _ () =
-  let+ response = Response.sendfile "./test_response.ml" in
+let test_sendfile () =
+  let response = Response.sendfile "./test_response.ml" in
   Alcotest.(check string)
     "expected status 200"
     "200"
@@ -32,8 +31,8 @@ let test_sendfile _ () =
     (Headers.of_list [ Headers.Well_known.content_type, "text/x-ocaml" ])
     (Result.get_ok response).headers
 
-let test_sendfile_nonexistent _ () =
-  let+ response = Response.sendfile "./does_not_exist.ml" in
+let test_sendfile_nonexistent () =
+  let response = Response.sendfile "./does_not_exist.ml" in
   Alcotest.(
     check
       (result (Alcotest.of_pp Response.pp_hum) (Alcotest.of_pp Error.pp_hum)))
@@ -43,13 +42,11 @@ let test_sendfile_nonexistent _ () =
 
 let suite =
   [ ( "response"
-    , List.map
-        (fun (desc, ty, f) -> Alcotest_lwt.test_case desc ty f)
-        [ "copy_file", `Quick, test_copy_file
-        ; "non-existent copy_file", `Quick, test_copy_file_nonexistent
-        ; "sendfile", `Quick, test_sendfile
-        ; "non-existent sendfile", `Quick, test_sendfile_nonexistent
-        ] )
+    , [ "copy_file", `Quick, test_copy_file
+      ; "non-existent copy_file", `Quick, test_copy_file_nonexistent
+      ; "sendfile", `Quick, test_sendfile
+      ; "non-existent sendfile", `Quick, test_sendfile_nonexistent
+      ] )
   ]
 
 let () =
@@ -80,4 +77,4 @@ let () =
     Logs.set_reporter format_reporter
   in
   setup_log Debug;
-  Lwt_main.run (Alcotest_lwt.run "Piaf client tests" suite)
+  Eio_main.run (fun _stdenv -> Alcotest.run "Piaf client tests" suite)

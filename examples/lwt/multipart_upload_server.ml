@@ -1,5 +1,5 @@
 open Lwt.Syntax
-open Piaf
+open Piaf_lwt
 
 let setup_log ?style_renderer level =
   let pp_header src ppf (l, h) =

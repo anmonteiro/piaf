@@ -1,4 +1,4 @@
-open Lwt.Syntax
+open Eio.Std
 
 let content_type =
   "multipart/form-data; boundary=----WebKitFormBoundaryVuTaDGWRcduyfmAv"
@@ -28,13 +28,13 @@ let multipart_request_body_chunks payload =
   done;
   List.rev !ret
 
-let test_simple_boundary _ () =
+let test_simple_boundary ~sw _env () =
   let payload_size = 0x1000 in
   let max_chunk_size = 0x400 in
   let chunks =
     multipart_request_body_chunks (multipart_request_body payload_size)
   in
-  let stream, push = Lwt_stream.create () in
+  let stream, push = Stream.create 1024 in
   List.iter
     (fun x ->
       push
@@ -46,20 +46,17 @@ let test_simple_boundary _ () =
            }))
     chunks;
   push None;
-  let waiter, wakener = Lwt.wait () in
-  let emit name stream = Lwt.wakeup wakener (name, stream) in
+  let waiter, wakener = Promise.create () in
+  let emit name stream = Promise.resolve wakener (name, stream) in
   let multipart_result =
-    Lwt.bind
-      (Multipart.parse_multipart_form
+    Fiber.fork_promise ~sw (fun () ->
+      Multipart.parse_multipart_form
          ~content_type
          ~max_chunk_size
          ~emit
          stream)
-      (fun x ->
-        let+ () = Lwt_unix.sleep 0.0 in
-        x)
   in
-  let* name, stream = waiter in
+  let name, stream = Promise.await waiter in
   Alcotest.(check (option string))
     "filename extracted"
     (Some "picture.png")
@@ -67,16 +64,15 @@ let test_simple_boundary _ () =
   Alcotest.(check bool)
     "working through chunks in parallel (stream arrives before the promise \
      resolves)"
-    true
-    (Lwt.state multipart_result = Sleep);
-  let* chunks = Lwt_stream.to_list stream in
+    false
+    ((Promise.is_resolved multipart_result));
+  let chunks = Stream.to_list stream in
   Alcotest.(check int)
     "Correct number of chunks emitted"
     (payload_size / max_chunk_size)
     (List.length chunks);
-  let+ multipart_result = multipart_result in
-  match multipart_result with
-  | Ok t ->
+  match Promise.await multipart_result with
+  | Ok (Ok t) ->
     let fields = Multipart.result_fields t in
     Alcotest.(check int) "one field" 1 (List.length fields);
     let name, multipart_fields = List.hd fields in
@@ -88,16 +84,18 @@ let test_simple_boundary _ () =
                           parameters= (parameters (name, "picture.png")); }
 Content-Type[*]: image/iana:png |}
       (Format.asprintf "%a" Multipart_form.Header.pp multipart_fields)
-  | Error (`Msg msg) ->
+  | Ok (Error (`Msg msg)) ->
     Alcotest.fail msg
+  | Error (exn) ->
+    Alcotest.fail (Printexc.to_string exn)
 
-let test_unaligned_boundary _ () =
+let test_unaligned_boundary ~sw _env () =
   let payload_size = 0x1100 in
   let max_chunk_size = 0x400 in
   let chunks =
     multipart_request_body_chunks (multipart_request_body payload_size)
   in
-  let stream, push = Lwt_stream.create () in
+  let stream, push = Stream.create 1024 in
   List.iter
     (fun x ->
       push
@@ -109,30 +107,31 @@ let test_unaligned_boundary _ () =
            }))
     chunks;
   push None;
-  let waiter, wakener = Lwt.wait () in
-  let emit name stream = Lwt.wakeup wakener (name, stream) in
+  let waiter, wakener = Promise.create () in
+  let emit name stream = Promise.resolve wakener (name, stream) in
   let _multipart_result =
+    Fiber.fork_promise ~sw (fun () ->
     Multipart.parse_multipart_form ~content_type ~max_chunk_size ~emit stream
+    )
   in
-  let* name, stream = waiter in
+  let name, stream = Promise.await waiter in
   Alcotest.(check (option string))
     "filename extracted"
     (Some "picture.png")
     name;
-  let* chunks = Lwt_stream.to_list stream in
+  let chunks = Stream.to_list stream in
   Alcotest.(check int)
     "Correct number of chunks emitted"
     ((payload_size / max_chunk_size) + 1)
-    (List.length chunks);
-  Lwt.return_unit
+    (List.length chunks)
 
-let test_no_boundary _ () =
+let test_no_boundary ~sw:_ _env () =
   let content_type_no_boundary = "text/plain" in
   let request_body n = String.make n 'a' in
   let payload_size = 0x1000 in
   let max_chunk_size = 0x400 in
   let chunks = multipart_request_body_chunks (request_body payload_size) in
-  let stream, push = Lwt_stream.create () in
+  let stream, push = Stream.create 1024 in
   List.iter
     (fun x ->
       push
@@ -144,9 +143,9 @@ let test_no_boundary _ () =
            }))
     chunks;
   push None;
-  let waiter, wakener = Lwt.wait () in
-  let emit name stream = Lwt.wakeup wakener (name, stream) in
-  let* multipart_result =
+  let waiter, wakener = Promise.create () in
+  let emit name stream = Promise.resolve wakener (name, stream) in
+  let multipart_result =
     Multipart.parse_multipart_form
       ~content_type:content_type_no_boundary
       ~max_chunk_size
@@ -154,22 +153,21 @@ let test_no_boundary _ () =
       stream
   in
   ignore @@ Result.get_ok multipart_result;
-  let* name, stream = waiter in
+  let name, stream = Promise.await waiter in
   Alcotest.(check (option string)) "filename extracted" None name;
-  let* chunks = Lwt_stream.to_list stream in
+  let chunks = Stream.to_list stream in
   Alcotest.(check int)
     "Correct number of chunks emitted"
     (payload_size / max_chunk_size)
-    (List.length chunks);
-  Lwt.return_unit
+    (List.length chunks)
 
-let test_no_boundary_unaligned _ () =
+let test_no_boundary_unaligned ~sw:_ _env () =
   let content_type_no_boundary = "text/plain" in
   let request_body n = String.make n 'a' in
   let payload_size = 0x1100 in
   let max_chunk_size = 0x400 in
   let chunks = multipart_request_body_chunks (request_body payload_size) in
-  let stream, push = Lwt_stream.create () in
+  let stream, push = Stream.create 1024  in
   List.iter
     (fun x ->
       push
@@ -181,9 +179,9 @@ let test_no_boundary_unaligned _ () =
            }))
     chunks;
   push None;
-  let waiter, wakener = Lwt.wait () in
-  let emit name stream = Lwt.wakeup wakener (name, stream) in
-  let* multipart_result =
+  let waiter, wakener = Promise.create () in
+  let emit name stream = Promise.resolve wakener (name, stream) in
+  let multipart_result =
     Multipart.parse_multipart_form
       ~content_type:content_type_no_boundary
       ~max_chunk_size
@@ -191,22 +189,21 @@ let test_no_boundary_unaligned _ () =
       stream
   in
   ignore @@ Result.get_ok multipart_result;
-  let* name, stream = waiter in
+  let name, stream = Promise.await waiter in
   Alcotest.(check (option string)) "filename extracted" None name;
-  let* chunks = Lwt_stream.to_list stream in
+  let chunks = Stream.to_list stream in
   Alcotest.(check int)
     "Correct number of chunks emitted"
     ((payload_size / max_chunk_size) + 1)
-    (List.length chunks);
-  Lwt.return_unit
+    (List.length chunks)
 
-let test_no_boundary_but_boundary_expected _ () =
+let test_no_boundary_but_boundary_expected ~sw:_ _env () =
   let content_type_no_boundary = "multipart/form-data" in
   let request_body n = String.make n 'a' in
   let payload_size = 0x1100 in
   let max_chunk_size = 0x400 in
   let chunks = multipart_request_body_chunks (request_body payload_size) in
-  let stream, push = Lwt_stream.create () in
+  let stream, push = Stream.create 1024  in
   List.iter
     (fun x ->
       push
@@ -219,7 +216,7 @@ let test_no_boundary_but_boundary_expected _ () =
     chunks;
   push None;
   let emit _ _ = assert false in
-  let+ multipart_result =
+  let multipart_result =
     Multipart.parse_multipart_form
       ~content_type:content_type_no_boundary
       ~max_chunk_size
@@ -232,10 +229,20 @@ let test_no_boundary_but_boundary_expected _ () =
   | Error _ ->
     Alcotest.(check pass) "failed because boundary was expected" () ()
 
+let test_case
+    :  string -> Alcotest.speed_level
+    -> (sw:Switch.t -> Eio.Stdenv.t -> unit -> unit)
+    -> string * Alcotest.speed_level * (unit -> unit)
+  =
+ fun desc ty f ->
+  ( desc
+  , ty
+  , fun () -> Eio_main.run (fun env -> Switch.run (fun sw -> f ~sw env ())) )
+
 let suite =
   [ ( "multipart"
     , List.map
-        (fun (desc, ty, f) -> Alcotest_lwt.test_case desc ty f)
+        (fun (desc, ty, f) -> test_case desc ty f)
         [ "simple boundary", `Quick, test_simple_boundary
         ; "unaligned boundary", `Quick, test_unaligned_boundary
         ; "no boundary", `Quick, test_no_boundary
@@ -246,4 +253,4 @@ let suite =
         ] )
   ]
 
-let () = Lwt_main.run (Alcotest_lwt.run "Multipart form unit tests" suite)
+let () =  Alcotest.run "Multipart form unit tests" suite

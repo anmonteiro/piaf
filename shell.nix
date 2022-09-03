@@ -1,8 +1,8 @@
-{ pkgs, release-mode ? false }:
+{ packages, pkgs, release-mode ? false }:
 
 let
   inherit (pkgs) lib callPackage;
-  piafPkgs = pkgs.recurseIntoAttrs (callPackage ./nix { doCheck = true; }).native;
+  piafPkgs = packages.native;
   piafDrvs = lib.filterAttrs (_: value: lib.isDerivation value) piafPkgs;
 
   filterDrvs = inputs:

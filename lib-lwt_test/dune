@@ -1,0 +1,10 @@
+(generate_sites_module
+ (module cert_sites)
+ (sourceroot))
+
+(test
+ (name test_client)
+ (libraries alcotest alcotest-lwt piaf-lwt logs.fmt dune-site)
+ (modules helper_server test_client cert_sites)
+ (deps
+  (source_tree "./certificates")))

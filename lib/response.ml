@@ -66,7 +66,7 @@ let sendfile ?version ?(headers = Headers.empty) path =
   let headers =
     Headers.(add_unless_exists headers Well_known.content_type mime)
   in
-  let++! body = Body.sendfile path in
+  let+! body = Body.sendfile path in
   create ?version ~headers ~body `OK
 
 let copy_file ?version ?(headers = Headers.empty) path =
@@ -74,14 +74,16 @@ let copy_file ?version ?(headers = Headers.empty) path =
   let headers =
     Headers.(add_unless_exists headers Well_known.content_type mime)
   in
-  let**! fd =
-    Lwt.catch
-      (fun () ->
-        let+ fd = Lwt_unix.openfile path [ O_RDONLY ] 0 in
-        Ok fd)
-      (fun exn -> Lwt_result.fail (`Exn exn))
+  let*! fd =
+    try
+      Eio_unix.run_in_systhread (fun () ->
+          let fd = Unix.openfile path [ O_RDONLY ] 0 in
+          Ok fd)
+    with
+    | exn -> Result.error (`Exn exn)
   in
-  let+ stream = Body.stream_of_fd fd in
+
+  let stream = Body.stream_of_fd fd in
   Ok
     (create
        ?version
@@ -117,6 +119,8 @@ let to_http1 { status; headers; version; _ } =
     | `Misdirected_request -> `Code (H2.Status.to_code status)
   in
   Httpaf.Response.create ~version ~headers:http1_headers status
+
+let to_h2 { status; headers; _ } = H2.Response.create ~headers status
 
 let of_h2 ?(body = Body.empty) response =
   let { H2.Response.status; headers } = response in

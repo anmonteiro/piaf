@@ -53,3 +53,19 @@ module String = struct
         Bytes.unsafe_to_string
           (Bytes.sub (Bytes.unsafe_of_string s) idx (String.length s - idx))
 end
+
+module Result = struct
+  include Result
+
+  module Syntax = struct
+    let ( let+ ) result f = map f result
+    let ( let* ) = bind
+
+    let ( and+ ) r1 r2 =
+      match r1, r2 with
+      | Ok x, Ok y -> Ok (x, y)
+      | Ok _, Error e | Error e, Ok _ | Error e, Error _ -> Error e
+
+    let ( and* ) = ( and+ )
+  end
+end

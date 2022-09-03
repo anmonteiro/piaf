@@ -20,8 +20,9 @@ let setup_log ?style_renderer level =
   Logs.set_reporter (Logs_fmt.reporter ());
   ()
 
+open Piaf_lwt
+
 let request host =
-  let open Piaf in
   let open Lwt_syntax.Result in
   let* client =
     Client.create
@@ -52,4 +53,4 @@ let () =
   Lwt_main.run
     (request host >|= function
      | Ok () -> ()
-     | Error e -> failwith (Piaf.Error.to_string e))
+     | Error e -> failwith (Error.to_string e))

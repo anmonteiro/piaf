@@ -30,6 +30,7 @@
  *---------------------------------------------------------------------------*)
 
 type error_handler = kind:Error.kind -> Error.client -> unit
+type response_handler = Response.t -> unit
 
 module type Client = sig
   type socket
@@ -40,10 +41,9 @@ module type Client = sig
   val create_connection
     :  config:Config.t
     -> error_handler:error_handler
+    -> sw:Eio.Switch.t
     -> socket
-    -> (t * Scheme.Runtime.t) Lwt.t
-
-  type response_handler = Response.t -> unit
+    -> t * Scheme.Runtime.t
 
   val request
     :  t
@@ -53,14 +53,57 @@ module type Client = sig
     -> Request.t
     -> write_body
 
-  val shutdown : t -> unit Lwt.t
+  val shutdown : t -> unit
   val is_closed : t -> bool
+end
+
+module type Reqd = sig
+  type write_body
+  type t
+
+  val respond_with_string : t -> Response.t -> string -> unit
+  val respond_with_bigstring : t -> Response.t -> Bigstringaf.t -> unit
+
+  val respond_with_streaming
+    :  t
+    -> ?flush_headers_immediately:bool
+    -> Response.t
+    -> write_body
+
+  val respond_with_upgrade : t -> Headers.t -> (unit -> unit) -> unit
+
+  val error_code
+    :  t
+    -> [ `Bad_request | `Bad_gateway | `Internal_server_error | `Exn of exn ]
+       option
+
+  val report_exn : t -> exn -> unit
+  val try_with : t -> (unit -> unit) -> (unit, exn) result
+end
+
+module type Server = sig
+  type socket
+  type write_body
+
+  module Reqd : Reqd with type write_body := write_body
+
+  val create_connection_handler
+    :  config:Server_config.t
+    -> request_handler:Request_info.t Server_intf.Handler.t
+    -> error_handler:Server_intf.error_handler
+    -> socket Server_intf.connection_handler
 end
 
 (* Common signature for sharing HTTP/1.X / HTTP/2 implementations. *)
 module type HTTPCommon = sig
   module Body : Body.BODY
   module Client : Client with type write_body := Body.Writer.t
+  module Server : Server with type write_body := Body.Writer.t
+end
+
+module type HTTPServerCommon = sig
+  module Body : Body.BODY
+  module Reqd : Reqd with type write_body := Body.Writer.t
 end
 
 module type HTTP1 = sig
@@ -71,17 +114,23 @@ module type HTTP1 = sig
 
     val upgrade : t -> Gluten.impl -> unit
   end
+
+  module Server : Server with type write_body := Body.Writer.t
 end
 
 module type HTTP =
   HTTPCommon
-    with type Client.socket = Lwt_unix.file_descr
-     and type Client.runtime = Gluten_lwt_unix.Client.t
+    with type Client.socket = Gluten_eio.Client.socket
+     and type Server.socket = Gluten_eio.Server.socket
+     and type Client.runtime = Gluten_eio.Client.t
 
 module type HTTPS =
   HTTPCommon
-    with type Client.socket = Lwt_ssl.socket
-     and type Client.runtime = Gluten_lwt_unix.Client.SSL.t
+    with type Client.socket = Eio_ssl.socket
+     and type Server.socket = Gluten_eio.Server.SSL.socket
+     and type Client.runtime = Gluten_eio.Client.SSL.t
+
+module Piaf_body = Body
 
 (* Only needed for h2c upgrades (insecure HTTP/2) *)
 module type HTTP2 = sig
@@ -91,7 +140,7 @@ module type HTTP2 = sig
     include
       Client
         with type write_body := Body.Writer.t
-         and type runtime = Gluten_lwt_unix.Client.t
+         and type runtime = Gluten_eio.Client.t
 
     val create_h2c
       :  config:Config.t
@@ -102,7 +151,23 @@ module type HTTP2 = sig
       -> runtime
       -> (t, string) result
   end
+
+  module Server : sig
+    include Server with type write_body := Body.Writer.t
+
+    val create_h2c_connection_handler
+      :  config:Server_config.t
+      -> sw:Eio.Switch.t
+      -> fd:Scheme.Runtime.Socket.t
+      -> error_handler:Server_intf.error_handler
+      -> http_request:Httpaf.Request.t
+      -> request_body:Bigstringaf.t IOVec.t list
+      -> client_address:Eio.Net.Sockaddr.stream
+      -> Request_info.t Server_intf.Handler.t
+      -> (H2.Server_connection.t, string) result
+  end
 end
-with type Client.socket = Lwt_unix.file_descr
- and type Client.runtime = Gluten_lwt_unix.Client.t
- and type Client.t = H2_lwt_unix.Client.t
+with type Client.socket = Gluten_eio.Client.socket
+ and type Client.runtime = Gluten_eio.Client.t
+ and type Server.socket = Gluten_eio.Server.socket
+ and type Client.t = H2_eio.Client.t

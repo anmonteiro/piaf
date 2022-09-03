@@ -6,6 +6,8 @@ let setup_log ?style_renderer level =
   Logs.set_reporter (Logs_fmt.reporter ());
   ()
 
+module Piaf = Piaf_lwt
+
 let request host =
   Piaf.Client.Oneshot.get
     ~config:{ Piaf.Config.default with follow_redirects = true }

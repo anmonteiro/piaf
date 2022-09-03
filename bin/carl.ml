@@ -29,6 +29,7 @@
  * POSSIBILITY OF SUCH DAMAGE.
  *---------------------------------------------------------------------------*)
 
+open Eio.Std
 open Cmdliner
 open Piaf
 
@@ -77,7 +78,7 @@ type cli =
   ; head : bool
   ; headers : (string * string) list
   ; include_ : bool
-  ; max_http_version : Versions.HTTP.t
+  ; max_http_version : Versions.ALPN.t
   ; h2c_upgrade : bool
   ; http2_prior_knowledge : bool
   ; tcp_nodelay : bool
@@ -145,10 +146,8 @@ module Ansi = struct
 end
 
 let ok = Ok ()
-let return_ok = Lwt.return ok
 
 let print_string ~cli formatter s =
-  let open Lwt.Syntax in
   if Ansi.isatty && cli.output = Stdout && String.contains s '\000'
   then (
     let msg =
@@ -157,11 +156,11 @@ let print_string ~cli formatter s =
        <FILE>\" to save to a file."
     in
     Logs.warn (fun m -> m "%s" msg);
-    Lwt_result.fail (`Msg msg))
-  else
-    let* () = Lwt_fmt.fprintf formatter "%s" s in
-    let* () = Lwt_fmt.flush formatter in
-    return_ok
+    Error (`Msg msg))
+  else (
+    Format.fprintf formatter "%s" s;
+    Format.pp_print_flush formatter ();
+    ok)
 
 module Size = struct
   let gb = int_of_float (1024. ** 3.)
@@ -222,53 +221,55 @@ let inflate_chunk zstream result_buffer chunk =
 
 (* TODO: try / catch *)
 let inflate response_body =
-  let open Lwt_result.Syntax in
+  let open Util.Result.Syntax in
   let zstream = Zlib.inflate_init false in
   let result_buf = Buffer.create 1024 in
   let+ () =
     Body.iter_string
-      (fun chunk -> inflate_chunk zstream result_buf chunk)
+      ~f:(fun chunk -> inflate_chunk zstream result_buf chunk)
       response_body
   in
   Buffer.contents result_buf
 
-let handle_response ~cli ({ Response.body; _ } as response) =
-  let open Lwt_result.Syntax in
+let handle_response
+    ~cli
+    ~sw
+    ~(stdout : Eio.Flow.sink)
+    ({ Response.body; _ } as response)
+  =
+  let open Util.Result.Syntax in
   let { head; compressed; include_; _ } = cli in
   let* channel, formatter =
     match cli.output with
-    | Stdout | Channel "-" -> Lwt_result.return (Lwt_io.stdout, Lwt_fmt.stdout)
+    | Stdout | Channel "-" -> Ok (stdout, Format.std_formatter)
     | Channel filename ->
-      Lwt.catch
-        (fun () ->
-          let open Lwt.Syntax in
-          let+ channel =
-            Lwt_io.open_file
-              ~mode:Output
-              ~flags:Unix.[ O_NONBLOCK; O_WRONLY; O_TRUNC; O_CREAT ]
-              filename
-          in
-          Ok (channel, Lwt_fmt.of_channel channel))
-        (fun exn -> Lwt_result.fail (`Exn exn))
+      (try
+         Eio_unix.run_in_systhread (fun () ->
+             let fd =
+               Unix.openfile
+                 filename
+                 Unix.[ O_NONBLOCK; O_WRONLY; O_TRUNC; O_CREAT ]
+                 0o600
+             in
+             Ok
+               ( (Eio_unix.FD.as_socket ~sw ~close_unix:true fd :> Eio.Flow.sink)
+               , Format.formatter_of_out_channel (Unix.out_channel_of_descr fd)
+               ))
+       with
+      | exn -> Error (`Exn exn))
   in
-  let open Lwt.Syntax in
-  let* () =
-    if head || include_
-    then
-      let* () = Lwt_fmt.fprintf formatter "%a" pp_response_headers response in
-      Lwt_fmt.flush formatter
-    else Lwt.return_unit
-  in
-  let* result =
+  if head || include_
+  then (
+    Format.fprintf formatter "%a" pp_response_headers response;
+    Format.pp_print_flush formatter ());
+  let result =
     if head
     then (
-      Lwt.async (fun () ->
-          let open Lwt.Syntax in
-          let+ _ = Body.drain body in
+      Fiber.fork ~sw (fun () ->
+          let (_ : (unit, _) result) = Body.drain body in
           ());
-      return_ok)
+      ok)
     else
-      let open Lwt_result.Syntax in
       match compressed, Headers.get response.headers "content-encoding" with
       | true, Some encoding when String.lowercase_ascii encoding = "gzip" ->
         (* We requested a compressed response, and we got a compressed response
@@ -283,38 +284,38 @@ let handle_response ~cli ({ Response.body; _ } as response) =
         let* s = inflate body in
         print_string ~cli formatter s
       | _ ->
-        let open Lwt.Syntax in
-        let* stream, or_error = Body.to_stream body in
+        let stream = Body.to_stream body in
         let total_len = Body.length body in
-        Lwt.catch
-          (fun () ->
-            let* { Piaf.IOVec.buffer; off; len } = Lwt_stream.next stream in
-            let running_total = Int64.of_int len in
-            report_progess ~first:true ~cli running_total total_len;
-            let chunk = Bigstringaf.substring buffer ~off ~len in
-            let open Lwt_result.Syntax in
-            let* () = print_string ~cli formatter chunk in
-            let* _ =
-              Body.fold_s
-                (fun { Piaf.IOVec.buffer; off; len } running_total ->
-                  let open Lwt.Syntax in
-                  let new_total = Int64.(add (of_int len) running_total) in
-                  report_progess ~cli new_total total_len;
-                  let body_fragment = Bigstringaf.substring buffer ~off ~len in
-                  let+ _ = print_string ~cli formatter body_fragment in
-                  new_total)
-                body
-                running_total
-            in
-            or_error)
-          (function
-            | Lwt_stream.Empty -> or_error | exn -> Lwt.return_error (`Exn exn))
+        (try
+           let { Piaf.IOVec.buffer; off; len } =
+             Option.get @@ Stream.take stream
+           in
+           let running_total = Int64.of_int len in
+           report_progess ~first:true ~cli running_total total_len;
+           let chunk = Bigstringaf.substring buffer ~off ~len in
+           let* () = print_string ~cli formatter chunk in
+           let+ (_ret : int64) =
+             Body.fold
+               ~f:(fun running_total { Piaf.IOVec.buffer; off; len } ->
+                 let new_total = Int64.(add (of_int len) running_total) in
+                 report_progess ~cli new_total total_len;
+                 let body_fragment = Bigstringaf.substring buffer ~off ~len in
+                 let (_ : _ result) =
+                   print_string ~cli formatter body_fragment
+                 in
+                 new_total)
+               ~init:running_total
+               body
+           in
+           ()
+         with
+        | exn -> Error (`Exn exn))
   in
-  let+ () =
-    match cli.output with
-    | Stdout | Channel "-" -> Lwt.return_unit
-    | Channel _ -> Lwt_io.close channel
-  in
+  (match cli.output with
+  | Stdout | Channel "-" -> Format.pp_print_newline formatter ()
+  | Channel _ ->
+    Eio_unix.run_in_systhread (fun () ->
+        Unix.close (Option.get (Eio_unix.FD.peek_opt channel))));
   result
 
 let build_headers
@@ -343,8 +344,7 @@ let build_headers
     ("Authorization", "Basic " ^ Base64.encode_exn user) :: headers
   | None, None -> headers
 
-let request ~cli ~config ~iobuf uri =
-  let open Lwt.Syntax in
+let request env ~sw ~cli ~config uri =
   let module Client = Client.Oneshot in
   let { meth; data; _ } = cli in
   let uri_user = Uri.userinfo uri in
@@ -356,35 +356,29 @@ let request ~cli ~config ~iobuf uri =
       cli
   in
   let headers = build_headers ~cli in
-  let* body =
+  let body =
     match data with
-    | Some (Data s) -> Lwt.return_some (Body.of_string s)
+    | Some (Data s) -> Some (Body.of_string s)
     | Some (File filename) ->
-      let* channel =
-        Lwt_io.open_file
-          ~buffer:iobuf
-          ~flags:[ O_RDONLY ]
-          ~mode:Lwt_io.input
-          filename
+      let fd = Unix.openfile filename [ O_RDONLY ] 0 in
+      let { Unix.st_size = length; _ } =
+        Eio_unix.run_in_systhread (fun () -> Unix.fstat fd)
       in
-      let* length = Lwt_io.length channel in
-      let remaining = ref (Int64.to_int length) in
+      let remaining = ref length in
+      let flow = Eio_unix.FD.as_socket ~sw ~close_unix:true fd in
       let stream =
-        Lwt_stream.from (fun () ->
+        Stream.from ~f:(fun () ->
             if !remaining = 0
-            then Lwt.return_none
+            then None
             else
-              let* payload =
-                Lwt_io.read
-                  ~count:(min config.Config.body_buffer_size !remaining)
-                  channel
-              in
-              let read = String.length payload in
-              remaining := !remaining - read;
-              Lwt.return_some payload)
+              let len = min config.Config.body_buffer_size !remaining in
+              let cs = Cstruct.create len in
+              Eio.Flow.read_exact flow cs;
+              remaining := !remaining - len;
+              Some { Faraday.buffer = cs.buffer; off = cs.off; len = cs.len })
       in
-      Lwt.on_success (Lwt_stream.closed stream) (fun () ->
-          Lwt.ignore_result (Lwt_io.close channel));
+      Fiber.fork ~sw (fun () ->
+          Stream.when_closed ~f:(fun () -> Eio.Flow.close flow) stream);
       let body_length =
         match
           List.find_opt
@@ -392,26 +386,16 @@ let request ~cli ~config ~iobuf uri =
             headers
         with
         | Some (_, "chunked") -> `Chunked
-        | _ -> `Fixed length
+        | _ -> `Fixed (Int64.of_int length)
       in
-      Lwt.return_some (Body.of_string_stream ~length:body_length stream)
-    | None -> Lwt.return_none
+      Some (Body.of_stream ~length:body_length stream)
+    | None -> None
   in
-  let open Lwt_result.Syntax in
-  let* response = Client.request ~config ~meth ~headers ?body uri in
-  handle_response ~cli response
+  let open Util.Result.Syntax in
+  let* response = Client.request ~sw ~config ~meth ~headers ?body env uri in
+  handle_response ~cli ~sw ~stdout:(Eio.Stdenv.stdout env) response
 
-let rec request_many ~cli ~config urls =
-  let open Lwt.Syntax in
-  let iobuf =
-    match cli.data with
-    | Some (File _) ->
-      (* If there's a file to upload, allocate a single buffer for doing
-       * I/O on that file, sized according to the configuration we're running
-       * with. *)
-      Bigstringaf.create config.Config.body_buffer_size
-    | _ -> Bigstringaf.empty
-  in
+let rec request_many ~sw ~cli ~config env urls =
   let { default_proto; _ } = cli in
   match urls with
   | [] ->
@@ -419,14 +403,14 @@ let rec request_many ~cli ~config urls =
     assert false
   | [ x ] ->
     let uri = uri_of_string ~scheme:default_proto x in
-    let* r = request ~cli ~config ~iobuf uri in
+    let r = request ~sw ~cli ~config env uri in
     (match r with
-    | Ok () -> Lwt.return (`Ok ())
-    | Error e -> Lwt.return (`Error (false, Error.to_string e)))
+    | Ok () -> `Ok ()
+    | Error e -> `Error (false, Error.to_string e))
   | x :: xs ->
     let uri = uri_of_string ~scheme:default_proto x in
-    let* _r = request ~cli ~config ~iobuf uri in
-    request_many ~cli ~config xs
+    let _r = request ~sw ~cli ~config env uri in
+    request_many ~sw ~cli ~config env xs
 
 let log_level_of_list ~silent = function
   | [] -> if silent then None else Some Logs.Warning
@@ -480,10 +464,12 @@ let piaf_config_of_cli
 let main ({ log_level; urls; _ } as cli) =
   setup_log log_level;
   if (not Ansi.dumb) && Ansi.isatty
-  then Fmt.set_style_renderer Lwt_fmt.(get_formatter stdout) `Ansi_tty;
+  then Fmt.set_style_renderer (Format.get_std_formatter ()) `Ansi_tty;
   match piaf_config_of_cli cli with
   | Error msg -> `Error (false, msg)
-  | Ok config -> Lwt_main.run (request_many ~cli ~config urls)
+  | Ok config ->
+    Eio_main.run (fun env ->
+        Eio.Switch.run (fun sw -> request_many ~sw ~cli ~config env urls))
 
 (* --resolve <host:port:address[,address]...> Resolve the host+port to this address
  * --retry <num>   Retry request if transient problems occur
@@ -520,7 +506,7 @@ module CLI = struct
   let cert =
     let doc = "Client certificate file path" in
     let docv = "file" in
-    Arg.(value & opt (some string) None & info [ "cert" ] ~doc ~docv)
+    Arg.(value & opt (some string) None & info [ "E"; "cert" ] ~doc ~docv)
 
   let compressed =
     let doc = "Request compressed response" in
@@ -765,13 +751,12 @@ module CLI = struct
     ; headers
     ; include_
     ; max_http_version =
-        (let open Versions.HTTP in
-        match use_http_2, use_http_1_1, use_http_1_0 with
+        (match use_http_2, use_http_1_1, use_http_1_0 with
         | true, _, _ | false, false, false ->
           (* Default to the highest supported if no override specified. *)
-          v2_0
-        | false, true, _ -> v1_1
-        | false, false, true -> v1_0)
+          Versions.ALPN.HTTP_2
+        | false, true, _ -> HTTP_1_1
+        | false, false, true -> HTTP_1_0)
     ; h2c_upgrade = use_http_2
     ; http2_prior_knowledge
     ; cacert

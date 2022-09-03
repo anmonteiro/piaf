@@ -1,4 +1,4 @@
-open Piaf
+open Piaf_lwt
 
 let get_sync url =
   let open Lwt_result.Syntax in

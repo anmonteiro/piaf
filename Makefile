@@ -1,3 +1,5 @@
+gh-actions:
+	dune build @gh-actions
 
 update-gitmodules:
 	git submodule sync --recursive

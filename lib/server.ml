@@ -29,206 +29,239 @@
  * POSSIBILITY OF SUCH DAMAGE.
  *---------------------------------------------------------------------------*)
 
-open Monads.Bindings
+open Eio.Std
+include Server_intf
 
 let src = Logs.Src.create "piaf.server" ~doc:"Piaf Server module"
 
 module Log = (val Logs.src_log src : Logs.LOG)
 module Reqd = Httpaf.Reqd
 module Server_connection = Httpaf.Server_connection
+module Config = Server_config
 
-module Service = struct
-  type ('req, 'resp) t = 'req -> 'resp Lwt.t
-end
+type 'ctx ctx = 'ctx Handler.ctx =
+  { ctx : 'ctx
+  ; request : Request.t
+  }
 
-module Middleware = struct
-  type ('req, 'resp, 'req', 'resp') t =
-    ('req, 'resp) Service.t -> ('req', 'resp') Service.t
+let default_error_handler : Server_intf.error_handler =
+ fun _client_addr ?request:_ ~respond (_error : Error.server) ->
+  respond ~headers:(Headers.of_list [ "connection", "close" ]) Body.empty
 
-  type ('req, 'resp) simple = ('req, 'resp, 'req, 'resp) t
-end
+type t =
+  { config : Config.t
+  ; error_handler : error_handler
+  ; handler : Request_info.t Handler.t
+  }
 
-module Handler = struct
-  type 'ctx ctx =
-    { ctx : 'ctx
-    ; request : Request.t
+let create ?(error_handler = default_error_handler) ~config handler : t =
+  { config; error_handler; handler }
+
+let is_requesting_h2c_upgrade ~config ~version ~scheme headers =
+  match version, config.Config.max_http_version, config.h2c_upgrade, scheme with
+  | cur_version, max_version, true, Scheme.HTTP ->
+    if Versions.HTTP.(
+         equal (Versions.ALPN.to_version max_version) v2_0
+         && equal cur_version v1_1)
+    then
+      match
+        Headers.(
+          get headers Well_known.connection, get headers Well_known.upgrade)
+      with
+      | Some connection, Some "h2c" ->
+        let connection_segments = String.split_on_char ',' connection in
+        List.exists
+          (fun segment ->
+            let normalized = String.(trim (lowercase_ascii segment)) in
+            String.equal normalized Headers.Well_known.upgrade)
+          connection_segments
+      | _ -> false
+    else false
+  | _ -> false
+
+let do_h2c_upgrade ~sw ~fd ~request_body server =
+  let { config; error_handler; handler } = server in
+  let upgrade_handler client_address (request : Request.t) upgrade =
+    let http_request =
+      Httpaf.Request.create
+        ~headers:
+          (Httpaf.Headers.of_rev_list (Headers.to_rev_list request.headers))
+        request.meth
+        request.target
+    in
+    let connection =
+      Result.get_ok
+        (Http2.HTTP.Server.create_h2c_connection_handler
+           ~config
+           ~sw
+           ~fd
+           ~error_handler
+           ~http_request
+           ~request_body
+           ~client_address
+           handler)
+    in
+    upgrade (Gluten.make (module H2.Server_connection) connection)
+  in
+  let request_handler { request; ctx = { Request_info.client_address; _ } } =
+    let headers =
+      Headers.(
+        of_list [ Well_known.connection, "Upgrade"; Well_known.upgrade, "h2c" ])
+    in
+    Response.upgrade ~headers (upgrade_handler client_address request)
+  in
+  request_handler
+
+module Http : Http_intf.HTTP = Http1.HTTP
+
+let http_connection_handler t : _ connection_handler =
+  let { error_handler; handler; config } = t in
+  fun ~sw socket client_address ->
+    let request_handler
+        ({ request; ctx = { Request_info.client_address = _; scheme; _ } } as
+        ctx)
+      =
+      match
+        is_requesting_h2c_upgrade
+          ~config
+          ~version:request.version
+          ~scheme
+          request.headers
+      with
+      | false -> handler ctx
+      | true ->
+        let request_body = Body.to_list request.body in
+        do_h2c_upgrade ~sw ~fd:(HTTP socket) ~request_body t ctx
+    in
+
+    Http.Server.create_connection_handler
+      ~config
+      ~error_handler
+      ~request_handler
+      ~sw
+      socket
+      client_address
+
+let https_connection_handler ~https ~clock t : _ connection_handler =
+  let { error_handler; handler; config } = t in
+  let ssl_config = Openssl.Server_conf.of_server_config ~https config in
+  fun ~sw socket client_address ->
+    match Openssl.accept ~clock ~config:ssl_config ~fd:socket with
+    | Error (`Exn exn) -> Format.eprintf "EXN: %s@." (Printexc.to_string exn)
+    | Error (`Connect_error string) ->
+      Format.eprintf "CONNECT ERROR: %s@." string
+    | Ok { Openssl.socket = ssl_server; alpn_version } ->
+      let (module Https) =
+        match alpn_version with
+        | Versions.ALPN.HTTP_1_0 | Versions.ALPN.HTTP_1_1 ->
+          (module Http1.HTTPS : Http_intf.HTTPS)
+        | Versions.ALPN.HTTP_2 -> (module Http2.HTTPS : Http_intf.HTTPS)
+      in
+
+      Https.Server.create_connection_handler
+        ~config
+        ~error_handler
+        ~request_handler:handler
+        ~sw
+        ssl_server
+        client_address
+
+module Command = struct
+  exception Server_shutdown
+
+  type connection_handler =
+    sw:Switch.t -> Eio.Net.stream_socket -> Eio.Net.Sockaddr.stream -> unit
+
+  type nonrec t =
+    { network : Eio.Net.t
+    ; http_address : Eio.Net.Sockaddr.stream
+    ; resolver : unit -> unit
+    ; https_address : Eio.Net.Sockaddr.stream option
     }
 
-  type 'ctx t = ('ctx ctx, Response.t) Service.t
+  let create ~network ~address ~resolver =
+    { network; http_address = address; resolver; https_address = None }
 
-  let not_found _ =
-    Lwt.return
-      (Response.of_string
-         ~body:"<html><body><h1>404 - Not found</h1></body></html>"
-         `Not_found)
-end
+  let shutdown t = t.resolver ()
 
-include Handler
+  let listen
+      ?(bind_to_address = Eio.Net.Ipaddr.V4.loopback)
+      ~sw
+      ~network
+      ~port
+      connection_handler
+    =
+    let command_p, command_u = Promise.create () in
+    let released_p, released_u = Promise.create () in
+    Fiber.fork ~sw (fun () ->
+        let address = `Tcp (bind_to_address, port) in
+        Fiber.fork_sub
+          ~sw
+          ~on_error:(function
+            | Server_shutdown ->
+              Log.debug (fun m -> m "Server teardown finished")
+            | exn -> raise exn)
+          (fun sw ->
+            Switch.on_release sw (fun () -> Promise.resolve released_u ());
+            let resolver () =
+              Log.debug (fun m ->
+                  m "Starting server teardown on port %d..." port);
+              Switch.fail sw Server_shutdown;
+              Promise.await released_p
+            in
 
-module Error_response = struct
-  type t = unit
-end
+            let command = create ~network ~address ~resolver in
+            Fiber.fork ~sw (fun () ->
+                let socket =
+                  Eio.Net.listen
+                    ~reuse_addr:true
+                    ~reuse_port:true
+                    ~backlog:5
+                    ~sw
+                    network
+                    address
+                in
+                Log.info (fun m -> m "Server listening on port %d" port);
+                while true do
+                  Eio.Net.accept_fork
+                    socket
+                    ~sw
+                    ~on_error:(fun exn ->
+                      Log.err (fun m ->
+                          m
+                            "Error in connection handler: %s"
+                            (Printexc.to_string exn)))
+                    (fun socket addr ->
+                      Switch.run (fun sw -> connection_handler ~sw socket addr))
+                done);
+            Promise.resolve command_u command));
+    Promise.await command_p
 
-let make_error_handler ~fd error_handler
-    : Unix.sockaddr -> Server_connection.error_handler
-  =
- fun client_addr ?request error start_response ->
-  let module Writer = Http1.Body.Writer in
-  let was_response_written = ref false in
-  let respond ~headers body =
-    let headers =
-      Headers.add_length_related_headers ~body_length:(Body.length body) headers
+  let start ?bind_to_address ~sw env server =
+    let { config; _ } = server in
+    let network = Eio.Stdenv.net env in
+    let clock = Eio.Stdenv.clock env in
+    (* TODO(anmonteiro): config option to listen only in HTTPS? *)
+    let connection_handler = http_connection_handler server in
+    let ({ resolver = http_resolver; _ } as command) =
+      listen ?bind_to_address ~sw ~network ~port:config.port connection_handler
     in
-    let response_body = start_response (Headers.to_http1 headers) in
-    was_response_written := true;
-    match Body.contents body with
-    | `Empty _ -> Writer.close response_body
-    | `String s ->
-      Writer.write_string response_body s;
-      Writer.close response_body
-    | `Bigstring { IOVec.buffer; off; len } ->
-      Writer.write_bigstring response_body ~off ~len buffer;
-      Writer.close response_body
-    | `Stream stream ->
-      Body.stream_write_body (module Http1.Body) response_body stream
-    | `Sendfile (src_fd, _, _) ->
-      Writer.flush response_body (fun () ->
-          Posix.sendfile (module Http1.Body) ~src_fd ~dst_fd:fd response_body)
-  in
-
-  let request = Option.map Request.of_http1 request in
-  Lwt.dont_wait
-    (fun () ->
-      Log.info (fun m ->
-          m
-            "Error handler called with error: %a%a"
-            Error.pp_hum
-            error
-            (Format.pp_print_option (fun fmt request ->
-                 Format.fprintf fmt "; Request: @?%a" Request.pp_hum request))
-            request);
-      error_handler client_addr ?request ~respond error)
-    (fun exn ->
-      Log.err (fun m ->
-          let raw_backtrace = Printexc.get_raw_backtrace () in
-          m
-            "Exception in `error_handler`: %s.@]@;<0 2>@[<v 0>%a@]"
-            (Printexc.to_string exn)
-            Util.Backtrace.pp_hum
-            raw_backtrace);
-      if not !was_response_written
-      then
-        respond
-          ~headers:(Headers.of_list [])
-          (Body.of_string "Internal Server Error"))
-
-let default_error_handler
-    _client_addr
-    ?request:_
-    ~respond
-    (_error : Server_connection.error)
-  =
-  respond ~headers:(Headers.of_list [ "connection", "close" ]) Body.empty;
-  Lwt.return_unit
-
-let report_exn reqd exn =
-  Log.err (fun m ->
-      let raw_backtrace = Printexc.get_raw_backtrace () in
-      m
-        "Exception while handling request: %s.@]@;<0 2>@[<v 0>%a@]"
-        (Printexc.to_string exn)
-        Util.Backtrace.pp_hum
-        raw_backtrace);
-  Reqd.report_exn reqd exn
-
-let request_handler ~fd handler : Unix.sockaddr -> Reqd.t Gluten.reqd -> unit =
- fun client_addr reqd ->
-  let { Gluten.reqd; upgrade } = reqd in
-  let request = Reqd.request reqd in
-  let body_length = Httpaf.Request.body_length request in
-  let request_body =
-    Body.of_raw_body
-      (module Http1.Body : Body.BODY with type Reader.t = Httpaf.Body.Reader.t)
-      ~body_length:(body_length :> Body.length)
-      ~on_eof:(fun body ->
-        match Reqd.error_code reqd with
-        | Some error ->
-          Body.embed_error_received body (Lwt.return (error :> Error.t))
-        | None -> ())
-      (Reqd.request_body reqd)
-  in
-  let exn_handler = report_exn reqd in
-  let request = Request.of_http1 ~body:request_body request in
-  Lwt.dont_wait
-    (fun () ->
-      let+ ({ Response.headers; body; _ } as response) =
-        handler { ctx = client_addr; request }
+    match config.https with
+    | None -> command
+    | Some https ->
+      let connection_handler =
+        https_connection_handler
+          ~clock
+          ~https
+          { server with config = { server.config with https = Some https } }
       in
-      (* XXX(anmonteiro): It's a little weird that, given an actual
-       * response returned from the handler, we decide to completely ignore
-       * it. There's a good justification here, which is that the error
-       * handler will be called. The alternative would be to have the
-       * request handler return a result type, but then we'd be ignoring
-       * the error instead. *)
-      match Reqd.error_code reqd with
-      | Some _ ->
-        (* Already handling an error, don't bother sending the response.
-         * `error_handler` will be called. *)
-        Log.info (fun m ->
-            m
-              "Response returned by handler will not be written, currently \
-               handling error")
-      | None ->
-        let response =
-          { response with
-            headers =
-              Headers.add_length_related_headers
-                ~body_length:(Body.length body)
-                headers
-          }
-        in
-        let http1_response = Response.to_http1 response in
-        (match Body.contents body with
-        | `Empty upgrade_handler ->
-          if Body.Optional_handler.is_none upgrade_handler
-          then
-            (* No upgrade *)
-            Reqd.respond_with_bigstring reqd http1_response Bigstringaf.empty
-          else (
-            (* we created it ourselves *)
-            assert (response.status = `Switching_protocols);
-            Reqd.respond_with_upgrade reqd http1_response.headers (fun () ->
-                Body.Optional_handler.call_if_some upgrade_handler upgrade))
-        | `String s -> Reqd.respond_with_string reqd http1_response s
-        | `Bigstring { IOVec.buffer; off; len } ->
-          let bstr = Bigstringaf.sub ~off ~len buffer in
-          Reqd.respond_with_bigstring reqd http1_response bstr
-        | `Stream stream ->
-          let response_body = Reqd.respond_with_streaming reqd http1_response in
-          Body.stream_write_body (module Http1.Body) response_body stream
-        | `Sendfile (src_fd, _, _) ->
-          let response_body =
-            Reqd.respond_with_streaming
-              ~flush_headers_immediately:true
-              reqd
-              http1_response
-          in
-          Http1.Body.Writer.flush response_body (fun () ->
-              Posix.sendfile
-                (module Http1.Body)
-                ~on_exn:exn_handler
-                ~src_fd
-                ~dst_fd:fd
-                response_body)))
-    exn_handler
-
-let create ?config ?(error_handler = default_error_handler) handler
-    : Unix.sockaddr -> Lwt_unix.file_descr -> unit Lwt.t
-  =
- fun sockaddr fd ->
-  Httpaf_lwt_unix.Server.create_connection_handler
-    ?config:(Option.map Config.to_http1_config config)
-    ~request_handler:(request_handler ~fd handler)
-    ~error_handler:(make_error_handler ~fd error_handler)
-    sockaddr
-    fd
+      let { resolver = https_resolver; _ } =
+        listen ?bind_to_address ~sw ~network ~port:https.port connection_handler
+      in
+      { command with
+        resolver =
+          (fun () ->
+            http_resolver ();
+            https_resolver ())
+      }
+end

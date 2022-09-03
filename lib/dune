@@ -1,18 +1,23 @@
+(copy_files# stubs/*)
+
 (library
  (name piaf)
  (public_name piaf)
  (libraries
   multipart
   h2
-  h2-lwt-unix
+  h2-eio
   httpaf
-  httpaf-lwt-unix
+  httpaf-eio
   logs
-  logs.lwt
-  lwt
-  lwt_ssl
+  eio
+  eio-ssl
   magic-mime
   ssl
   uri
   ipaddr
-  sendfile))
+  sendfile
+  piaf.stream)
+ (foreign_stubs
+  (language c)
+  (names piaf_bigarray_read piaf_fdutils)))

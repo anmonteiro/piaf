@@ -1,3 +1,9 @@
 (executable
  (name carl)
+ (modules carl util)
  (libraries piaf cmdliner logs fmt logs.fmt fmt.tty camlzip ezgzip))
+
+(executable
+ (name carl_lwt)
+ (modules carl_lwt)
+ (libraries piaf_lwt cmdliner logs fmt logs.fmt fmt.tty camlzip ezgzip))

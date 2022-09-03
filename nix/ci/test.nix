@@ -13,20 +13,51 @@ let
       })
     ];
   };
+  nix-filter-src = fetchGit {
+    url = with lock.nodes.nix-filter.locked; "https://github.com/${owner}/${repo}";
+    inherit (lock.nodes.nix-filter.locked) rev;
+    # inherit (lock.nodes.nixpkgs.original) ref;
+    allRefs = true;
+  };
+  nix-filter = import "${nix-filter-src}";
 
   inherit (pkgs) lib stdenv fetchTarball ocamlPackages callPackage;
-  piafPkgs = callPackage ./.. { doCheck = true; };
+  native = (callPackage ./.. {
+    doCheck = true;
+    inherit nix-filter;
+  }).native;
+  musl = (callPackage ./.. {
+    inherit nix-filter;
+  }).musl64;
 
   test = pkg:
     let piafDrvs = lib.filterAttrs (_: value: lib.isDerivation value) pkg;
     in
     stdenv.mkDerivation {
       name = "piaf-tests";
-      src = lib.filterGitSource {
-        src = ./../..;
-        dirs = [ "lib" "lib_test" "examples" ];
-        files = [ ".ocamlformat" "piaf.opam" "dune-project" "dune" ];
+      src = with nix-filter; filter {
+        root = ./../..;
+        include = [
+          ".ocamlformat"
+          ".ocamlformat-ignore"
+          "piaf.opam"
+          "piaf-lwt.opam"
+          "dune-project"
+          "dune"
+        ] ++ (builtins.map inDirectory [
+          "lib"
+          "lib_test"
+          "multipart"
+          "multipart_test"
+          "lib-lwt"
+          "lib-lwt_test"
+          "multipart-lwt"
+          "multipart-lwt_test"
+          "stream"
+          "examples"
+        ]);
       };
+
       dontBuild = true;
       installPhase = ''
         touch $out
@@ -45,6 +76,6 @@ let
     };
 in
 {
-  native = test piafPkgs.native;
-  musl64 = test piafPkgs.musl64;
+  native = test native;
+  musl64 = test musl;
 }

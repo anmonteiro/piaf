@@ -1,4 +1,4 @@
-open Piaf
+open Piaf_lwt
 
 let sha1 s = s |> Digestif.SHA1.digest_string |> Digestif.SHA1.to_raw_string
 

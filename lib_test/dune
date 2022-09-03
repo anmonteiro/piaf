@@ -9,12 +9,12 @@
 
 (test
  (name test_client)
- (libraries alcotest alcotest-lwt piaf logs.fmt dune-site)
+ (libraries alcotest piaf logs.fmt dune-site)
  (modules helper_server test_client cert_sites)
  (deps
   (source_tree "./certificates")))
 
 (test
  (name test_response)
- (libraries alcotest alcotest-lwt piaf logs.fmt)
+ (libraries alcotest piaf logs.fmt)
  (modules test_response))

@@ -1,7 +1,7 @@
 { lib }:
 
 let
-  commonSteps = { name, signingKey }: [
+  commonSteps = [
     {
       uses = "actions/checkout@v2";
       "with" = {
@@ -9,15 +9,14 @@ let
       };
     }
     {
-      uses = "cachix/install-nix-action@v14.1";
-    }
-    {
-      uses = "cachix/cachix-action@v10";
+      uses = "cachix/install-nix-action@v17";
       "with" = {
-        inherit name signingKey;
+        extra_nix_config = ''
+          extra-substituters = https://anmonteiro.nix-cache.workers.dev
+          extra-trusted-public-keys = ocaml.nix-cache.com-1:/xI2h2+56rwFfKyyFVbkJSeGqSIYMC/Je+7XXqGKDIY=
+        '';
       };
     }
-
   ];
 
   job =
@@ -39,7 +38,7 @@ let
     };
 
   gh-actions = {
-    cachixBuild = { name, branches ? [ "master" ], os, cachix }:
+    cachedBuild = { name, branches ? [ "master" ], os }:
       lib.generators.toYAML { } {
         inherit name;
         on = {
@@ -53,8 +52,7 @@ let
           (os: { run, name, ... }@conf:
             job ({
               runs-on = os;
-              steps = commonSteps cachix
-                ++ [{ inherit name run; }];
+              steps = commonSteps ++ [{ inherit name run; }];
             } // (if (conf ? ocamlVersions) then {
               inherit (conf) ocamlVersions;
             } else { })))
@@ -64,12 +62,8 @@ let
 
 in
 
-gh-actions.cachixBuild {
+gh-actions.cachedBuild {
   name = "Build";
-  cachix = {
-    name = "anmonteiro";
-    signingKey = "\${{ secrets.CACHIX_SIGNING_KEY }}";
-  };
   os = {
     macos-latest = {
       name = "Run nix-build";
