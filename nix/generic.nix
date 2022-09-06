@@ -15,12 +15,11 @@ let
         "dune-project"
         "piaf-lwt.opam"
         "dune-project"
-      ] ++ (builtins.map inDirectory [
         "lib-lwt"
         "lib-lwt_test"
         "multipart-lwt"
         "multipart-lwt_test"
-      ]);
+      ];
     };
 
     useDune2 = true;
@@ -115,10 +114,13 @@ in
       name = "carl";
       version = "0.0.1-dev";
 
-      src = lib.filterGitSource {
-        src = ./..;
-        dirs = [ "bin" ];
-        files = [ "dune" "dune-project" ];
+      src = with nix-filter; filter {
+        root = ./..;
+        include = [
+          "dune"
+          "dune-project"
+          "bin"
+        ];
       };
 
       nativeBuildInputs = [ dune ocaml findlib ];
