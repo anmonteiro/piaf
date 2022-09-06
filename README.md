@@ -55,7 +55,7 @@ There's two ways to get a development environemnt up and running. If you have (o
 
 ### Option 1) Setting up the sandbox
 
-Assuming [`nix` has been installed](https://nix.dev/tutorials/install-nix.html) and set up, run `nix-shell --pure` in the repository root. Once it's done building, you should have the development environment set up!
+Assuming [`nix` has been installed](https://nix.dev/tutorials/install-nix.html) and set up, run `nix develop -c $SHELL` in the repository root. Once it's done building, you should have the development environment set up!
 
 ### Option 2) Setting up opam
 
