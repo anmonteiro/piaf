@@ -29,7 +29,7 @@ with pkgs;
       git
       opam
     ] else [ ]) ++
-    (with ocamlPackages; [ merlin ocamlformat utop ]);
+    (with ocamlPackages; [ ocaml-lsp merlin ocamlformat utop ]);
 }).overrideAttrs (o: {
   propagatedBuildInputs = filterDrvs o.propagatedBuildInputs;
   buildInputs = filterDrvs o.buildInputs;
