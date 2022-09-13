@@ -86,10 +86,17 @@ module MakeHTTP2
         req
       =
       let response_handler response body =
+        let request_method =
+          match req.Request.meth with
+          | #Method.standard as meth -> meth
+          | `Other _ -> `GET
+        in
         let body =
           Piaf_body.of_raw_body
             (module Body : BODY with type Reader.t = H2.Body.Reader.t)
-            ~body_length:(H2.Response.body_length response :> Piaf_body.length)
+            ~body_length:
+              (H2.Response.body_length ~request_method response
+                :> Piaf_body.length)
             body
         in
         response_handler (Response.of_h2 ~body response)
@@ -127,10 +134,17 @@ module HTTP : Http_intf.HTTP2 = struct
         runtime
       =
       let response_handler response body =
+        let request_method =
+          match http_request.Httpaf.Request.meth with
+          | #Method.standard as meth -> meth
+          | `Other _ -> `GET
+        in
         let body =
           Piaf_body.of_raw_body
             (module Body : BODY with type Reader.t = H2.Body.Reader.t)
-            ~body_length:(H2.Response.body_length response :> Piaf_body.length)
+            ~body_length:
+              (H2.Response.body_length ~request_method response
+                :> Piaf_body.length)
             body
         in
         response_handler (Response.of_h2 ~body response)
