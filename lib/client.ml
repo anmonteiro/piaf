@@ -160,12 +160,6 @@ let open_connection ~config ~sw ~clock conn_info =
     close_connection ~conn_info fd;
     result
 
-let change_connection t conn_info =
-  let (Conn { sw; _ }) = t.conn in
-  let+! conn' = open_connection ~sw ~config:t.config ~clock:t.clock conn_info in
-  t.conn <- conn';
-  t.uri <- conn_info.uri
-
 (* This function and `drain_available_body_bytes_and_shutdown` both take a
  * `conn_info` and a `Connection.t` instead of just a `t` too allow reuse when
  * shutting down old connection.
@@ -181,6 +175,13 @@ let shutdown_conn (Connection.Conn { impl; handle; conn_info; _ }) =
         Connection_info.pp_hum
         conn_info);
   Http_impl.shutdown (module (val impl)) handle
+
+let change_connection t conn_info =
+  let (Conn { sw; _ }) = t.conn in
+  shutdown_conn t.conn;
+  let+! conn' = open_connection ~sw ~config:t.config ~clock:t.clock conn_info in
+  t.conn <- conn';
+  t.uri <- conn_info.uri
 
 let drain_available_body_bytes_and_shutdown conn response_body =
   let (Connection.Conn { sw; _ }) = conn in
