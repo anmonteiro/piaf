@@ -49,7 +49,7 @@ type t =
   ; clock : Eio.Time.clock
   }
 
-let create_http_connection ~sw ~config ~conn_info fd =
+let create_http_connection ~sw ~config ~conn_info (fd : Eio_unix.socket) =
   let (module Http), version =
     match
       ( config.Config.http2_prior_knowledge
@@ -69,11 +69,20 @@ let create_http_connection ~sw ~config ~conn_info fd =
       in
       (module Http1.HTTP : Http_intf.HTTP), version
   in
-  Http_impl.create_connection (module Http) ~sw ~config ~conn_info ~version fd
+  Http_impl.create_connection
+    (module Http)
+    ~sw
+    ~config
+    ~conn_info
+    ~version
+    ~fd
+    (fd :> Eio.Net.stream_socket)
 
-let create_https_connection ~sw ~config ~conn_info fd =
+let create_https_connection ~sw ~config ~conn_info (fd : Eio_unix.socket) =
   let { Connection_info.host; _ } = conn_info in
-  let*! ssl_client = Openssl.connect ~config ~hostname:host fd in
+  let*! ssl_client =
+    Openssl.connect ~config ~hostname:host (fd :> Eio.Net.stream_socket)
+  in
   match Eio_ssl.ssl_socket ssl_client with
   | None -> failwith "handshake not established?"
   | Some ssl_socket ->
@@ -130,6 +139,7 @@ let create_https_connection ~sw ~config ~conn_info fd =
       ~conn_info
       ~version
       ~sw
+      ~fd
       ssl_client
 
 let close_connection ~conn_info fd =
@@ -147,9 +157,7 @@ let open_connection ~config ~sw ~clock conn_info =
   let result =
     let*! () = Connection.connect ~config ~clock ~conn_info fd in
     Log.info (fun m -> m "Connected to %a" Connection_info.pp_hum conn_info);
-    let socket =
-      (Eio_unix.FD.as_socket ~sw ~close_unix:true fd :> Eio.Net.stream_socket)
-    in
+    let socket = Eio_unix.FD.as_socket ~sw ~close_unix:true fd in
     match conn_info.scheme with
     | Scheme.HTTP -> create_http_connection ~sw ~config ~conn_info socket
     | HTTPS -> create_https_connection ~sw ~config ~conn_info socket
@@ -167,14 +175,15 @@ let open_connection ~config ~sw ~clock conn_info =
  * Due to the fact that `t.conn` is mutable, we could run into weird
  * asynchronous edge cases and shut down the connection that's currently in use
  * instead of the old one. *)
-let shutdown_conn (Connection.Conn { impl; handle; conn_info; _ }) =
+let shutdown_conn (Connection.Conn { impl; handle; conn_info; fd; _ }) =
   Log.info (fun m ->
       m
         "Tearing down %s connection to %a"
         (String.uppercase_ascii (Scheme.to_string conn_info.scheme))
         Connection_info.pp_hum
         conn_info);
-  Http_impl.shutdown (module (val impl)) handle
+  Http_impl.shutdown (module (val impl)) handle;
+  Eio.Flow.close fd
 
 let change_connection t conn_info =
   let (Conn { sw; _ }) = t.conn in
@@ -274,6 +283,7 @@ let rec return_response
         ; runtime
         ; conn_info = { Connection_info.scheme; _ } as conn_info
         ; sw
+        ; fd
         ; _
         })
     =
@@ -306,6 +316,7 @@ let rec return_response
            ~config
            ~conn_info
            ~sw
+           ~fd
            ~http_request:request
            runtime
           :> (Connection.t * Response.t, Error.t) result)

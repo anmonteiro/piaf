@@ -157,6 +157,7 @@ type t =
              with type Client.t = 'a
               and type Body.Reader.t = 'b)
       ; handle : 'a
+      ; fd : Eio_unix.socket
       ; mutable conn_info : Connection_info.t
       ; runtime : Scheme.Runtime.t
       ; connection_error_received : Error.client Promise.t
