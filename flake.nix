@@ -4,7 +4,7 @@
   inputs.nix-filter.url = "github:numtide/nix-filter";
   inputs.flake-utils.url = "github:numtide/flake-utils";
   inputs.nixpkgs.inputs.flake-utils.follows = "flake-utils";
-  inputs.nixpkgs.url = "github:anmonteiro/nix-overlays";
+  inputs.nixpkgs.url = "github:anmonteiro/nix-overlays?rev=f1117857121c16e0dd44761a0c5cd3f6fa43f807";
 
   outputs = { self, nixpkgs, flake-utils, nix-filter }:
     flake-utils.lib.eachDefaultSystem (system:
