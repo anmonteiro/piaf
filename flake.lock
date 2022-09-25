@@ -40,13 +40,13 @@
       "locked": {
         "lastModified": 1664080233,
         "narHash": "sha256-NQkbDLxSny4jt9GdFLfHrmwnIcLKGUMJqRWxnSGQnfk=",
-        "owner": "anmonteiro",
+        "owner": "nix-ocaml",
         "repo": "nix-overlays",
         "rev": "a4dafddea1c4cf3a49784fbcd73c7740912ee1fa",
         "type": "github"
       },
       "original": {
-        "owner": "anmonteiro",
+        "owner": "nix-ocaml",
         "repo": "nix-overlays",
         "rev": "a4dafddea1c4cf3a49784fbcd73c7740912ee1fa",
         "type": "github"
