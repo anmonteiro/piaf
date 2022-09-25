@@ -67,7 +67,7 @@ let do_sendfile
     : type writer.
       (module Http_intf.HTTPServerCommon with type Body.Writer.t = writer)
       -> src_fd:Unix.file_descr
-      -> fd:Eio.Flow.two_way
+      -> fd:Eio.Net.stream_socket
       -> report_exn:(exn -> unit)
       -> writer
       -> unit
@@ -225,7 +225,7 @@ let handle_error
       | HTTPS _ -> assert false)
   in
   try
-    Log.info (fun m ->
+    Log.warn (fun m ->
         m
           "Error handler called with error: %a%a"
           Error.pp_hum

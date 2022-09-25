@@ -150,6 +150,35 @@ let connect ~clock ~config ~conn_info fd =
            "FIXME: unhandled connection error (%s)"
            (Printexc.to_string exn)))
 
+let to_eio = function
+  | Unix.ADDR_UNIX s -> `Unix s
+  | ADDR_INET (addr, port) -> `Tcp (Eio_unix.Ipaddr.of_unix addr, port)
+
+let connect_eio ~sw ~clock ~config ~network conn_info =
+  let { Connection_info.addresses; _ } = conn_info in
+  (* TODO: try addresses in e.g. a round robin fashion? *)
+  let address = List.hd addresses in
+  Log.debug (fun m ->
+      m "Trying connection to %a" Connection_info.pp_hum conn_info);
+  match
+    Eio.Time.with_timeout clock config.Config.connect_timeout (fun () ->
+        Ok (Eio.Net.connect ~sw network (to_eio address)))
+  with
+  | Ok sock -> Ok sock
+  | Error `Timeout | (exception Unix.Unix_error (ECONNREFUSED, _, _)) ->
+    Result.error
+      (`Connect_error
+        (Format.asprintf
+           "Failed connecting to %a: connection refused"
+           Connection_info.pp_hum
+           conn_info))
+  | exception exn ->
+    Result.error
+      (`Connect_error
+        (Format.asprintf
+           "FIXME: unhandled connection error (%s)"
+           (Printexc.to_string exn)))
+
 type t =
   | Conn :
       { impl :
@@ -157,7 +186,7 @@ type t =
              with type Client.t = 'a
               and type Body.Reader.t = 'b)
       ; handle : 'a
-      ; fd : Eio_unix.socket
+      ; fd : < Eio.Net.stream_socket ; Eio.Flow.close >
       ; mutable conn_info : Connection_info.t
       ; runtime : Scheme.Runtime.t
       ; connection_error_received : Error.client Promise.t

@@ -81,7 +81,6 @@ type cli =
   ; max_http_version : Versions.ALPN.t
   ; h2c_upgrade : bool
   ; http2_prior_knowledge : bool
-  ; tcp_nodelay : bool
   ; cacert : Cert.t option
   ; capath : string option
   ; clientcert : (Cert.t * Cert.t) option
@@ -423,7 +422,6 @@ let piaf_config_of_cli
     ; max_http_version
     ; h2c_upgrade
     ; http2_prior_knowledge
-    ; tcp_nodelay
     ; cacert
     ; capath
     ; insecure
@@ -451,7 +449,6 @@ let piaf_config_of_cli
       ; max_http_version
       ; h2c_upgrade
       ; http2_prior_knowledge
-      ; tcp_nodelay
       ; cacert
       ; capath
       ; allow_insecure = insecure
@@ -643,10 +640,6 @@ module CLI = struct
     Arg.(
       value & opt tls_conv Versions.TLS.TLSv1_3 & info [ "tls-max" ] ~doc ~docv)
 
-  let tcp_nodelay =
-    let doc = "Use the TCP_NODELAY option" in
-    Arg.(value & flag & info [ "tcp-nodelay" ] ~doc)
-
   let upload_file =
     let doc = "Transfer local $(docv) to destination" in
     let docv = "file" in
@@ -712,7 +705,6 @@ module CLI = struct
       use_http_2
       http2_prior_knowledge
       referer
-      tcp_nodelay
       sslv3
       tlsv1
       tlsv1_0
@@ -778,7 +770,6 @@ module CLI = struct
           | _, _, _, _, _, _ -> TLSv1_0)
     ; max_tls_version
     ; insecure
-    ; tcp_nodelay
     ; user_agent
     ; compressed
     ; connect_timeout
@@ -811,7 +802,6 @@ module CLI = struct
       $ use_http_2
       $ http_2_prior_knowledge
       $ referer
-      $ tcp_nodelay
       $ sslv3
       $ tlsv1
       $ tlsv1_0

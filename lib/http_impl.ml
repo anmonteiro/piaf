@@ -57,7 +57,7 @@ let create_connection
       -> config:Config.t
       -> conn_info:Connection.Connection_info.t
       -> version:Versions.HTTP.t
-      -> fd:Eio_unix.socket
+      -> fd:< Eio.Net.stream_socket ; Eio.Flow.close >
       -> a
       -> (Connection.t, Error.client) result
   =
@@ -206,8 +206,9 @@ let can't_upgrade msg =
 
 let create_h2c_connection
     :  config:Config.t -> conn_info:Connection.Connection_info.t
-    -> fd:Eio_unix.socket -> http_request:Request.t -> sw:Eio.Switch.t
-    -> Scheme.Runtime.t -> (Connection.t * Response.t, Error.client) result
+    -> fd:< Eio.Net.stream_socket ; Eio.Flow.close > -> http_request:Request.t
+    -> sw:Eio.Switch.t -> Scheme.Runtime.t
+    -> (Connection.t * Response.t, Error.client) result
   =
  fun ~config ~conn_info ~fd ~http_request ~sw runtime ->
   match runtime with
@@ -268,9 +269,15 @@ let create_h2c_connection
        communicating over HTTPS"
 
 let shutdown
-    : type t. (module Http_intf.HTTPCommon with type Client.t = t) -> t -> unit
+    : type t.
+      (module Http_intf.HTTPCommon with type Client.t = t)
+      -> fd:< Eio.Net.stream_socket ; Eio.Flow.close >
+      -> t
+      -> unit
   =
- fun (module Http) conn -> Http.Client.shutdown conn
+ fun (module Http) ~fd conn ->
+  Http.Client.shutdown conn;
+  Eio.Flow.close fd
 
 let is_closed
     : type t. (module Http_intf.HTTPCommon with type Client.t = t) -> t -> bool

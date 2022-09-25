@@ -708,13 +708,13 @@ module Server : sig
         }
 
       val create
-        :  ?port:int
-        -> ?cacert:Cert.t
+        :  ?cacert:Cert.t
         -> ?capath:string
         -> ?min_tls_version:Versions.TLS.t
         -> ?max_tls_version:Versions.TLS.t
         -> ?allow_insecure:bool
         -> ?enforce_client_cert:bool
+        -> port:int
         -> Cert.t * Cert.t
         -> t
     end

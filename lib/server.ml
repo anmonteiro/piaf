@@ -216,7 +216,7 @@ module Command = struct
                   Eio.Net.listen
                     ~reuse_addr:true
                     ~reuse_port:true
-                    ~backlog:5
+                    ~backlog:10_000
                     ~sw
                     network
                     address

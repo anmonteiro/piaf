@@ -227,7 +227,6 @@ end = struct
      fun ~config ~request_handler ~error_handler ->
       ();
       fun ~sw socket sockaddr ->
-        (* let fd = Option.get @@ Eio_unix.FD.peek_opt socket in *)
         let fd = Runtime_scheme.socket socket in
         let request_handler = make_request_handler ~sw ~fd request_handler in
         let error_handler = make_error_handler ~fd error_handler in

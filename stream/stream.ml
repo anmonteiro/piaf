@@ -153,7 +153,5 @@ let to_list t =
 
 let drain t = iter ~f:ignore t
 
-let drain_available t =
-  while Option.is_some (take_nonblocking t) do
-    ()
-  done
+let rec drain_available t =
+  match take_nonblocking t with Some _ -> drain_available t | None -> ()
