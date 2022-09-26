@@ -14,7 +14,22 @@
         });
       in
       rec {
-        packages = pkgs.callPackage ./nix { nix-filter = nix-filter.lib; };
+        packages = {
+          native = pkgs.callPackage ./nix {
+            nix-filter = nix-filter.lib;
+            doCheck = false;
+          };
+          musl64 =
+            let
+              pkgs' = pkgs.pkgsCross.musl64;
+            in
+            pkgs'.lib.callPackageWith pkgs' ./nix {
+              static = true;
+              doCheck = false;
+              nix-filter = nix-filter.lib;
+            };
+
+        };
         defaultPackage = packages.native.piaf;
         devShell = pkgs.callPackage ./shell.nix { inherit packages; };
         gh-actions = pkgs.callPackage ./nix/gh-actions.nix { };
