@@ -9,6 +9,7 @@
 
 (test
  (name test_client)
+ (package piaf)
  (libraries alcotest piaf logs.fmt dune-site)
  (modules helper_server test_client cert_sites)
  (deps

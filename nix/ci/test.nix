@@ -23,7 +23,7 @@ let
 
   inherit (pkgs) lib stdenv fetchTarball ocamlPackages callPackage;
   native = callPackage ./.. {
-    doCheck = true;
+    doCheck = false;
     inherit nix-filter;
   };
   musl =
@@ -32,7 +32,7 @@ let
     in
     pkgs'.lib.callPackageWith pkgs' ./.. {
       inherit nix-filter;
-      doCheck = true;
+      doCheck = false;
       static = true;
     };
 
@@ -64,7 +64,11 @@ let
         ]);
       };
 
-      dontBuild = true;
+      buildPhase = ''
+        # Run these 2 tests serially as they use the same server ports
+        dune runtest -p piaf-lwt
+        dune runtest -p piaf
+      '';
       installPhase = ''
         touch $out
       '';
