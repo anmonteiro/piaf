@@ -232,6 +232,8 @@ module Command = struct
                             "Error in connection handler: %s"
                             (Printexc.to_string exn)))
                     (fun socket addr ->
+                      Unix.set_nonblock
+                        (Eio_unix.FD.peek_opt socket |> Option.get);
                       Switch.run (fun sw -> connection_handler ~sw socket addr))
                 done);
             Promise.resolve command_u command));

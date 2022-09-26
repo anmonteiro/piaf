@@ -155,6 +155,7 @@ let open_connection ~config ~sw ~clock ~network conn_info =
     Unix.setsockopt (Eio_unix.FD.peek_opt socket |> Option.get) TCP_NODELAY true;
     Log.debug (fun m -> m "TCP_NODELAY set"));
 
+  Unix.set_nonblock (Eio_unix.FD.peek_opt socket |> Option.get);
   Log.info (fun m -> m "Connected to %a" Connection_info.pp_hum conn_info);
   match conn_info.scheme with
   | Scheme.HTTP -> create_http_connection ~sw ~config ~conn_info socket
