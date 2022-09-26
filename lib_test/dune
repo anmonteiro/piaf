@@ -1,5 +1,6 @@
 (test
  (name test_cookies)
+ (package piaf)
  (modules test_cookies)
  (libraries alcotest piaf))
 
@@ -17,5 +18,6 @@
 
 (test
  (name test_response)
+ (package piaf)
  (libraries alcotest piaf logs.fmt)
  (modules test_response))
