@@ -522,4 +522,4 @@ let () =
     Logs.set_reporter format_reporter
   in
   setup_log Debug;
-  Lwt_main.run (Alcotest_lwt.run "Piaf client tests" suite)
+  Lwt_main.run (Alcotest_lwt.run "Piaf-lwt client tests" suite)

@@ -33,7 +33,6 @@ open Eio.Std
 open Monads.Bindings
 open Util
 module Connection_info = Connection.Connection_info
-module Version = Httpaf.Version
 
 let src = Logs.Src.create "piaf.client" ~doc:"Piaf Client module"
 
@@ -47,6 +46,8 @@ type t =
          * Mutable so that we remember permanent redirects. *)
   ; config : Config.t
   ; clock : Eio.Time.clock
+  ; network : Eio.Net.t
+  ; sw : Switch.t
   }
 
 let create_http_connection ~sw ~config ~conn_info fd =
@@ -69,11 +70,25 @@ let create_http_connection ~sw ~config ~conn_info fd =
       in
       (module Http1.HTTP : Http_intf.HTTP), version
   in
-  Http_impl.create_connection (module Http) ~sw ~config ~conn_info ~version fd
+  Http_impl.create_connection
+    (module Http)
+    ~sw
+    ~config
+    ~conn_info
+    ~version
+    ~fd
+    (fd :> Eio.Net.stream_socket)
 
-let create_https_connection ~sw ~config ~conn_info fd =
+let create_https_connection
+    ~sw
+    ~config
+    ~conn_info
+    (fd : < Eio.Net.stream_socket ; Eio.Flow.close >)
+  =
   let { Connection_info.host; _ } = conn_info in
-  let*! ssl_client = Openssl.connect ~config ~hostname:host fd in
+  let*! ssl_client =
+    Openssl.connect ~config ~hostname:host (fd :> Eio.Net.stream_socket)
+  in
   match Eio_ssl.ssl_socket ssl_client with
   | None -> failwith "handshake not established?"
   | Some ssl_socket ->
@@ -130,41 +145,21 @@ let create_https_connection ~sw ~config ~conn_info fd =
       ~conn_info
       ~version
       ~sw
+      ~fd
       ssl_client
 
-let close_connection ~conn_info fd =
-  Log.info (fun m ->
-      m "Closing connection to %a" Connection_info.pp_hum conn_info);
-  Body.Unix_fd.ensure_closed fd
-
-let open_connection ~config ~sw ~clock conn_info =
-  let fd = Unix.socket Unix.PF_INET Unix.SOCK_STREAM 0 in
+let open_connection ~config ~sw ~clock ~network conn_info =
+  let*! socket = Connection.connect_eio ~sw ~config ~clock ~network conn_info in
   if config.Config.tcp_nodelay
   then (
-    Unix.setsockopt fd TCP_NODELAY true;
+    Unix.setsockopt (Eio_unix.FD.peek_opt socket |> Option.get) TCP_NODELAY true;
     Log.debug (fun m -> m "TCP_NODELAY set"));
 
-  let*! () = Connection.connect ~config ~clock ~conn_info fd in
+  Unix.set_nonblock (Eio_unix.FD.peek_opt socket |> Option.get);
   Log.info (fun m -> m "Connected to %a" Connection_info.pp_hum conn_info);
-  let socket =
-    (Eio_unix.FD.as_socket ~sw ~close_unix:true fd :> Eio.Net.stream_socket)
-  in
-  let result =
-    match conn_info.scheme with
-    | Scheme.HTTP -> create_http_connection ~sw ~config ~conn_info socket
-    | HTTPS -> create_https_connection ~sw ~config ~conn_info socket
-  in
-  match result with
-  | Ok _ -> result
-  | Error _ ->
-    close_connection ~conn_info fd;
-    result
-
-let change_connection t conn_info =
-  let (Conn { sw; _ }) = t.conn in
-  let+! conn' = open_connection ~sw ~config:t.config ~clock:t.clock conn_info in
-  t.conn <- conn';
-  t.uri <- conn_info.uri
+  match conn_info.scheme with
+  | Scheme.HTTP -> create_http_connection ~sw ~config ~conn_info socket
+  | HTTPS -> create_https_connection ~sw ~config ~conn_info socket
 
 (* This function and `drain_available_body_bytes_and_shutdown` both take a
  * `conn_info` and a `Connection.t` instead of just a `t` too allow reuse when
@@ -173,14 +168,28 @@ let change_connection t conn_info =
  * Due to the fact that `t.conn` is mutable, we could run into weird
  * asynchronous edge cases and shut down the connection that's currently in use
  * instead of the old one. *)
-let shutdown_conn (Connection.Conn { impl; handle; conn_info; _ }) =
+let shutdown_conn (Connection.Conn { impl; handle; conn_info; fd; _ }) =
   Log.info (fun m ->
       m
         "Tearing down %s connection to %a"
         (String.uppercase_ascii (Scheme.to_string conn_info.scheme))
         Connection_info.pp_hum
         conn_info);
-  Http_impl.shutdown (module (val impl)) handle
+  Http_impl.shutdown (module (val impl)) ~fd handle
+
+let change_connection t conn_info =
+  let (Conn { sw; _ }) = t.conn in
+  Fiber.fork ~sw (fun () -> shutdown_conn t.conn);
+  let+! conn' =
+    open_connection
+      ~sw
+      ~config:t.config
+      ~clock:t.clock
+      ~network:t.network
+      conn_info
+  in
+  t.conn <- conn';
+  t.uri <- conn_info.uri
 
 let drain_available_body_bytes_and_shutdown conn response_body =
   let (Connection.Conn { sw; _ }) = conn in
@@ -189,8 +198,7 @@ let drain_available_body_bytes_and_shutdown conn response_body =
    * response body so it doesn't need to stay around. *)
   Fiber.fork ~sw (fun () ->
       Log.debug (fun m -> m "Ignoring the response body");
-      Body.drain_available response_body;
-      shutdown_conn conn)
+      Body.drain_available response_body)
 
 let shutdown { conn; _ } = shutdown_conn conn
 
@@ -198,7 +206,7 @@ let shutdown { conn; _ } = shutdown_conn conn
 let reuse_or_set_up_new_connection
     ({ conn =
          Connection.Conn
-           ({ impl = (module Http); handle; conn_info; sw; _ } as conn)
+           ({ impl = (module Http); handle; conn_info; _ } as conn)
      ; _
      } as t)
     new_uri
@@ -215,16 +223,15 @@ let reuse_or_set_up_new_connection
       }
     in
     if (not t.persistent) || Http_impl.is_closed (module Http) handle
-    then (
+    then
       (* No way to avoid establishing a new connection if the previous one
        * wasn't persistent or the connection is closed. *)
-      Fiber.fork ~sw (fun () -> shutdown t);
       let*! new_addresses =
         Connection.resolve_host ~port:new_conn_info.port new_conn_info.host
       in
       let new_conn_info = { new_conn_info with addresses = new_addresses } in
       let+! () = change_connection t new_conn_info in
-      false)
+      false
     else if Connection_info.equal_without_resolving conn_info new_conn_info
     then (
       (* If we're redirecting within the same host / port / scheme, no need
@@ -273,6 +280,7 @@ let rec return_response
         ; runtime
         ; conn_info = { Connection_info.scheme; _ } as conn_info
         ; sw
+        ; fd
         ; _
         })
     =
@@ -305,6 +313,7 @@ let rec return_response
            ~config
            ~conn_info
            ~sw
+           ~fd
            ~http_request:request
            runtime
           :> (Connection.t * Response.t, Error.t) result)
@@ -405,8 +414,9 @@ let rec send_request_and_handle_response
      * only reuse if persistent), throw away the response body, because we're
      * not going to expose it to consumers.
      *
-     * Otherwise, if we couldn't reuse the connection, drain the response body
-     * and additionally shut down the old connection. *)
+     * Otherwise, if we couldn't reuse the connection, drain the response body.
+     * The old connection will already have been shutdown by
+     * `change_connection`. *)
     if did_reuse
     then ignore (Body.drain response.body)
     else
@@ -453,11 +463,12 @@ let rec send_request_and_handle_response
 let create ?(config = Config.default) ~sw env uri =
   let*! conn_info = Connection_info.of_uri uri in
   let clock = Eio.Stdenv.clock env in
+  let network = Eio.Stdenv.net env in
   let+! conn =
-    (open_connection ~config ~sw ~clock conn_info
+    (open_connection ~config ~sw ~clock ~network conn_info
       :> (Connection.t, Error.t) result)
   in
-  { conn; persistent = true; uri; config; clock }
+  { conn; persistent = true; uri; config; clock; network; sw }
 
 let call t ~meth ?(headers = []) ?(body = Body.empty) target =
   (* Need to try to reconnect to the base host on every call, if redirects are
@@ -490,8 +501,11 @@ let patch t ?headers ?body target =
 let delete t ?headers ?body target = call t ?headers ?body ~meth:`DELETE target
 
 module Oneshot = struct
-  (* TODO(anmonteiro): if this is oneshot, why aren't we sending a
-   * `Connection: close` header? *)
+  (* Note: we're not sending `Connection: close`:
+   * - HTTP/2 doesn't support the `Connection` header
+   * - We want to reuse the same connection in case there's a redirect we must
+   *   follow
+   *)
   let call
       ?(config = Config.default)
       ?(headers = [])

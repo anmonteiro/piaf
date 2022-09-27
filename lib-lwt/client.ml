@@ -137,9 +137,9 @@ let open_connection ~config conn_info =
     Lwt_unix.setsockopt fd Lwt_unix.TCP_NODELAY true;
     Log.debug (fun m -> m "TCP_NODELAY set"));
 
-  let**! () = Connection.connect ~config ~conn_info fd in
-  Log.info (fun m -> m "Connected to %a" Connection_info.pp_hum conn_info);
   let* result =
+    let**! () = Connection.connect ~config ~conn_info fd in
+    Log.info (fun m -> m "Connected to %a" Connection_info.pp_hum conn_info);
     match conn_info.scheme with
     | Scheme.HTTP -> create_http_connection ~config ~conn_info fd
     | HTTPS -> create_https_connection ~config ~conn_info fd

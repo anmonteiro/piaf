@@ -22,16 +22,28 @@ let
   nix-filter = import "${nix-filter-src}";
 
   inherit (pkgs) lib stdenv fetchTarball ocamlPackages callPackage;
-  native = (callPackage ./.. {
-    doCheck = true;
+  native = callPackage ./.. {
+    doCheck = false;
     inherit nix-filter;
-  }).native;
-  musl = (callPackage ./.. {
-    inherit nix-filter;
-  }).musl64;
+  };
+  musl =
+    let
+      pkgs' = pkgs.pkgsCross.musl64;
+    in
+    pkgs'.lib.callPackageWith pkgs' ./.. {
+      inherit nix-filter;
+      doCheck = false;
+      static = true;
+    };
 
   test = pkg:
-    let piafDrvs = lib.filterAttrs (_: value: lib.isDerivation value) pkg;
+    let
+      piafDrvs = lib.filterAttrs
+        (_: value:
+          if lib.isDerivation value
+          then true
+          else false)
+        pkg;
     in
     stdenv.mkDerivation {
       name = "piaf-tests";
@@ -58,7 +70,13 @@ let
         ]);
       };
 
-      dontBuild = true;
+      buildPhase = ''
+        # Run these 2 tests serially as they use the same server ports
+        dune runtest -p piaf-lwt
+        ${if (lib.hasPrefix "5_" ocamlVersion) then
+          "dune runtest -p piaf"
+          else ""}
+      '';
       installPhase = ''
         touch $out
       '';

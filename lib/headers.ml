@@ -47,6 +47,11 @@ module Well_known = struct
   let location = "location"
   let upgrade = "upgrade"
   let transfer_encoding = "transfer-encoding"
+
+  module Values = struct
+    let close = "close"
+    let chunked = "chunked"
+  end
 end
 
 let add_length_related_headers ~body_length headers =
@@ -56,8 +61,13 @@ let add_length_related_headers ~body_length headers =
   match body_length with
   | `Fixed n ->
     add_unless_exists headers Well_known.content_length (Int64.to_string n)
-  | `Chunked -> add_unless_exists headers Well_known.transfer_encoding "chunked"
-  | `Close_delimited -> add_unless_exists headers Well_known.connection "close"
+  | `Chunked ->
+    add_unless_exists
+      headers
+      Well_known.transfer_encoding
+      Well_known.Values.chunked
+  | `Close_delimited ->
+    add_unless_exists headers Well_known.connection Well_known.Values.close
   | `Error _ | `Unknown -> headers
 
 (* TODO: Add user-agent if not defined *)
@@ -70,7 +80,8 @@ let canonicalize_headers ~body_length ~host ~version headers =
         :: List.map
              (fun (name, value) -> String.lowercase_ascii name, value)
              headers)
-    | { major = 1; _ } -> add_unless_exists (of_list headers) "Host" host
+    | { major = 1; _ } ->
+      add_unless_exists (of_list headers) Well_known.HTTP1.host host
     | _ -> failwith "unsupported version"
   in
   add_length_related_headers ~body_length headers

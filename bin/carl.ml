@@ -81,7 +81,6 @@ type cli =
   ; max_http_version : Versions.ALPN.t
   ; h2c_upgrade : bool
   ; http2_prior_knowledge : bool
-  ; tcp_nodelay : bool
   ; cacert : Cert.t option
   ; capath : string option
   ; clientcert : (Cert.t * Cert.t) option
@@ -287,27 +286,28 @@ let handle_response
         let stream = Body.to_stream body in
         let total_len = Body.length body in
         (try
-           let { Piaf.IOVec.buffer; off; len } =
-             Option.get @@ Stream.take stream
-           in
-           let running_total = Int64.of_int len in
-           report_progess ~first:true ~cli running_total total_len;
-           let chunk = Bigstringaf.substring buffer ~off ~len in
-           let* () = print_string ~cli formatter chunk in
-           let+ (_ret : int64) =
-             Body.fold
-               ~f:(fun running_total { Piaf.IOVec.buffer; off; len } ->
-                 let new_total = Int64.(add (of_int len) running_total) in
-                 report_progess ~cli new_total total_len;
-                 let body_fragment = Bigstringaf.substring buffer ~off ~len in
-                 let (_ : _ result) =
-                   print_string ~cli formatter body_fragment
-                 in
-                 new_total)
-               ~init:running_total
-               body
-           in
-           ()
+           match Stream.take stream with
+           | Some { Piaf.IOVec.buffer; off; len } ->
+             Format.eprintf "ahoy2@.";
+             let running_total = Int64.of_int len in
+             report_progess ~first:true ~cli running_total total_len;
+             let chunk = Bigstringaf.substring buffer ~off ~len in
+             let* () = print_string ~cli formatter chunk in
+             let+ (_ret : int64) =
+               Body.fold
+                 ~f:(fun running_total { Piaf.IOVec.buffer; off; len } ->
+                   let new_total = Int64.(add (of_int len) running_total) in
+                   report_progess ~cli new_total total_len;
+                   let body_fragment = Bigstringaf.substring buffer ~off ~len in
+                   let (_ : _ result) =
+                     print_string ~cli formatter body_fragment
+                   in
+                   new_total)
+                 ~init:running_total
+                 body
+             in
+             ()
+           | None -> assert false
          with
         | exn -> Error (`Exn exn))
   in
@@ -423,7 +423,6 @@ let piaf_config_of_cli
     ; max_http_version
     ; h2c_upgrade
     ; http2_prior_knowledge
-    ; tcp_nodelay
     ; cacert
     ; capath
     ; insecure
@@ -451,7 +450,6 @@ let piaf_config_of_cli
       ; max_http_version
       ; h2c_upgrade
       ; http2_prior_knowledge
-      ; tcp_nodelay
       ; cacert
       ; capath
       ; allow_insecure = insecure
@@ -643,10 +641,6 @@ module CLI = struct
     Arg.(
       value & opt tls_conv Versions.TLS.TLSv1_3 & info [ "tls-max" ] ~doc ~docv)
 
-  let tcp_nodelay =
-    let doc = "Use the TCP_NODELAY option" in
-    Arg.(value & flag & info [ "tcp-nodelay" ] ~doc)
-
   let upload_file =
     let doc = "Transfer local $(docv) to destination" in
     let docv = "file" in
@@ -712,7 +706,6 @@ module CLI = struct
       use_http_2
       http2_prior_knowledge
       referer
-      tcp_nodelay
       sslv3
       tlsv1
       tlsv1_0
@@ -778,7 +771,6 @@ module CLI = struct
           | _, _, _, _, _, _ -> TLSv1_0)
     ; max_tls_version
     ; insecure
-    ; tcp_nodelay
     ; user_agent
     ; compressed
     ; connect_timeout
@@ -811,7 +803,6 @@ module CLI = struct
       $ use_http_2
       $ http_2_prior_knowledge
       $ referer
-      $ tcp_nodelay
       $ sslv3
       $ tlsv1
       $ tlsv1_0

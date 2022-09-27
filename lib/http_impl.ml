@@ -57,10 +57,11 @@ let create_connection
       -> config:Config.t
       -> conn_info:Connection.Connection_info.t
       -> version:Versions.HTTP.t
+      -> fd:< Eio.Net.stream_socket ; Eio.Flow.close >
       -> a
       -> (Connection.t, Error.client) result
   =
- fun (module Http_impl) ~sw ~config ~conn_info ~version socket ->
+ fun (module Http_impl) ~sw ~config ~conn_info ~version ~fd socket ->
   let connection_error_received, notify_connection_error_received =
     Promise.create ()
   in
@@ -72,6 +73,7 @@ let create_connection
     Connection.Conn
       { impl = (module Http_impl)
       ; handle
+      ; fd
       ; conn_info
       ; runtime
       ; connection_error_received
@@ -204,10 +206,11 @@ let can't_upgrade msg =
 
 let create_h2c_connection
     :  config:Config.t -> conn_info:Connection.Connection_info.t
-    -> http_request:Request.t -> sw:Eio.Switch.t -> Scheme.Runtime.t
+    -> fd:< Eio.Net.stream_socket ; Eio.Flow.close > -> http_request:Request.t
+    -> sw:Eio.Switch.t -> Scheme.Runtime.t
     -> (Connection.t * Response.t, Error.client) result
   =
- fun ~config ~conn_info ~http_request ~sw runtime ->
+ fun ~config ~conn_info ~fd ~http_request ~sw runtime ->
   match runtime with
   | HTTP http_runtime ->
     let (module Http2) = (module Http2.HTTP : Http_intf.HTTP2) in
@@ -248,6 +251,7 @@ let create_h2c_connection
         let connection =
           Connection.Conn
             { impl = (module Http2)
+            ; fd
             ; handle
             ; conn_info
             ; runtime
@@ -265,9 +269,15 @@ let create_h2c_connection
        communicating over HTTPS"
 
 let shutdown
-    : type t. (module Http_intf.HTTPCommon with type Client.t = t) -> t -> unit
+    : type t.
+      (module Http_intf.HTTPCommon with type Client.t = t)
+      -> fd:< Eio.Net.stream_socket ; Eio.Flow.close >
+      -> t
+      -> unit
   =
- fun (module Http) conn -> Http.Client.shutdown conn
+ fun (module Http) ~fd conn ->
+  Http.Client.shutdown conn;
+  Eio.Flow.close fd
 
 let is_closed
     : type t. (module Http_intf.HTTPCommon with type Client.t = t) -> t -> bool
