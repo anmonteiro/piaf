@@ -39,12 +39,9 @@ let
   test = pkg:
     let
       piafDrvs = lib.filterAttrs
-        (name: value:
+        (_: value:
           if lib.isDerivation value
-          then
-            (if !(lib.hasPrefix "5_" ocamlVersion)
-            then lib.trace name (name != "carl" && name != "piaf")
-            else true)
+          then true
           else false)
         pkg;
     in
@@ -76,7 +73,9 @@ let
       buildPhase = ''
         # Run these 2 tests serially as they use the same server ports
         dune runtest -p piaf-lwt
-        dune runtest -p piaf
+        ${if (lib.hasPrefix "5_" ocamlVersion) then
+          "dune runtest -p piaf"
+          else ""}
       '';
       installPhase = ''
         touch $out
