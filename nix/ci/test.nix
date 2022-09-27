@@ -37,7 +37,16 @@ let
     };
 
   test = pkg:
-    let piafDrvs = lib.filterAttrs (_: value: lib.isDerivation value) pkg;
+    let
+      piafDrvs = lib.filterAttrs
+        (name: value:
+          if lib.isDerivation value
+          then
+            (if !(lib.hasPrefix "5_" ocamlVersion)
+            then lib.trace name (name != "carl" && name != "piaf")
+            else true)
+          else false)
+        pkg;
     in
     stdenv.mkDerivation {
       name = "piaf-tests";
