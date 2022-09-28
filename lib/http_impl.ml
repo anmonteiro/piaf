@@ -68,6 +68,7 @@ let create_connection
       ; connection
       ; fd
       ; conn_info
+      ; persistent = true
       ; runtime
       ; connection_error_received
       ; version
@@ -202,7 +203,7 @@ let create_h2c_connection
     -> Gluten_eio.Client.t -> (Connection.t * Response.t, Error.client) result
   =
  fun ~sw ~config ~conn_info ~fd ~http_request runtime ->
-  match http_request.scheme with
+  match conn_info.scheme with
   | `HTTP ->
     let (module Http2) = (module Http2.HTTP : Http_intf.HTTP2) in
     let response_received, notify_response_received = Promise.create () in
@@ -217,11 +218,10 @@ let create_h2c_connection
     let response_error_handler =
       make_error_handler notify_response_error_received
     in
-    let http_request = Request.to_http1 http_request in
     (match
        Http2.Client.create_h2c
          ~config
-         ~http_request
+         ~http_request:(Request.to_http1 http_request)
          ~error_handler
          (response_handler, response_error_handler)
          runtime
@@ -245,6 +245,7 @@ let create_h2c_connection
             ; fd
             ; connection
             ; conn_info
+            ; persistent = true
             ; runtime
             ; connection_error_received
             ; version = Versions.HTTP.v2_0

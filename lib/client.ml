@@ -40,7 +40,6 @@ module Log = (val Logs.src_log src : Logs.LOG)
 
 type t =
   { mutable conn : Connection.t
-  ; mutable persistent : bool
   ; mutable uri : Uri.t
         (* The connection URI. Request entrypoints connect here.
          * Mutable so that we remember permanent redirects. *)
@@ -157,9 +156,8 @@ let open_connection ~config ~sw ~clock ~network conn_info =
   | `HTTP -> create_http_connection ~sw ~config ~conn_info socket
   | `HTTPS -> create_https_connection ~sw ~config ~conn_info socket
 
-(* This function and `drain_available_body_bytes_and_shutdown` both take a
- * `conn_info` and a `Connection.t` instead of just a `t` too allow reuse when
- * shutting down old connection.
+(* This function takes a `conn_info` and a `Connection.t` instead of just a `t`
+ * too allow reuse when shutting down old connection.
  *
  * Due to the fact that `t.conn` is mutable, we could run into weird
  * asynchronous edge cases and shut down the connection that's currently in use
@@ -174,8 +172,8 @@ let shutdown_conn (Connection.Conn { impl; connection; conn_info; fd; _ }) =
   Http_impl.shutdown (module (val impl)) ~fd connection
 
 let change_connection t conn_info =
-  let (Conn { sw; _ }) = t.conn in
-  Fiber.fork ~sw (fun () -> shutdown_conn t.conn);
+  let { sw; conn; _ } = t in
+  Fiber.fork ~sw (fun () -> shutdown_conn conn);
   let+! conn' =
     open_connection
       ~sw
@@ -186,15 +184,6 @@ let change_connection t conn_info =
   in
   t.conn <- conn';
   t.uri <- conn_info.uri
-
-let drain_available_body_bytes_and_shutdown conn response_body =
-  let (Connection.Conn { sw; _ }) = conn in
-  (* Junk what's available because we're going to close the connection.
-   * This is to avoid leaking memory. We're not going to use this
-   * response body so it doesn't need to stay around. *)
-  Fiber.fork ~sw (fun () ->
-      Log.debug (fun m -> m "Ignoring the response body");
-      Body.drain_available response_body)
 
 let shutdown { conn; _ } = shutdown_conn conn
 
@@ -218,8 +207,8 @@ let reuse_or_set_up_new_connection
       ; uri = new_uri
       }
     in
-    if (not t.persistent) || Http_impl.is_closed (module Http) connection
-    then
+    if (not conn.persistent) || Http_impl.is_closed (module Http) connection
+    then (
       (* No way to avoid establishing a new connection if the previous one
        * wasn't persistent or the connection is closed. *)
       let*! new_addresses =
@@ -376,15 +365,18 @@ let make_request_info
   { remaining_redirects; headers; request; meth; target; is_h2c_upgrade }
 
 let rec send_request_and_handle_response
-    ({ conn = Conn { conn_info; _ } as conn; uri; config; _ } as t)
+    t
     ~body
     ({ remaining_redirects; request; headers; meth; _ } as request_info)
   =
+  let { conn = Conn ({ conn_info; _ } as conn); uri; config; _ } = t in
+
   let*! response =
-    (Http_impl.send_request conn ~config ~body request
+    (Http_impl.send_request t.conn ~config ~body request
       :> (Response.t, Error.t) result)
   in
-  if t.persistent then t.persistent <- Response.persistent_connection response;
+  if conn.persistent
+  then conn.persistent <- Response.persistent_connection response;
   (* TODO: 201 created can also return a Location header. Should we follow
    * those? *)
   match
@@ -406,20 +398,17 @@ let rec send_request_and_handle_response
     let*! did_reuse =
       (reuse_or_set_up_new_connection t new_uri :> (bool, Error.t) result)
     in
-    (* If we reused the connection, and this is a persistent connection (we
-     * only reuse if persistent), throw away the response body, because we're
-     * not going to expose it to consumers.
+    (* If we reused the (persistent) connection, throw away the response body,
+     * because we're not going to expose it to consumers.
      *
      * Otherwise, if we couldn't reuse the connection, drain the response body.
      * The old connection will already have been shutdown by
      * `change_connection`. *)
     if did_reuse
-    then ignore (Body.drain response.body)
-    else
-      (* In this branch, don't bother waiting for the entire response body to
-       * arrive, we're going to shut down the connection either way. Just hang
-       * up. *)
-      drain_available_body_bytes_and_shutdown conn response.body;
+    then
+      Fiber.fork ~sw:t.sw (fun () ->
+          let (_drained : _ result) = Body.drain response.body in
+          ());
     if Status.is_permanent_redirection response.status then t.uri <- new_uri;
     let target = Uri.path_and_query new_uri in
     (* From RFC7231§6.4:
@@ -464,21 +453,24 @@ let create ?(config = Config.default) ~sw env uri =
     (open_connection ~config ~sw ~clock ~network conn_info
       :> (Connection.t, Error.t) result)
   in
-  { conn; persistent = true; uri; config; clock; network; sw }
+  { conn; uri; config; clock; network; sw }
 
 let call t ~meth ?(headers = []) ?(body = Body.empty) target =
   (* Need to try to reconnect to the base host on every call, if redirects are
    * enabled, because the connection manager could have tried to follow a
    * temporary redirect. We remember permanent redirects. *)
-  let (Connection.Conn { impl = (module Http); connection; _ }) = t.conn in
-  let*! (_did_reuse : bool) =
+  let (Connection.Conn { impl = (module Http); connection; persistent; _ }) =
+    t.conn
+  in
+  let*! (_reused : bool) =
     if t.config.follow_redirects || Http_impl.is_closed (module Http) connection
     then (reuse_or_set_up_new_connection t t.uri :> (bool, Error.t) result)
     else Ok true
   in
   let headers = t.config.default_headers @ headers in
   let request_info = make_request_info t ~meth ~headers ~body target in
-  t.persistent <- Request.persistent_connection request_info.request;
+  let (Connection.Conn conn) = t.conn in
+  conn.persistent <- Request.persistent_connection request_info.request;
   send_request_and_handle_response t ~body request_info
 
 let request t ?headers ?body ~meth target = call t ?headers ?body ~meth target
@@ -511,11 +503,13 @@ module Oneshot = struct
       env
       uri
     =
-    let*! t = create ~config ~sw env uri in
+    let*! ({ conn = Connection.Conn conn; _ } as t) =
+      create ~config ~sw env uri
+    in
     let target = Uri.path_and_query t.uri in
     let headers = t.config.default_headers @ headers in
     let request_info = make_request_info t ~meth ~headers ~body target in
-    t.persistent <- Request.persistent_connection request_info.request;
+    conn.persistent <- Request.persistent_connection request_info.request;
     let response_result =
       send_request_and_handle_response t ~body request_info
     in

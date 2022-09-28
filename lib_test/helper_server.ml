@@ -8,11 +8,18 @@ let request_handler { Server.request; _ } =
   let response_body =
     Format.asprintf "%a %s" Method.pp_hum request.meth request.target
   in
+  let headers =
+    Headers.(
+      of_list
+        (match get_exn request.headers Well_known.connection with
+        | "close" -> [ Well_known.connection, Well_known.Values.close ]
+        | _ | (exception Not_found) -> []))
+  in
   match Astring.String.cuts ~empty:false ~sep:"/" request.target with
-  | [] -> (Response.of_string ~body:response_body) `OK
+  | [] -> Response.of_string ~headers ~body:response_body `OK
   | [ "redirect" ] ->
     Response.create
-      ~headers:Headers.(of_list [ Well_known.location, "/" ])
+      ~headers:Headers.(add headers Well_known.location "/")
       `Found
   | "alpn" :: _ ->
     (Response.create

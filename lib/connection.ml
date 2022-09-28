@@ -181,13 +181,11 @@ let connect_eio ~sw ~clock ~config ~network conn_info =
 
 type t =
   | Conn :
-      { impl :
-          (module Http_intf.HTTPCommon
-             with type Client.t = 'a
-              and type Body.Reader.t = 'b)
+      { impl : (module Http_intf.HTTPCommon with type Client.t = 'a)
       ; connection : 'a
       ; fd : < Eio.Net.stream_socket ; Eio.Flow.close >
       ; mutable conn_info : Connection_info.t
+      ; mutable persistent : bool
       ; runtime : Gluten_eio.Client.t
       ; connection_error_received : Error.client Promise.t
       ; version : Versions.HTTP.t

@@ -190,6 +190,10 @@ module Headers : sig
     val location : string
     val upgrade : string
     val transfer_encoding : string
+
+    module Values : sig
+      val close : string
+    end
   end
 end
 

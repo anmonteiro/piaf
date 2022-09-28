@@ -259,7 +259,7 @@ let is_closed t =
   match t.contents with
   | `Empty _ | `String _ | `Bigstring _ -> true
   | `Stream stream -> Stream.is_closed stream
-  | `Sendfile (fd, _, _) -> Unix_fd.is_valid fd
+  | `Sendfile (fd, _, _) -> not (Unix_fd.is_valid fd)
 
 let is_errored t = Promise.is_resolved t.error_received
 
