@@ -459,9 +459,7 @@ let call t ~meth ?(headers = []) ?(body = Body.empty) target =
   (* Need to try to reconnect to the base host on every call, if redirects are
    * enabled, because the connection manager could have tried to follow a
    * temporary redirect. We remember permanent redirects. *)
-  let (Connection.Conn { impl = (module Http); connection; persistent; _ }) =
-    t.conn
-  in
+  let (Connection.Conn { impl = (module Http); connection; _ }) = t.conn in
   let*! (_reused : bool) =
     if t.config.follow_redirects || Http_impl.is_closed (module Http) connection
     then (reuse_or_set_up_new_connection t t.uri :> (bool, Error.t) result)

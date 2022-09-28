@@ -417,7 +417,7 @@ let test_https_client_certs ~sw env () =
     |> Result.map (fun res -> Result.get_ok (Body.drain res.Response.body))
   in
   (match response with
-  | Ok _ -> Alcotest.fail "expected response to be error"
+  | Ok () -> Alcotest.fail "expected response to be error"
   | Error (`TLS_error msg) ->
     (match run "uname" with
     | "Linux" ->
@@ -428,7 +428,9 @@ let test_https_client_certs ~sw env () =
         "response error"
         "error:0A00045C:SSL routines::tlsv13 alert certificate required"
         msg)
-  | Error _ -> Alcotest.fail "expected response to be error");
+  | Error e ->
+    Alcotest.fail
+      (Format.asprintf "expected response to be error: %a" Error.pp_hum e));
 
   Helper_server.teardown server
 

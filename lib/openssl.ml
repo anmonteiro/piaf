@@ -354,12 +354,12 @@ let connect ~hostname ~config fd =
   else
     let*! ssl_ctx = setup_client_ctx ~config:client_conf ~hostname fd in
     let socket_or_error =
-      try Ok (Eio_ssl.connect ssl_ctx) with
-      | Eio_ssl.Exn.Ssl_exception { message; _ } ->
+      match Eio_ssl.connect ssl_ctx with
+      | socket -> Ok socket
+      | exception Eio_ssl.Exn.Ssl_exception { message; _ } ->
         let msg = Format.asprintf "SSL Error: %s" message in
         Log.err (fun m -> m "%s" msg);
         Error (`Connect_error msg)
-      | _ -> assert false
     in
     let ssl_sock = Eio_ssl.Context.ssl_socket ssl_ctx in
     match socket_or_error with
