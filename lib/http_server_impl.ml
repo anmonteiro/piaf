@@ -67,7 +67,7 @@ let do_sendfile
     : type writer.
       (module Http_intf.HTTPServerCommon with type Body.Writer.t = writer)
       -> src_fd:Unix.file_descr
-      -> fd:Eio.Net.stream_socket
+      -> fd:Eio.Flow.two_way
       -> report_exn:(exn -> unit)
       -> writer
       -> unit

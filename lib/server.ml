@@ -169,8 +169,7 @@ let https_connection_handler ~https ~clock t : connection_handler =
 module Command = struct
   exception Server_shutdown
 
-  type connection_handler =
-    sw:Switch.t -> Eio.Net.stream_socket -> Eio.Net.Sockaddr.stream -> unit
+  type connection_handler = Server_intf.connection_handler
 
   type nonrec t =
     { network : Eio.Net.t
