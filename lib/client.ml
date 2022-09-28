@@ -32,7 +32,7 @@
 open Eio.Std
 open Monads.Bindings
 open Util
-module Connection_info = Connection.Connection_info
+module Connection_info = Connection.Info
 
 let src = Logs.Src.create "piaf.client" ~doc:"Piaf Client module"
 
@@ -40,16 +40,13 @@ module Log = (val Logs.src_log src : Logs.LOG)
 
 type t =
   { mutable conn : Connection.t
-  ; mutable uri : Uri.t
-        (* The connection URI. Request entrypoints connect here.
-         * Mutable so that we remember permanent redirects. *)
   ; config : Config.t
   ; clock : Eio.Time.clock
   ; network : Eio.Net.t
   ; sw : Switch.t
   }
 
-let create_http_connection ~sw ~config ~conn_info fd =
+let create_http_connection ~sw ~config ~conn_info ~uri fd =
   let (module Http), version =
     match
       ( config.Config.http2_prior_knowledge
@@ -74,6 +71,7 @@ let create_http_connection ~sw ~config ~conn_info fd =
     ~sw
     ~config
     ~conn_info
+    ~uri
     ~version
     ~fd
     (fd :> Eio.Net.stream_socket)
@@ -82,6 +80,7 @@ let create_https_connection
     ~sw
     ~config
     ~conn_info
+    ~uri
     (fd : < Eio.Net.stream_socket ; Eio.Flow.close >)
   =
   let { Connection_info.host; _ } = conn_info in
@@ -136,14 +135,15 @@ let create_https_connection
   in
   Http_impl.create_connection
     (module Https)
+    ~sw
     ~config
     ~conn_info
+    ~uri
     ~version
-    ~sw
     ~fd
     (ssl_client :> Eio.Flow.two_way)
 
-let open_connection ~config ~sw ~clock ~network conn_info =
+let open_connection ~sw ~config ~clock ~network ~uri conn_info =
   let*! socket = Connection.connect_eio ~sw ~config ~clock ~network conn_info in
   if config.Config.tcp_nodelay
   then (
@@ -153,8 +153,8 @@ let open_connection ~config ~sw ~clock ~network conn_info =
   Unix.set_nonblock (Eio_unix.FD.peek_opt socket |> Option.get);
   Log.info (fun m -> m "Connected to %a" Connection_info.pp_hum conn_info);
   match conn_info.scheme with
-  | `HTTP -> create_http_connection ~sw ~config ~conn_info socket
-  | `HTTPS -> create_https_connection ~sw ~config ~conn_info socket
+  | `HTTP -> create_http_connection ~sw ~config ~conn_info ~uri socket
+  | `HTTPS -> create_https_connection ~sw ~config ~conn_info ~uri socket
 
 (* This function takes a `conn_info` and a `Connection.t` instead of just a `t`
  * too allow reuse when shutting down old connection.
@@ -162,16 +162,16 @@ let open_connection ~config ~sw ~clock ~network conn_info =
  * Due to the fact that `t.conn` is mutable, we could run into weird
  * asynchronous edge cases and shut down the connection that's currently in use
  * instead of the old one. *)
-let shutdown_conn (Connection.Conn { impl; connection; conn_info; fd; _ }) =
+let shutdown_conn (Connection.Conn { impl; connection; info; fd; _ }) =
   Log.info (fun m ->
       m
         "Tearing down %s connection to %a"
-        (String.uppercase_ascii (Scheme.to_string conn_info.scheme))
+        (String.uppercase_ascii (Scheme.to_string info.scheme))
         Connection_info.pp_hum
-        conn_info);
+        info);
   Http_impl.shutdown (module (val impl)) ~fd connection
 
-let change_connection t conn_info =
+let change_connection t (conn_info : Connection_info.t) =
   let { sw; conn; _ } = t in
   Fiber.fork ~sw (fun () -> shutdown_conn conn);
   let+! conn' =
@@ -180,18 +180,17 @@ let change_connection t conn_info =
       ~config:t.config
       ~clock:t.clock
       ~network:t.network
+      ~uri:conn_info.uri
       conn_info
   in
-  t.conn <- conn';
-  t.uri <- conn_info.uri
+  t.conn <- conn'
 
 let shutdown { conn; _ } = shutdown_conn conn
 
 (* returns true if it succeeding in reusing the connection, false otherwise. *)
 let reuse_or_set_up_new_connection
     ({ conn =
-         Connection.Conn
-           ({ impl = (module Http); connection; conn_info; _ } as conn)
+         Connection.Conn ({ impl = (module Http); connection; info; _ } as conn)
      ; _
      } as t)
     new_uri
@@ -200,7 +199,7 @@ let reuse_or_set_up_new_connection
   | Error _ as e -> e
   | Ok new_scheme ->
     let new_conn_info =
-      { conn_info with
+      { info with
         port = Connection_info.infer_port ~scheme:new_scheme new_uri
       ; scheme = new_scheme
       ; host = Uri.host_exn new_uri
@@ -217,14 +216,14 @@ let reuse_or_set_up_new_connection
       let new_conn_info = { new_conn_info with addresses = new_addresses } in
       let+! () = change_connection t new_conn_info in
       false
-    else if Connection_info.equal_without_resolving conn_info new_conn_info
+    else if Connection_info.equal_without_resolving info new_conn_info
     then (
       (* If we're redirecting within the same host / port / scheme, no need
        * to re-establish a new connection. *)
       Log.debug (fun m ->
           m "Reusing the same connection as the host / port didn't change");
       (* Even if we reused the connection, the URI could've changed. *)
-      conn.conn_info <- new_conn_info;
+      conn.info <- new_conn_info;
       Ok true)
     else
       let*! new_addresses =
@@ -234,12 +233,12 @@ let reuse_or_set_up_new_connection
       let new_conn_info = { new_conn_info with addresses = new_addresses } in
       (* Really avoiding having to establish a new connection here, if the new
        * host resolves to the same address and the port matches *)
-      if Connection_info.equal conn_info new_conn_info
+      if Connection_info.equal info new_conn_info
       then (
         Log.debug (fun m ->
             m "Reusing the same connection as the remote address didn't change");
         (* Even if we reused the connection, the URI could've changed. *)
-        conn.conn_info <- new_conn_info;
+        conn.info <- new_conn_info;
         Ok true)
       else
         (* No way to avoid establishing a new connection. *)
@@ -263,7 +262,8 @@ let rec return_response
   let (Connection.Conn
         { impl = (module Http)
         ; runtime
-        ; conn_info = { Connection_info.scheme; _ } as conn_info
+        ; info = { Connection_info.scheme; _ } as conn_info
+        ; uri
         ; fd
         ; _
         })
@@ -296,6 +296,7 @@ let rec return_response
         (Http_impl.create_h2c_connection
            ~config
            ~conn_info
+           ~uri
            ~sw
            ~fd
            ~http_request:request
@@ -322,14 +323,14 @@ let is_h2c_upgrade ~config ~version ~scheme =
   | _ -> false
 
 let make_request_info
-    { conn = Connection.Conn { version; conn_info; _ }; config; _ }
+    { conn = Connection.Conn { version; info; _ }; config; _ }
     ?(remaining_redirects = config.max_redirects)
     ~meth
     ~headers
     ~body
     target
   =
-  let { Connection_info.host; scheme; _ } = conn_info in
+  let { Connection_info.host; scheme; _ } = info in
   let is_h2c_upgrade = is_h2c_upgrade ~config ~version ~scheme in
   let h2_settings = H2.Settings.to_base64 (Config.to_http2_settings config) in
   let canonical_headers =
@@ -368,7 +369,7 @@ let rec send_request_and_handle_response
     ~body
     ({ remaining_redirects; request; headers; meth; _ } as request_info)
   =
-  let { conn = Conn ({ conn_info; _ } as conn); uri; config; _ } = t in
+  let { conn = Conn ({ info; uri; _ } as conn); config; _ } = t in
 
   let*! response =
     (Http_impl.send_request ~sw:t.sw t.conn ~config ~body request
@@ -392,7 +393,7 @@ let rec send_request_and_handle_response
     Log.err (fun m -> m "%s" msg);
     Error (`Connect_error msg)
   | true, true, _, Some location ->
-    let { Connection_info.scheme; _ } = conn_info in
+    let { Connection_info.scheme; _ } = info in
     let new_uri = Uri.parse_with_base_uri ~scheme ~uri location in
     let*! did_reuse =
       (reuse_or_set_up_new_connection t new_uri :> (bool, Error.t) result)
@@ -408,7 +409,7 @@ let rec send_request_and_handle_response
       Fiber.fork ~sw:t.sw (fun () ->
           let (_drained : _ result) = Body.drain response.body in
           ());
-    if Status.is_permanent_redirection response.status then t.uri <- new_uri;
+    if Status.is_permanent_redirection response.status then conn.uri <- new_uri;
     let target = Uri.path_and_query new_uri in
     (* From RFC7231§6.4:
      *   Note: In HTTP/1.0, the status codes 301 (Moved Permanently) and 302
@@ -449,19 +450,19 @@ let create ?(config = Config.default) ~sw env uri =
   let clock = Eio.Stdenv.clock env in
   let network = Eio.Stdenv.net env in
   let+! conn =
-    (open_connection ~config ~sw ~clock ~network conn_info
+    (open_connection ~config ~sw ~clock ~network ~uri:conn_info.uri conn_info
       :> (Connection.t, Error.t) result)
   in
-  { conn; uri; config; clock; network; sw }
+  { conn; config; clock; network; sw }
 
 let call t ~meth ?(headers = []) ?(body = Body.empty) target =
   (* Need to try to reconnect to the base host on every call, if redirects are
    * enabled, because the connection manager could have tried to follow a
    * temporary redirect. We remember permanent redirects. *)
-  let (Connection.Conn { impl = (module Http); connection; _ }) = t.conn in
+  let (Connection.Conn { impl = (module Http); connection; uri; _ }) = t.conn in
   let*! (_reused : bool) =
     if t.config.follow_redirects || Http_impl.is_closed (module Http) connection
-    then (reuse_or_set_up_new_connection t t.uri :> (bool, Error.t) result)
+    then (reuse_or_set_up_new_connection t uri :> (bool, Error.t) result)
     else Ok true
   in
   let headers = t.config.default_headers @ headers in
@@ -503,7 +504,7 @@ module Oneshot = struct
     let*! ({ conn = Connection.Conn conn; _ } as t) =
       create ~config ~sw env uri
     in
-    let target = Uri.path_and_query t.uri in
+    let target = Uri.path_and_query conn.uri in
     let headers = t.config.default_headers @ headers in
     let request_info = make_request_info t ~meth ~headers ~body target in
     conn.persistent <- Request.persistent_connection request_info.request;

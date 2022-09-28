@@ -50,11 +50,11 @@ let make_error_handler notify_error ~kind:_ error =
 
 let create_connection
     :  (module Http_intf.HTTPCommon) -> sw:Eio.Switch.t -> config:Config.t
-    -> conn_info:Connection.Connection_info.t -> version:Versions.HTTP.t
+    -> conn_info:Connection.Info.t -> uri:Uri.t -> version:Versions.HTTP.t
     -> fd:< Eio.Net.stream_socket ; Eio.Flow.close > -> Eio.Flow.two_way
     -> (Connection.t, Error.client) result
   =
- fun (module Http_impl) ~sw ~config ~conn_info ~version ~fd socket ->
+ fun (module Http_impl) ~sw ~config ~conn_info ~uri ~version ~fd socket ->
   let connection_error_received, notify_connection_error_received =
     Promise.create ()
   in
@@ -67,7 +67,8 @@ let create_connection
       { impl = (module Http_impl)
       ; connection
       ; fd
-      ; conn_info
+      ; info = conn_info
+      ; uri
       ; persistent = true
       ; runtime
       ; connection_error_received
@@ -190,12 +191,12 @@ let can't_upgrade msg =
   Error (`Protocol_error (H2.Error_code.HTTP_1_1_Required, msg))
 
 let create_h2c_connection
-    :  sw:Eio.Switch.t -> config:Config.t
-    -> conn_info:Connection.Connection_info.t
-    -> fd:< Eio.Net.stream_socket ; Eio.Flow.close > -> http_request:Request.t
-    -> Gluten_eio.Client.t -> (Connection.t * Response.t, Error.client) result
+    :  sw:Eio.Switch.t -> config:Config.t -> conn_info:Connection.Info.t
+    -> uri:Uri.t -> fd:< Eio.Net.stream_socket ; Eio.Flow.close >
+    -> http_request:Request.t -> Gluten_eio.Client.t
+    -> (Connection.t * Response.t, Error.client) result
   =
- fun ~sw ~config ~conn_info ~fd ~http_request runtime ->
+ fun ~sw ~config ~conn_info ~uri ~fd ~http_request runtime ->
   match conn_info.scheme with
   | `HTTP ->
     let (module Http2) = (module Http2.HTTP : Http_intf.HTTP2) in
@@ -237,7 +238,8 @@ let create_h2c_connection
             { impl = (module Http2)
             ; fd
             ; connection
-            ; conn_info
+            ; info = conn_info
+            ; uri
             ; persistent = true
             ; runtime
             ; connection_error_received
