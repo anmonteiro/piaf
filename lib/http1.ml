@@ -216,9 +216,8 @@ module MakeHTTP1 (Runtime_scheme : Scheme.Runtime.SCHEME) :
       =
      fun ~config ~request_handler ~error_handler ->
       ();
-      fun ~sw socket sockaddr ->
+      fun ~sw fd sockaddr ->
         (* Option.get @@ Eio_unix.FD.peek_opt socket *)
-        let fd = socket in
         let request_handler = make_request_handler ~sw ~fd request_handler in
         let error_handler = make_error_handler ~fd error_handler in
         create_connection_handler
@@ -226,7 +225,7 @@ module MakeHTTP1 (Runtime_scheme : Scheme.Runtime.SCHEME) :
           ~request_handler
           ~error_handler
           sockaddr
-          socket
+          fd
   end
 end
 

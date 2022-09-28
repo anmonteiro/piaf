@@ -49,12 +49,15 @@ let make_error_handler notify_error ~kind:_ error =
   Promise.resolve notify_error error
 
 let create_connection
-    :  (module Http_intf.HTTPCommon) -> sw:Eio.Switch.t -> config:Config.t
-    -> conn_info:Connection.Info.t -> uri:Uri.t -> version:Versions.HTTP.t
-    -> fd:< Eio.Net.stream_socket ; Eio.Flow.close > -> Eio.Flow.two_way
-    -> (Connection.t, Error.client) result
+    (module Http_impl : Http_intf.HTTPCommon)
+    ~sw
+    ~config
+    ~conn_info
+    ~uri
+    ~version
+    ~fd
+    socket
   =
- fun (module Http_impl) ~sw ~config ~conn_info ~uri ~version ~fd socket ->
   let connection_error_received, notify_connection_error_received =
     Promise.create ()
   in
@@ -124,7 +127,7 @@ let handle_response
 
 let send_request
     :  sw:Switch.t -> Connection.t -> config:Config.t -> body:Body.t
-    -> Request.t -> (Response.t, 'err) Result.t
+    -> Request.t -> (Response.t, Error.client) Result.t
   =
  fun ~sw conn ~config ~body request ->
   let (Connection.Conn
@@ -191,12 +194,14 @@ let can't_upgrade msg =
   Error (`Protocol_error (H2.Error_code.HTTP_1_1_Required, msg))
 
 let create_h2c_connection
-    :  sw:Eio.Switch.t -> config:Config.t -> conn_info:Connection.Info.t
-    -> uri:Uri.t -> fd:< Eio.Net.stream_socket ; Eio.Flow.close >
-    -> http_request:Request.t -> Gluten_eio.Client.t
-    -> (Connection.t * Response.t, Error.client) result
+    ~sw
+    ~config
+    ~(conn_info : Connection.Info.t)
+    ~uri
+    ~fd
+    ~http_request
+    runtime
   =
- fun ~sw ~config ~conn_info ~uri ~fd ~http_request runtime ->
   match conn_info.scheme with
   | `HTTP ->
     let (module Http2) = (module Http2.HTTP : Http_intf.HTTP2) in
