@@ -208,7 +208,7 @@ let reuse_or_set_up_new_connection
       }
     in
     if (not conn.persistent) || Http_impl.is_closed (module Http) connection
-    then (
+    then
       (* No way to avoid establishing a new connection if the previous one
        * wasn't persistent or the connection is closed. *)
       let*! new_addresses =
