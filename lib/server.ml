@@ -59,7 +59,7 @@ let create ?(error_handler = default_error_handler) ~config handler : t =
 
 let is_requesting_h2c_upgrade ~config ~version ~scheme headers =
   match version, config.Config.max_http_version, config.h2c_upgrade, scheme with
-  | cur_version, max_version, true, Scheme.HTTP ->
+  | cur_version, max_version, true, `HTTP ->
     if Versions.HTTP.(
          equal (Versions.ALPN.to_version max_version) v2_0
          && equal cur_version v1_1)
@@ -114,7 +114,7 @@ let do_h2c_upgrade ~sw ~fd ~request_body server =
 
 module Http : Http_intf.HTTP = Http1.HTTP
 
-let http_connection_handler t : _ connection_handler =
+let http_connection_handler t : connection_handler =
   let { error_handler; handler; config } = t in
   fun ~sw socket client_address ->
     let request_handler
@@ -131,7 +131,7 @@ let http_connection_handler t : _ connection_handler =
       | false -> handler ctx
       | true ->
         let request_body = Body.to_list request.body in
-        do_h2c_upgrade ~sw ~fd:(HTTP socket) ~request_body t ctx
+        do_h2c_upgrade ~sw ~fd:socket ~request_body t ctx
     in
 
     Http.Server.create_connection_handler
@@ -142,7 +142,7 @@ let http_connection_handler t : _ connection_handler =
       socket
       client_address
 
-let https_connection_handler ~https ~clock t : _ connection_handler =
+let https_connection_handler ~https ~clock t : connection_handler =
   let { error_handler; handler; config } = t in
   let ssl_config = Openssl.Server_conf.of_server_config ~https config in
   fun ~sw socket client_address ->
@@ -163,7 +163,7 @@ let https_connection_handler ~https ~clock t : _ connection_handler =
         ~error_handler
         ~request_handler:handler
         ~sw
-        ssl_server
+        (ssl_server :> Eio.Flow.two_way)
         client_address
 
 module Command = struct

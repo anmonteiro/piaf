@@ -52,39 +52,36 @@ module Body :
   module Writer = H2.Body.Writer
 end
 
-module MakeHTTP2
-    (H2_client : H2_eio.Client)
-    (H2_server : H2_eio.Server)
-    (Runtime_scheme : Scheme.Runtime.SCHEME
-                        with type runtime = H2_client.runtime
-                         and type socket = H2_server.socket) : sig
+module MakeHTTP2 (Runtime_scheme : Scheme.Runtime.SCHEME) : sig
   include
     Http_intf.HTTPCommon
-      with type Client.t = H2_client.t
-       and type Client.socket = H2_client.socket
-       and type Client.runtime = H2_client.runtime
-       and type Server.socket = H2_server.socket
+      with type Client.t = H2_eio.Client.t
        and type Body.Reader.t = H2.Body.Reader.t
        and type Body.Writer.t = H2.Body.Writer.t
+       and type scheme = Runtime_scheme.t
 
   val make_error_handler
-    :  fd:Scheme.Runtime.Socket.t
+    :  fd:Eio.Flow.two_way
     -> Server_intf.error_handler
     -> Eio.Net.Sockaddr.stream
     -> H2.Server_connection.error_handler
 
   val make_request_handler
     :  sw:Switch.t
-    -> fd:Scheme.Runtime.Socket.t
+    -> fd:Eio.Flow.two_way
     -> Request_info.t Server_intf.Handler.t
     -> Eio.Net.Sockaddr.stream
     -> H2.Reqd.t
     -> unit
 end = struct
+  type scheme = Runtime_scheme.t
+
+  let scheme = Runtime_scheme.scheme
+
   module Body = Body
 
   module Client = struct
-    include H2_client
+    include H2_eio.Client
 
     let create_connection ~config ~error_handler ~sw fd =
       let t =
@@ -94,7 +91,7 @@ end = struct
           ~error_handler:(make_client_error_handler error_handler `Connection)
           fd
       in
-      t, Runtime_scheme.make t.runtime
+      t, t.runtime
 
     let request
         t
@@ -171,6 +168,7 @@ end = struct
     Http_server_impl.handle_error
       ?request:(Option.map Request.of_h2 request)
       (module HttpServer)
+      ~scheme:Runtime_scheme.scheme
       ~fd
       ~error_handler
       ~start_response
@@ -215,22 +213,22 @@ end = struct
     Http_server_impl.handle_request ~sw descriptor request
 
   module Server = struct
-    include H2_server
+    include H2_eio.Server
     module Reqd = Reqd
 
     let create_connection_handler
         :  config:Server_config.t
         -> request_handler:Request_info.t Server_intf.Handler.t
         -> error_handler:Server_intf.error_handler
-        -> socket Server_intf.connection_handler
+        -> Server_intf.connection_handler
       =
      fun ~config ~request_handler ~error_handler ->
       ();
       fun ~sw socket sockaddr ->
-        let fd = Runtime_scheme.socket socket in
+        let fd = socket in
         let request_handler = make_request_handler ~sw ~fd request_handler in
         let error_handler = make_error_handler ~fd error_handler in
-        H2_server.create_connection_handler
+        H2_eio.Server.create_connection_handler
           ~config:(Server_config.to_http2_config config)
           ~request_handler
           ~error_handler
@@ -239,9 +237,8 @@ end = struct
   end
 end
 
-module HTTP : Http_intf.HTTP2 = struct
-  module HTTP_2 =
-    MakeHTTP2 (H2_eio.Client) (H2_eio.Server) (Scheme.Runtime.HTTP)
+module HTTP : Http_intf.HTTP2 with type scheme = Scheme.http = struct
+  module HTTP_2 = MakeHTTP2 (Scheme.Runtime.HTTP)
 
   include (
     HTTP_2 :
@@ -302,8 +299,8 @@ module HTTP : Http_intf.HTTP2 = struct
     include HTTP_2.Server
 
     let create_h2c_connection_handler
-        :  config:Server_config.t -> sw:Eio.Switch.t
-        -> fd:Scheme.Runtime.Socket.t -> error_handler:Server_intf.error_handler
+        :  config:Server_config.t -> sw:Eio.Switch.t -> fd:Eio.Flow.two_way
+        -> error_handler:Server_intf.error_handler
         -> http_request:Httpaf.Request.t
         -> request_body:Bigstringaf.t IOVec.t list
         -> client_address:Eio.Net.Sockaddr.stream
@@ -331,5 +328,4 @@ module HTTP : Http_intf.HTTP2 = struct
   end
 end
 
-module HTTPS : Http_intf.HTTPS =
-  MakeHTTP2 (H2_eio.Client.SSL) (H2_eio.Server.SSL) (Scheme.Runtime.HTTPS)
+module HTTPS : Http_intf.HTTPS = MakeHTTP2 (Scheme.Runtime.HTTPS)

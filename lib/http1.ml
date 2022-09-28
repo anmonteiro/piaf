@@ -42,30 +42,27 @@ module Body :
   module Writer = Httpaf.Body.Writer
 end
 
-module MakeHTTP1
-    (Httpaf_client : Httpaf_eio.Client)
-    (Httpaf_server : Httpaf_eio.Server)
-    (Runtime_scheme : Scheme.Runtime.SCHEME
-                        with type runtime = Httpaf_client.runtime
-                         and type socket = Httpaf_server.socket) :
+module MakeHTTP1 (Runtime_scheme : Scheme.Runtime.SCHEME) :
   Http_intf.HTTP1
-    with type Client.t = Httpaf_client.t
-     and type Client.socket = Httpaf_client.socket
-     and type Client.runtime = Httpaf_client.runtime
-     and type Server.socket = Httpaf_server.socket
+    with type Client.t = Httpaf_eio.Client.t
      and type Body.Reader.t = Httpaf.Body.Reader.t
-     and type Body.Writer.t = Httpaf.Body.Writer.t = struct
+     and type Body.Writer.t = Httpaf.Body.Writer.t
+     and type scheme = Runtime_scheme.t = struct
+  type scheme = Runtime_scheme.t
+
+  let scheme = Runtime_scheme.scheme
+
   module Body = Body
 
   module Client = struct
-    include Httpaf_client
+    include Httpaf_eio.Client
 
     (* Error handler for HTTP/1 connections isn't used *)
     let create_connection ~config ~error_handler:_ ~sw fd =
       let t =
         create_connection ~sw ~config:(Config.to_http1_config config) fd
       in
-      t, Runtime_scheme.make t.runtime
+      t, t.runtime
 
     let request
         t
@@ -126,7 +123,7 @@ module MakeHTTP1
   module Server = struct
     let request_of_http1 = Request.of_http1 ~scheme:Runtime_scheme.scheme
 
-    include Httpaf_server
+    include Httpaf_eio.Server
 
     module Reqd :
       Http_intf.Reqd
@@ -166,6 +163,7 @@ module MakeHTTP1
         ?request:(Option.map request_of_http1 request)
         (module HttpServer)
         ~fd
+        ~scheme:Runtime_scheme.scheme
         ~error_handler
         ~start_response
         client_addr
@@ -214,13 +212,13 @@ module MakeHTTP1
         :  config:Server_config.t
         -> request_handler:Request_info.t Server_intf.Handler.t
         -> error_handler:Server_intf.error_handler
-        -> socket Server_intf.connection_handler
+        -> Server_intf.connection_handler
       =
      fun ~config ~request_handler ~error_handler ->
       ();
       fun ~sw socket sockaddr ->
         (* Option.get @@ Eio_unix.FD.peek_opt socket *)
-        let fd = Runtime_scheme.socket socket in
+        let fd = socket in
         let request_handler = make_request_handler ~sw ~fd request_handler in
         let error_handler = make_error_handler ~fd error_handler in
         create_connection_handler
@@ -232,9 +230,5 @@ module MakeHTTP1
   end
 end
 
-module HTTP : Http_intf.HTTP =
-  MakeHTTP1 (Httpaf_eio.Client) (Httpaf_eio.Server) (Scheme.Runtime.HTTP)
-
-module HTTPS : Http_intf.HTTPS =
-  MakeHTTP1 (Httpaf_eio.Client.SSL) (Httpaf_eio.Server.SSL)
-    (Scheme.Runtime.HTTPS)
+module HTTP : Http_intf.HTTP = MakeHTTP1 (Scheme.Runtime.HTTP)
+module HTTPS : Http_intf.HTTPS = MakeHTTP1 (Scheme.Runtime.HTTPS)

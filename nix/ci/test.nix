@@ -5,6 +5,7 @@ let
   src = fetchGit {
     url = with lock.nodes.nixpkgs.locked;"https://github.com/${owner}/${repo}";
     inherit (lock.nodes.nixpkgs.locked) rev;
+    allRefs = true;
   };
   pkgs = import src {
     extraOverlays = [

@@ -185,10 +185,10 @@ type t =
           (module Http_intf.HTTPCommon
              with type Client.t = 'a
               and type Body.Reader.t = 'b)
-      ; handle : 'a
+      ; connection : 'a
       ; fd : < Eio.Net.stream_socket ; Eio.Flow.close >
       ; mutable conn_info : Connection_info.t
-      ; runtime : Scheme.Runtime.t
+      ; runtime : Gluten_eio.Client.t
       ; connection_error_received : Error.client Promise.t
       ; version : Versions.HTTP.t
             (** HTTP version that this connection speaks *)

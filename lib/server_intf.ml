@@ -29,8 +29,8 @@ module Error_response = struct
   type t = unit
 end
 
-type 'a connection_handler =
-  sw:Switch.t -> 'a -> Eio.Net.Sockaddr.stream -> unit
+type connection_handler =
+  sw:Switch.t -> Eio.Flow.two_way -> Eio.Net.Sockaddr.stream -> unit
 
 type error_handler =
   Eio.Net.Sockaddr.stream

@@ -82,13 +82,13 @@ module ALPN = struct
   end
 
   let http1s_handler =
-    Httpaf_eio.Server.SSL.create_connection_handler
+    Httpaf_eio.Server.create_connection_handler
       ?config:None
       ~request_handler:Http1_handler.request_handler
       ~error_handler:Http1_handler.error_handler
 
   let h2s_handler =
-    H2_eio.Server.SSL.create_connection_handler
+    H2_eio.Server.create_connection_handler
       ~request_handler:H2_handler.request_handler
       ~error_handler:H2_handler.error_handler
 
@@ -121,17 +121,18 @@ module ALPN = struct
         Ssl.set_context_alpn_select_callback server_ctx (fun client_protos ->
             first_match client_protos protos);
         try
-          let ssl_server = Eio_ssl.ssl_accept fd server_ctx in
-          match Eio_ssl.ssl_socket ssl_server with
-          | None -> ()
-          | Some ssl_socket ->
-            (match Ssl.get_negotiated_alpn_protocol ssl_socket with
-            | Some "http/1.1" -> http1s_handler client_addr ssl_server
-            | Some "h2" -> h2s_handler client_addr ssl_server
-            | None (* Unable to negotiate a protocol *) | Some _ ->
-              (* Can't really happen - would mean that TLS negotiated a
-               * protocol that we didn't specify. *)
-              assert false)
+          let ssl_ctx = Eio_ssl.Context.create ~ctx:server_ctx fd in
+          let ssl_server = Eio_ssl.accept ssl_ctx in
+          let ssl_socket = Eio_ssl.ssl_socket ssl_server in
+          match Ssl.get_negotiated_alpn_protocol ssl_socket with
+          | Some "http/1.1" ->
+            http1s_handler client_addr (ssl_server :> Eio.Flow.two_way)
+          | Some "h2" ->
+            h2s_handler client_addr (ssl_server :> Eio.Flow.two_way)
+          | None (* Unable to negotiate a protocol *) | Some _ ->
+            (* Can't really happen - would mean that TLS negotiated a
+             * protocol that we didn't specify. *)
+            assert false
         with
         (* | Eio.Cancel.Cancelled _ -> () *)
         | exn ->

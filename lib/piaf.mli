@@ -194,9 +194,13 @@ module Headers : sig
 end
 
 module Scheme : sig
+  type http = [ `HTTP ]
+  type https = [ `HTTPS ]
+
   type t =
-    | HTTP
-    | HTTPS
+    [ http
+    | https
+    ]
 
   val of_uri : Uri.t -> (t, [ `Msg of string ]) result
   val to_string : t -> string

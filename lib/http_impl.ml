@@ -49,30 +49,23 @@ let make_error_handler notify_error ~kind:_ error =
   Promise.resolve notify_error error
 
 let create_connection
-    : type a r.
-      (module Http_intf.HTTPCommon
-         with type Client.socket = a
-          and type Client.runtime = r)
-      -> sw:Eio.Switch.t
-      -> config:Config.t
-      -> conn_info:Connection.Connection_info.t
-      -> version:Versions.HTTP.t
-      -> fd:< Eio.Net.stream_socket ; Eio.Flow.close >
-      -> a
-      -> (Connection.t, Error.client) result
+    :  (module Http_intf.HTTPCommon) -> sw:Eio.Switch.t -> config:Config.t
+    -> conn_info:Connection.Connection_info.t -> version:Versions.HTTP.t
+    -> fd:< Eio.Net.stream_socket ; Eio.Flow.close > -> Eio.Flow.two_way
+    -> (Connection.t, Error.client) result
   =
  fun (module Http_impl) ~sw ~config ~conn_info ~version ~fd socket ->
   let connection_error_received, notify_connection_error_received =
     Promise.create ()
   in
   let error_handler = make_error_handler notify_connection_error_received in
-  let handle, runtime =
+  let connection, runtime =
     Http_impl.Client.create_connection ~config ~error_handler ~sw socket
   in
   let conn =
     Connection.Conn
       { impl = (module Http_impl)
-      ; handle
+      ; connection
       ; fd
       ; conn_info
       ; runtime
@@ -135,9 +128,9 @@ let send_request
  fun conn ~config ~body request ->
   let (Connection.Conn
         { impl = (module Http)
-        ; handle
+        ; connection
+        ; fd
         ; connection_error_received
-        ; runtime
         ; sw
         ; _
         })
@@ -159,7 +152,7 @@ let send_request
   in
   let request_body =
     Http.Client.request
-      handle
+      connection
       ~flush_headers_immediately
       ~error_handler
       ~response_handler
@@ -181,21 +174,19 @@ let send_request
               stream);
         Body.stream_write_body (module Http.Body) request_body stream
       | `Sendfile (src_fd, _, _) ->
-        (match runtime with
-        | HTTP runtime ->
+        (match Http.scheme with
+        | `HTTP ->
           Bodyw.close request_body;
           (match
              Posix.sendfile
                (module Http.Body)
                ~src_fd
-               ~dst_fd:
-                 (Option.get
-                    (Eio_unix.FD.peek_opt (Gluten_eio.Client.socket runtime)))
+               ~dst_fd:(Option.get (Eio_unix.FD.peek_opt fd))
                request_body
            with
           | Ok () -> ()
           | Error exn -> Promise.resolve notify_error (`Exn exn))
-        | HTTPS _ ->
+        | `HTTPS ->
           (* can't `sendfile` on an encrypted connection.
            * TODO(anmonteiro): Return error message saying that. *)
           assert false));
@@ -205,14 +196,14 @@ let can't_upgrade msg =
   Error (`Protocol_error (H2.Error_code.HTTP_1_1_Required, msg))
 
 let create_h2c_connection
-    :  config:Config.t -> conn_info:Connection.Connection_info.t
+    :  sw:Eio.Switch.t -> config:Config.t
+    -> conn_info:Connection.Connection_info.t
     -> fd:< Eio.Net.stream_socket ; Eio.Flow.close > -> http_request:Request.t
-    -> sw:Eio.Switch.t -> Scheme.Runtime.t
-    -> (Connection.t * Response.t, Error.client) result
+    -> Gluten_eio.Client.t -> (Connection.t * Response.t, Error.client) result
   =
- fun ~config ~conn_info ~fd ~http_request ~sw runtime ->
-  match runtime with
-  | HTTP http_runtime ->
+ fun ~sw ~config ~conn_info ~fd ~http_request runtime ->
+  match http_request.scheme with
+  | `HTTP ->
     let (module Http2) = (module Http2.HTTP : Http_intf.HTTP2) in
     let response_received, notify_response_received = Promise.create () in
     let response_handler response =
@@ -233,9 +224,9 @@ let create_h2c_connection
          ~http_request
          ~error_handler
          (response_handler, response_error_handler)
-         http_runtime
+         runtime
      with
-    | Ok handle ->
+    | Ok connection ->
       Log.info (fun m -> m "Connection state changed (HTTP/2 confirmed)");
       (* Doesn't write the body by design. The server holds on to the HTTP/1.1 body
        * that was sent as part of the upgrade. *)
@@ -252,7 +243,7 @@ let create_h2c_connection
           Connection.Conn
             { impl = (module Http2)
             ; fd
-            ; handle
+            ; connection
             ; conn_info
             ; runtime
             ; connection_error_received
@@ -263,7 +254,7 @@ let create_h2c_connection
         Ok (connection, response)
       | Error _ as error -> error)
     | Error msg -> can't_upgrade msg)
-  | HTTPS _ ->
+  | `HTTPS ->
     can't_upgrade
       "Attempted to start HTTP/2 over cleartext TCP but was already \
        communicating over HTTPS"
