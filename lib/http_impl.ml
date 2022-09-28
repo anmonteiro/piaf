@@ -72,7 +72,6 @@ let create_connection
       ; runtime
       ; connection_error_received
       ; version
-      ; sw
       }
   in
   Fiber.first (Fun.const (Ok conn)) (ptoerr connection_error_received)
@@ -123,18 +122,12 @@ let handle_response
     error
 
 let send_request
-    :  Connection.t -> config:Config.t -> body:Body.t -> Request.t
-    -> (Response.t, 'err) Result.t
+    :  sw:Switch.t -> Connection.t -> config:Config.t -> body:Body.t
+    -> Request.t -> (Response.t, 'err) Result.t
   =
- fun conn ~config ~body request ->
+ fun ~sw conn ~config ~body request ->
   let (Connection.Conn
-        { impl = (module Http)
-        ; connection
-        ; fd
-        ; connection_error_received
-        ; sw
-        ; _
-        })
+        { impl = (module Http); connection; fd; connection_error_received; _ })
     =
     conn
   in
@@ -249,7 +242,6 @@ let create_h2c_connection
             ; runtime
             ; connection_error_received
             ; version = Versions.HTTP.v2_0
-            ; sw
             }
         in
         Ok (connection, response)

@@ -24,7 +24,6 @@
         "fail-fast": false,
         "matrix": {
           "ocamlVersion": [
-            "4_13",
             "4_14",
             "5_00"
           ]

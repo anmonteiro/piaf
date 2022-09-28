@@ -256,7 +256,7 @@ type request_info =
   }
 
 let rec return_response
-    ({ conn; config; _ } as t)
+    ({ conn; config; sw; _ } as t)
     ({ request; _ } as request_info)
     ({ Response.status; headers; version; body } as response)
   =
@@ -264,7 +264,6 @@ let rec return_response
         { impl = (module Http)
         ; runtime
         ; conn_info = { Connection_info.scheme; _ } as conn_info
-        ; sw
         ; fd
         ; _
         })
@@ -372,7 +371,7 @@ let rec send_request_and_handle_response
   let { conn = Conn ({ conn_info; _ } as conn); uri; config; _ } = t in
 
   let*! response =
-    (Http_impl.send_request t.conn ~config ~body request
+    (Http_impl.send_request ~sw:t.sw t.conn ~config ~body request
       :> (Response.t, Error.t) result)
   in
   if conn.persistent

@@ -190,6 +190,5 @@ type t =
       ; connection_error_received : Error.client Promise.t
       ; version : Versions.HTTP.t
             (** HTTP version that this connection speaks *)
-      ; sw : Eio.Switch.t
       }
       -> t
