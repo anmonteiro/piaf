@@ -147,7 +147,6 @@ let fold ~f ~init t =
   loop ~f ~acc:init t
 
 let to_list t =
-  (* close t; *)
   let lst = fold ~f:(fun acc item -> item :: acc) ~init:[] t in
   List.rev lst
 
