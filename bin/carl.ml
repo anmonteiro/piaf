@@ -288,7 +288,6 @@ let handle_response
         (try
            match Stream.take stream with
            | Some { Piaf.IOVec.buffer; off; len } ->
-             Format.eprintf "ahoy2@.";
              let running_total = Int64.of_int len in
              report_progess ~first:true ~cli running_total total_len;
              let chunk = Bigstringaf.substring buffer ~off ~len in

@@ -139,7 +139,9 @@ let connect ~sw ~clock ~config ~network conn_info =
         Ok (Eio.Net.connect ~sw network (Info.address_to_eio address)))
   with
   | Ok sock -> Ok sock
-  | Error `Timeout | (exception Unix.Unix_error (ECONNREFUSED, _, _)) ->
+  | Error `Timeout
+  | (exception
+      (Eio.Net.Connection_failure _ | Unix.Unix_error (ECONNREFUSED, _, _))) ->
     Result.error
       (`Connect_error
         (Format.asprintf
