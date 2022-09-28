@@ -67,7 +67,7 @@ gh-actions.cachedBuild {
   os = {
     macos-latest = {
       name = "Run nix-build";
-      ocamlVersions = [ "4_13" "4_14" "5_00" ];
+      ocamlVersions = [ "4_14" "5_00" ];
       run = "nix-build ./nix/ci/test.nix -A native --argstr ocamlVersion \${{ matrix.ocamlVersion }}";
     };
     ubuntu-latest = {

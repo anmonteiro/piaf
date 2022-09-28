@@ -55,7 +55,7 @@ let resolve_host ~port hostname : (_, [> Error.client ]) result =
     (* TODO: add resolved canonical hostname *)
     Ok (List.map (fun { Unix.ai_addr; _ } -> ai_addr) xs)
 
-module Connection_info = struct
+module Info = struct
   (* This represents information that changes from connection to connection,
    * i.e. if one of these parameters changes between redirects we need to
    * establish a new connection. *)
@@ -96,6 +96,10 @@ module Connection_info = struct
     && c1.scheme = c2.scheme
     && Uri.host_exn c1.uri = Uri.host_exn c2.uri
 
+  let address_to_eio = function
+    | Unix.ADDR_UNIX s -> `Unix s
+    | ADDR_INET (addr, port) -> `Tcp (Eio_unix.Ipaddr.of_unix addr, port)
+
   let pp_address fmt = function
     | Unix.ADDR_INET (addr, port) ->
       Format.fprintf fmt "%s:%d" (Unix.string_of_inet_addr addr) port
@@ -125,52 +129,24 @@ module Connection_info = struct
     | _, (Error _ as error) -> error
 end
 
-let connect ~clock ~config ~conn_info fd =
-  let { Connection_info.addresses; _ } = conn_info in
+let connect ~sw ~clock ~config ~network conn_info =
+  let { Info.addresses; _ } = conn_info in
   (* TODO: try addresses in e.g. a round robin fashion? *)
   let address = List.hd addresses in
-  Log.debug (fun m ->
-      m "Trying connection to %a" Connection_info.pp_hum conn_info);
+  Log.debug (fun m -> m "Trying connection to %a" Info.pp_hum conn_info);
   match
     Eio.Time.with_timeout clock config.Config.connect_timeout (fun () ->
-        Ok (Unix.connect fd address))
-  with
-  | Ok () -> Ok ()
-  | Error `Timeout | (exception Unix.Unix_error (ECONNREFUSED, _, _)) ->
-    Result.error
-      (`Connect_error
-        (Format.asprintf
-           "Failed connecting to %a: connection refused"
-           Connection_info.pp_hum
-           conn_info))
-  | exception exn ->
-    Result.error
-      (`Connect_error
-        (Format.asprintf
-           "FIXME: unhandled connection error (%s)"
-           (Printexc.to_string exn)))
-
-let to_eio = function
-  | Unix.ADDR_UNIX s -> `Unix s
-  | ADDR_INET (addr, port) -> `Tcp (Eio_unix.Ipaddr.of_unix addr, port)
-
-let connect_eio ~sw ~clock ~config ~network conn_info =
-  let { Connection_info.addresses; _ } = conn_info in
-  (* TODO: try addresses in e.g. a round robin fashion? *)
-  let address = List.hd addresses in
-  Log.debug (fun m ->
-      m "Trying connection to %a" Connection_info.pp_hum conn_info);
-  match
-    Eio.Time.with_timeout clock config.Config.connect_timeout (fun () ->
-        Ok (Eio.Net.connect ~sw network (to_eio address)))
+        Ok (Eio.Net.connect ~sw network (Info.address_to_eio address)))
   with
   | Ok sock -> Ok sock
-  | Error `Timeout | (exception Unix.Unix_error (ECONNREFUSED, _, _)) ->
+  | Error `Timeout
+  | (exception
+      (Eio.Net.Connection_failure _ | Unix.Unix_error (ECONNREFUSED, _, _))) ->
     Result.error
       (`Connect_error
         (Format.asprintf
            "Failed connecting to %a: connection refused"
-           Connection_info.pp_hum
+           Info.pp_hum
            conn_info))
   | exception exn ->
     Result.error
@@ -181,17 +157,17 @@ let connect_eio ~sw ~clock ~config ~network conn_info =
 
 type t =
   | Conn :
-      { impl :
-          (module Http_intf.HTTPCommon
-             with type Client.t = 'a
-              and type Body.Reader.t = 'b)
-      ; handle : 'a
+      { impl : (module Http_intf.HTTPCommon with type Client.t = 'a)
+      ; connection : 'a
       ; fd : < Eio.Net.stream_socket ; Eio.Flow.close >
-      ; mutable conn_info : Connection_info.t
-      ; runtime : Scheme.Runtime.t
+      ; mutable info : Info.t
+      ; mutable uri : Uri.t
+            (* The connection URI. Request entrypoints connect here. Mutable so
+               that we remember permanent redirects. *)
+      ; mutable persistent : bool
+      ; runtime : Gluten_eio.Client.t
       ; connection_error_received : Error.client Promise.t
       ; version : Versions.HTTP.t
             (** HTTP version that this connection speaks *)
-      ; sw : Eio.Switch.t
       }
       -> t

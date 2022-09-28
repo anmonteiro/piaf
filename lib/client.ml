@@ -32,7 +32,7 @@
 open Eio.Std
 open Monads.Bindings
 open Util
-module Connection_info = Connection.Connection_info
+module Connection_info = Connection.Info
 
 let src = Logs.Src.create "piaf.client" ~doc:"Piaf Client module"
 
@@ -40,17 +40,13 @@ module Log = (val Logs.src_log src : Logs.LOG)
 
 type t =
   { mutable conn : Connection.t
-  ; mutable persistent : bool
-  ; mutable uri : Uri.t
-        (* The connection URI. Request entrypoints connect here.
-         * Mutable so that we remember permanent redirects. *)
   ; config : Config.t
   ; clock : Eio.Time.clock
   ; network : Eio.Net.t
   ; sw : Switch.t
   }
 
-let create_http_connection ~sw ~config ~conn_info fd =
+let create_http_connection ~sw ~config ~conn_info ~uri fd =
   let (module Http), version =
     match
       ( config.Config.http2_prior_knowledge
@@ -75,6 +71,7 @@ let create_http_connection ~sw ~config ~conn_info fd =
     ~sw
     ~config
     ~conn_info
+    ~uri
     ~version
     ~fd
     (fd :> Eio.Net.stream_socket)
@@ -83,73 +80,71 @@ let create_https_connection
     ~sw
     ~config
     ~conn_info
+    ~uri
     (fd : < Eio.Net.stream_socket ; Eio.Flow.close >)
   =
   let { Connection_info.host; _ } = conn_info in
   let*! ssl_client =
     Openssl.connect ~config ~hostname:host (fd :> Eio.Net.stream_socket)
   in
-  match Eio_ssl.ssl_socket ssl_client with
-  | None -> failwith "handshake not established?"
-  | Some ssl_socket ->
-    let (module Https), version =
-      match Ssl.get_negotiated_alpn_protocol ssl_socket with
+  let ssl_socket = Eio_ssl.ssl_socket ssl_client in
+  let (module Https), version =
+    match Ssl.get_negotiated_alpn_protocol ssl_socket with
+    | None ->
+      Log.warn (fun m ->
+          let alpn_protocols =
+            Versions.ALPN.protocols_of_version config.Config.max_http_version
+          in
+          let protos =
+            String.concat
+              ", "
+              (List.map
+                 (fun proto -> Format.asprintf "%S" proto)
+                 alpn_protocols)
+          in
+          m "ALPN: Failed to negotiate requested protocols (%s)" protos);
+      (* Default to HTTP/2.0 if `http2_prior_knowledge` has been configured
+       * and the remote doesn't speak ALPN. Otherwise, use the maximal HTTP/1
+       * version configured. *)
+      let impl, version =
+        if config.http2_prior_knowledge
+        then (module Http2.HTTPS : Http_intf.HTTPS), Versions.HTTP.v2_0
+        else
+          ( (module Http1.HTTPS : Http_intf.HTTPS)
+          , if Versions.HTTP.(
+                 compare (Versions.ALPN.to_version config.max_http_version) v2_0)
+               >= 0
+            then Versions.HTTP.v1_1
+            else Versions.ALPN.to_version config.max_http_version )
+      in
+      Log.info (fun m -> m "Defaulting to %a" Versions.HTTP.pp_hum version);
+      impl, version
+    | Some negotiated_proto ->
+      Log.info (fun m -> m "ALPN: server agreed to use %s" negotiated_proto);
+      (match Versions.ALPN.of_string negotiated_proto with
+      | Some HTTP_1_0 ->
+        (module Http1.HTTPS : Http_intf.HTTPS), Versions.HTTP.v1_0
+      | Some HTTP_1_1 ->
+        (module Http1.HTTPS : Http_intf.HTTPS), Versions.HTTP.v1_1
+      | Some HTTP_2 ->
+        (module Http2.HTTPS : Http_intf.HTTPS), Versions.HTTP.v2_0
       | None ->
-        Log.warn (fun m ->
-            let alpn_protocols =
-              Versions.ALPN.protocols_of_version config.Config.max_http_version
-            in
-            let protos =
-              String.concat
-                ", "
-                (List.map
-                   (fun proto -> Format.asprintf "%S" proto)
-                   alpn_protocols)
-            in
-            m "ALPN: Failed to negotiate requested protocols (%s)" protos);
-        (* Default to HTTP/2.0 if `http2_prior_knowledge` has been configured
-         * and the remote doesn't speak ALPN. Otherwise, use the maximal HTTP/1
-         * version configured. *)
-        let impl, version =
-          if config.http2_prior_knowledge
-          then (module Http2.HTTPS : Http_intf.HTTPS), Versions.HTTP.v2_0
-          else
-            ( (module Http1.HTTPS : Http_intf.HTTPS)
-            , if Versions.HTTP.(
-                   compare
-                     (Versions.ALPN.to_version config.max_http_version)
-                     v2_0)
-                 >= 0
-              then Versions.HTTP.v1_1
-              else Versions.ALPN.to_version config.max_http_version )
-        in
-        Log.info (fun m -> m "Defaulting to %a" Versions.HTTP.pp_hum version);
-        impl, version
-      | Some negotiated_proto ->
-        Log.info (fun m -> m "ALPN: server agreed to use %s" negotiated_proto);
-        (match Versions.ALPN.of_string negotiated_proto with
-        | Some HTTP_1_0 ->
-          (module Http1.HTTPS : Http_intf.HTTPS), Versions.HTTP.v1_0
-        | Some HTTP_1_1 ->
-          (module Http1.HTTPS : Http_intf.HTTPS), Versions.HTTP.v1_1
-        | Some HTTP_2 ->
-          (module Http2.HTTPS : Http_intf.HTTPS), Versions.HTTP.v2_0
-        | None ->
-          (* Can't really happen - would mean that TLS negotiated a
-           * protocol that we didn't specify. *)
-          assert false)
-    in
-    Http_impl.create_connection
-      (module Https)
-      ~config
-      ~conn_info
-      ~version
-      ~sw
-      ~fd
-      ssl_client
+        (* Can't really happen - would mean that TLS negotiated a
+         * protocol that we didn't specify. *)
+        assert false)
+  in
+  Http_impl.create_connection
+    (module Https)
+    ~sw
+    ~config
+    ~conn_info
+    ~uri
+    ~version
+    ~fd
+    (ssl_client :> Eio.Flow.two_way)
 
-let open_connection ~config ~sw ~clock ~network conn_info =
-  let*! socket = Connection.connect_eio ~sw ~config ~clock ~network conn_info in
+let open_connection ~sw ~config ~clock ~network ~uri conn_info =
+  let*! socket = Connection.connect ~sw ~config ~clock ~network conn_info in
   if config.Config.tcp_nodelay
   then (
     Unix.setsockopt (Eio_unix.FD.peek_opt socket |> Option.get) TCP_NODELAY true;
@@ -158,55 +153,44 @@ let open_connection ~config ~sw ~clock ~network conn_info =
   Unix.set_nonblock (Eio_unix.FD.peek_opt socket |> Option.get);
   Log.info (fun m -> m "Connected to %a" Connection_info.pp_hum conn_info);
   match conn_info.scheme with
-  | Scheme.HTTP -> create_http_connection ~sw ~config ~conn_info socket
-  | HTTPS -> create_https_connection ~sw ~config ~conn_info socket
+  | `HTTP -> create_http_connection ~sw ~config ~conn_info ~uri socket
+  | `HTTPS -> create_https_connection ~sw ~config ~conn_info ~uri socket
 
-(* This function and `drain_available_body_bytes_and_shutdown` both take a
- * `conn_info` and a `Connection.t` instead of just a `t` too allow reuse when
- * shutting down old connection.
+(* This function takes a `conn_info` and a `Connection.t` instead of just a `t`
+ * too allow reuse when shutting down old connection.
  *
  * Due to the fact that `t.conn` is mutable, we could run into weird
  * asynchronous edge cases and shut down the connection that's currently in use
  * instead of the old one. *)
-let shutdown_conn (Connection.Conn { impl; handle; conn_info; fd; _ }) =
+let shutdown_conn (Connection.Conn { impl; connection; info; fd; _ }) =
   Log.info (fun m ->
       m
         "Tearing down %s connection to %a"
-        (String.uppercase_ascii (Scheme.to_string conn_info.scheme))
+        (String.uppercase_ascii (Scheme.to_string info.scheme))
         Connection_info.pp_hum
-        conn_info);
-  Http_impl.shutdown (module (val impl)) ~fd handle
+        info);
+  Http_impl.shutdown (module (val impl)) ~fd connection
 
-let change_connection t conn_info =
-  let (Conn { sw; _ }) = t.conn in
-  Fiber.fork ~sw (fun () -> shutdown_conn t.conn);
+let change_connection t (conn_info : Connection_info.t) =
+  let { sw; conn; _ } = t in
+  Fiber.fork ~sw (fun () -> shutdown_conn conn);
   let+! conn' =
     open_connection
       ~sw
       ~config:t.config
       ~clock:t.clock
       ~network:t.network
+      ~uri:conn_info.uri
       conn_info
   in
-  t.conn <- conn';
-  t.uri <- conn_info.uri
-
-let drain_available_body_bytes_and_shutdown conn response_body =
-  let (Connection.Conn { sw; _ }) = conn in
-  (* Junk what's available because we're going to close the connection.
-   * This is to avoid leaking memory. We're not going to use this
-   * response body so it doesn't need to stay around. *)
-  Fiber.fork ~sw (fun () ->
-      Log.debug (fun m -> m "Ignoring the response body");
-      Body.drain_available response_body)
+  t.conn <- conn'
 
 let shutdown { conn; _ } = shutdown_conn conn
 
 (* returns true if it succeeding in reusing the connection, false otherwise. *)
 let reuse_or_set_up_new_connection
     ({ conn =
-         Connection.Conn
-           ({ impl = (module Http); handle; conn_info; _ } as conn)
+         Connection.Conn ({ impl = (module Http); connection; info; _ } as conn)
      ; _
      } as t)
     new_uri
@@ -215,14 +199,14 @@ let reuse_or_set_up_new_connection
   | Error _ as e -> e
   | Ok new_scheme ->
     let new_conn_info =
-      { conn_info with
+      { info with
         port = Connection_info.infer_port ~scheme:new_scheme new_uri
       ; scheme = new_scheme
       ; host = Uri.host_exn new_uri
       ; uri = new_uri
       }
     in
-    if (not t.persistent) || Http_impl.is_closed (module Http) handle
+    if (not conn.persistent) || Http_impl.is_closed (module Http) connection
     then
       (* No way to avoid establishing a new connection if the previous one
        * wasn't persistent or the connection is closed. *)
@@ -232,14 +216,14 @@ let reuse_or_set_up_new_connection
       let new_conn_info = { new_conn_info with addresses = new_addresses } in
       let+! () = change_connection t new_conn_info in
       false
-    else if Connection_info.equal_without_resolving conn_info new_conn_info
+    else if Connection_info.equal_without_resolving info new_conn_info
     then (
       (* If we're redirecting within the same host / port / scheme, no need
        * to re-establish a new connection. *)
       Log.debug (fun m ->
           m "Reusing the same connection as the host / port didn't change");
       (* Even if we reused the connection, the URI could've changed. *)
-      conn.conn_info <- new_conn_info;
+      conn.info <- new_conn_info;
       Ok true)
     else
       let*! new_addresses =
@@ -249,12 +233,12 @@ let reuse_or_set_up_new_connection
       let new_conn_info = { new_conn_info with addresses = new_addresses } in
       (* Really avoiding having to establish a new connection here, if the new
        * host resolves to the same address and the port matches *)
-      if Connection_info.equal conn_info new_conn_info
+      if Connection_info.equal info new_conn_info
       then (
         Log.debug (fun m ->
             m "Reusing the same connection as the remote address didn't change");
         (* Even if we reused the connection, the URI could've changed. *)
-        conn.conn_info <- new_conn_info;
+        conn.info <- new_conn_info;
         Ok true)
       else
         (* No way to avoid establishing a new connection. *)
@@ -271,15 +255,15 @@ type request_info =
   }
 
 let rec return_response
-    ({ conn; config; _ } as t)
+    ({ conn; config; sw; _ } as t)
     ({ request; _ } as request_info)
     ({ Response.status; headers; version; body } as response)
   =
   let (Connection.Conn
         { impl = (module Http)
         ; runtime
-        ; conn_info = { Connection_info.scheme; _ } as conn_info
-        ; sw
+        ; info = { Connection_info.scheme; _ } as conn_info
+        ; uri
         ; fd
         ; _
         })
@@ -292,7 +276,7 @@ let rec return_response
    * if it were true we would have started an HTTP/2 connection. *)
   match request_info.is_h2c_upgrade, scheme, version, status, config with
   | ( true
-    , Scheme.HTTP
+    , `HTTP
     , { Versions.HTTP.major = 1; minor = 1 }
     , `Switching_protocols
     , { Config.h2c_upgrade = true
@@ -312,6 +296,7 @@ let rec return_response
         (Http_impl.create_h2c_connection
            ~config
            ~conn_info
+           ~uri
            ~sw
            ~fd
            ~http_request:request
@@ -331,21 +316,21 @@ let is_h2c_upgrade ~config ~version ~scheme =
     , config.h2c_upgrade
     , scheme )
   with
-  | false, cur_version, max_version, true, Scheme.HTTP ->
+  | false, cur_version, max_version, true, `HTTP ->
     Versions.HTTP.(
       equal (Versions.ALPN.to_version max_version) v2_0
       && equal cur_version v1_1)
   | _ -> false
 
 let make_request_info
-    { conn = Connection.Conn { version; conn_info; _ }; config; _ }
+    { conn = Connection.Conn { version; info; _ }; config; _ }
     ?(remaining_redirects = config.max_redirects)
     ~meth
     ~headers
     ~body
     target
   =
-  let { Connection_info.host; scheme; _ } = conn_info in
+  let { Connection_info.host; scheme; _ } = info in
   let is_h2c_upgrade = is_h2c_upgrade ~config ~version ~scheme in
   let h2_settings = H2.Settings.to_base64 (Config.to_http2_settings config) in
   let canonical_headers =
@@ -380,15 +365,18 @@ let make_request_info
   { remaining_redirects; headers; request; meth; target; is_h2c_upgrade }
 
 let rec send_request_and_handle_response
-    ({ conn = Conn { conn_info; _ } as conn; uri; config; _ } as t)
+    t
     ~body
     ({ remaining_redirects; request; headers; meth; _ } as request_info)
   =
+  let { conn = Conn ({ info; uri; _ } as conn); config; _ } = t in
+
   let*! response =
-    (Http_impl.send_request conn ~config ~body request
+    (Http_impl.send_request ~sw:t.sw t.conn ~config ~body request
       :> (Response.t, Error.t) result)
   in
-  if t.persistent then t.persistent <- Response.persistent_connection response;
+  if conn.persistent
+  then conn.persistent <- Response.persistent_connection response;
   (* TODO: 201 created can also return a Location header. Should we follow
    * those? *)
   match
@@ -405,26 +393,23 @@ let rec send_request_and_handle_response
     Log.err (fun m -> m "%s" msg);
     Error (`Connect_error msg)
   | true, true, _, Some location ->
-    let { Connection_info.scheme; _ } = conn_info in
+    let { Connection_info.scheme; _ } = info in
     let new_uri = Uri.parse_with_base_uri ~scheme ~uri location in
     let*! did_reuse =
       (reuse_or_set_up_new_connection t new_uri :> (bool, Error.t) result)
     in
-    (* If we reused the connection, and this is a persistent connection (we
-     * only reuse if persistent), throw away the response body, because we're
-     * not going to expose it to consumers.
+    (* If we reused the (persistent) connection, throw away the response body,
+     * because we're not going to expose it to consumers.
      *
      * Otherwise, if we couldn't reuse the connection, drain the response body.
      * The old connection will already have been shutdown by
      * `change_connection`. *)
     if did_reuse
-    then ignore (Body.drain response.body)
-    else
-      (* In this branch, don't bother waiting for the entire response body to
-       * arrive, we're going to shut down the connection either way. Just hang
-       * up. *)
-      drain_available_body_bytes_and_shutdown conn response.body;
-    if Status.is_permanent_redirection response.status then t.uri <- new_uri;
+    then
+      Fiber.fork ~sw:t.sw (fun () ->
+          let (_drained : _ result) = Body.drain response.body in
+          ());
+    if Status.is_permanent_redirection response.status then conn.uri <- new_uri;
     let target = Uri.path_and_query new_uri in
     (* From RFC7231§6.4:
      *   Note: In HTTP/1.0, the status codes 301 (Moved Permanently) and 302
@@ -465,24 +450,25 @@ let create ?(config = Config.default) ~sw env uri =
   let clock = Eio.Stdenv.clock env in
   let network = Eio.Stdenv.net env in
   let+! conn =
-    (open_connection ~config ~sw ~clock ~network conn_info
+    (open_connection ~config ~sw ~clock ~network ~uri:conn_info.uri conn_info
       :> (Connection.t, Error.t) result)
   in
-  { conn; persistent = true; uri; config; clock; network; sw }
+  { conn; config; clock; network; sw }
 
 let call t ~meth ?(headers = []) ?(body = Body.empty) target =
   (* Need to try to reconnect to the base host on every call, if redirects are
    * enabled, because the connection manager could have tried to follow a
    * temporary redirect. We remember permanent redirects. *)
-  let (Connection.Conn { impl = (module Http); handle; _ }) = t.conn in
-  let*! (_did_reuse : bool) =
-    if t.config.follow_redirects || Http_impl.is_closed (module Http) handle
-    then (reuse_or_set_up_new_connection t t.uri :> (bool, Error.t) result)
+  let (Connection.Conn { impl = (module Http); connection; uri; _ }) = t.conn in
+  let*! (_reused : bool) =
+    if t.config.follow_redirects || Http_impl.is_closed (module Http) connection
+    then (reuse_or_set_up_new_connection t uri :> (bool, Error.t) result)
     else Ok true
   in
   let headers = t.config.default_headers @ headers in
   let request_info = make_request_info t ~meth ~headers ~body target in
-  t.persistent <- Request.persistent_connection request_info.request;
+  let (Connection.Conn conn) = t.conn in
+  conn.persistent <- Request.persistent_connection request_info.request;
   send_request_and_handle_response t ~body request_info
 
 let request t ?headers ?body ~meth target = call t ?headers ?body ~meth target
@@ -515,11 +501,13 @@ module Oneshot = struct
       env
       uri
     =
-    let*! t = create ~config ~sw env uri in
-    let target = Uri.path_and_query t.uri in
+    let*! ({ conn = Connection.Conn conn; _ } as t) =
+      create ~config ~sw env uri
+    in
+    let target = Uri.path_and_query conn.uri in
     let headers = t.config.default_headers @ headers in
     let request_info = make_request_info t ~meth ~headers ~body target in
-    t.persistent <- Request.persistent_connection request_info.request;
+    conn.persistent <- Request.persistent_connection request_info.request;
     let response_result =
       send_request_and_handle_response t ~body request_info
     in

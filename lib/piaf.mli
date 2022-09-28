@@ -190,13 +190,21 @@ module Headers : sig
     val location : string
     val upgrade : string
     val transfer_encoding : string
+
+    module Values : sig
+      val close : string
+    end
   end
 end
 
 module Scheme : sig
+  type http = [ `HTTP ]
+  type https = [ `HTTPS ]
+
   type t =
-    | HTTP
-    | HTTPS
+    [ http
+    | https
+    ]
 
   val of_uri : Uri.t -> (t, [ `Msg of string ]) result
   val to_string : t -> string

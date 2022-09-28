@@ -28,7 +28,7 @@ type t =
   | Descriptor :
       { impl : (module Http_intf.HTTPServerCommon with type Reqd.t = 'reqd)
       ; reqd : 'reqd
-      ; handle : Scheme.Runtime.Socket.t
+      ; handle : Eio.Flow.two_way
       ; scheme : Scheme.t
             (* ; connection_error_received : Error.server Promise.t *)
       ; version : Versions.ALPN.t
@@ -43,7 +43,7 @@ let create_descriptor
     : type reqd.
       ?upgrade:upgrade
       -> (module Http_intf.HTTPServerCommon with type Reqd.t = reqd)
-      -> fd:Scheme.Runtime.Socket.t
+      -> fd:Eio.Flow.two_way
       -> scheme:Scheme.t
       -> version:Versions.ALPN.t
       -> handler:Request_info.t Server_intf.Handler.t
@@ -67,7 +67,7 @@ let do_sendfile
     : type writer.
       (module Http_intf.HTTPServerCommon with type Body.Writer.t = writer)
       -> src_fd:Unix.file_descr
-      -> fd:Eio.Net.stream_socket
+      -> fd:Eio.Flow.two_way
       -> report_exn:(exn -> unit)
       -> writer
       -> unit
@@ -158,16 +158,21 @@ let handle_request : sw:Switch.t -> t -> Request.t -> unit =
             in
             Piaf_body.stream_write_body (module Http.Body) response_body stream
           | `Sendfile (src_fd, _, _) ->
-            (match handle with
-            | HTTP fd ->
+            (match scheme with
+            | `HTTP ->
               let response_body =
                 Http.Reqd.respond_with_streaming
                   ~flush_headers_immediately:true
                   reqd
                   response
               in
-              do_sendfile (module Http) ~src_fd ~fd ~report_exn response_body
-            | HTTPS _ ->
+              do_sendfile
+                (module Http)
+                ~src_fd
+                ~fd:handle
+                ~report_exn
+                response_body
+            | `HTTPS ->
               (* TODO(anmonteiro): can't sendfile on an encrypted connection *)
               assert false))
       with
@@ -181,7 +186,8 @@ let handle_error
              and type Body.Writer.t = writer)
       -> start_response:(Headers.t -> writer)
       -> error_handler:Server_intf.error_handler
-      -> fd:Scheme.Runtime.Socket.t
+      -> scheme:Scheme.t
+      -> fd:Eio.Flow.two_way
       -> Eio.Net.Sockaddr.stream
       -> Error.server
       -> unit
@@ -190,6 +196,7 @@ let handle_error
      (module Http)
      ~start_response
      ~error_handler
+     ~scheme
      ~fd
      client_address
      error ->
@@ -214,15 +221,15 @@ let handle_error
     | `Stream stream ->
       Piaf_body.stream_write_body (module Http.Body) response_body stream
     | `Sendfile (src_fd, _, _) ->
-      (match fd with
-      | HTTP fd ->
+      (match scheme with
+      | `HTTP ->
         do_sendfile
           (module Http)
           ~src_fd
           ~fd
           ~report_exn:(fun _exn -> ())
           response_body
-      | HTTPS _ -> assert false)
+      | `HTTPS -> assert false)
   in
   try
     Log.warn (fun m ->

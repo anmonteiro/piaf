@@ -33,8 +33,6 @@ type error_handler = kind:Error.kind -> Error.client -> unit
 type response_handler = Response.t -> unit
 
 module type Client = sig
-  type socket
-  type runtime
   type t
   type write_body
 
@@ -42,8 +40,8 @@ module type Client = sig
     :  config:Config.t
     -> error_handler:error_handler
     -> sw:Eio.Switch.t
-    -> socket
-    -> t * Scheme.Runtime.t
+    -> Eio.Flow.two_way
+    -> t * Gluten_eio.Client.t
 
   val request
     :  t
@@ -82,7 +80,6 @@ module type Reqd = sig
 end
 
 module type Server = sig
-  type socket
   type write_body
 
   module Reqd : Reqd with type write_body := write_body
@@ -91,11 +88,15 @@ module type Server = sig
     :  config:Server_config.t
     -> request_handler:Request_info.t Server_intf.Handler.t
     -> error_handler:Server_intf.error_handler
-    -> socket Server_intf.connection_handler
+    -> Server_intf.connection_handler
 end
 
 (* Common signature for sharing HTTP/1.X / HTTP/2 implementations. *)
 module type HTTPCommon = sig
+  type scheme
+
+  val scheme : Scheme.t
+
   module Body : Body.BODY
   module Client : Client with type write_body := Body.Writer.t
   module Server : Server with type write_body := Body.Writer.t
@@ -107,6 +108,10 @@ module type HTTPServerCommon = sig
 end
 
 module type HTTP1 = sig
+  type scheme
+
+  val scheme : Scheme.t
+
   module Body : Body.BODY
 
   module Client : sig
@@ -118,29 +123,21 @@ module type HTTP1 = sig
   module Server : Server with type write_body := Body.Writer.t
 end
 
-module type HTTP =
-  HTTPCommon
-    with type Client.socket = Gluten_eio.Client.socket
-     and type Server.socket = Gluten_eio.Server.socket
-     and type Client.runtime = Gluten_eio.Client.t
-
-module type HTTPS =
-  HTTPCommon
-    with type Client.socket = Eio_ssl.socket
-     and type Server.socket = Gluten_eio.Server.SSL.socket
-     and type Client.runtime = Gluten_eio.Client.SSL.t
+module type HTTP = HTTPCommon with type scheme = Scheme.http
+module type HTTPS = HTTPCommon with type scheme = Scheme.https
 
 module Piaf_body = Body
 
 (* Only needed for h2c upgrades (insecure HTTP/2) *)
 module type HTTP2 = sig
+  type scheme
+
+  val scheme : Scheme.t
+
   module Body : Body.BODY
 
   module Client : sig
-    include
-      Client
-        with type write_body := Body.Writer.t
-         and type runtime = Gluten_eio.Client.t
+    include Client with type write_body := Body.Writer.t
 
     val create_h2c
       :  config:Config.t
@@ -148,7 +145,7 @@ module type HTTP2 = sig
       -> http_request:Httpaf.Request.t
       -> error_handler:error_handler
       -> response_handler * error_handler
-      -> runtime
+      -> Gluten_eio.Client.t
       -> (t, string) result
   end
 
@@ -158,7 +155,7 @@ module type HTTP2 = sig
     val create_h2c_connection_handler
       :  config:Server_config.t
       -> sw:Eio.Switch.t
-      -> fd:Scheme.Runtime.Socket.t
+      -> fd:Eio.Flow.two_way
       -> error_handler:Server_intf.error_handler
       -> http_request:Httpaf.Request.t
       -> request_body:Bigstringaf.t IOVec.t list
@@ -167,7 +164,4 @@ module type HTTP2 = sig
       -> (H2.Server_connection.t, string) result
   end
 end
-with type Client.socket = Gluten_eio.Client.socket
- and type Client.runtime = Gluten_eio.Client.t
- and type Server.socket = Gluten_eio.Server.socket
- and type Client.t = H2_eio.Client.t
+with type Client.t = H2_eio.Client.t

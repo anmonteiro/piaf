@@ -274,12 +274,6 @@ module Client_conf = struct
     }
 end
 
-type ctx =
-  { uninitialized_socket : Eio_ssl.uninitialized_socket
-  ; ctx : Ssl.context
-  ; socket : Ssl.socket
-  }
-
 let setup_client_ctx
     ~config:
       Client_conf.
@@ -324,8 +318,8 @@ let setup_client_ctx
         Ok ()
     in
 
-    let s = Eio_ssl.embed_uninitialized_socket fd ctx in
-    let ssl_sock = Eio_ssl.ssl_socket_of_uninitialized_socket s in
+    let ssl_ctx = Eio_ssl.Context.create ~ctx fd in
+    let ssl_sock = Eio_ssl.Context.ssl_socket ssl_ctx in
     (* If hostname is an IP address, check that instead of the hostname *)
     let ipaddr = Ipaddr.of_string hostname in
     (match ipaddr with
@@ -335,7 +329,7 @@ let setup_client_ctx
       (* https://wiki.openssl.org/index.php/Hostname_validation *)
       Ssl.set_hostflags ssl_sock [ No_partial_wildcards ];
       Ssl.set_host ssl_sock hostname);
-    Ok { ctx; uninitialized_socket = s; socket = ssl_sock }
+    Ok ssl_ctx
 
 (* Assumes that the file descriptor is connected. *)
 let connect ~hostname ~config fd =
@@ -358,19 +352,18 @@ let connect ~hostname ~config fd =
     Log.err (fun m -> m "%s" msg);
     Error (`Connect_error msg))
   else
-    let*! { ctx = _; uninitialized_socket = s; socket = ssl_sock } =
-      setup_client_ctx ~config:client_conf ~hostname fd
-    in
+    let*! ssl_ctx = setup_client_ctx ~config:client_conf ~hostname fd in
     let socket_or_error =
-      try Ok (Eio_ssl.ssl_perform_handshake s) with
-      | Eio_ssl.Exn.Ssl_exception { message; _ } ->
+      match Eio_ssl.connect ssl_ctx with
+      | socket -> Ok socket
+      | exception Eio_ssl.Exn.Ssl_exception { message; _ } ->
         let msg = Format.asprintf "SSL Error: %s" message in
         Log.err (fun m -> m "%s" msg);
         Error (`Connect_error msg)
-      | _ -> assert false
     in
+    let ssl_sock = Eio_ssl.Context.ssl_socket ssl_ctx in
     match socket_or_error with
-    | Ok ssl_socket ->
+    | Ok ssl ->
       let ssl_version = version_of_ssl (Ssl.version ssl_sock) in
       let ssl_cipher = Ssl.get_cipher ssl_sock in
       Log.info (fun m ->
@@ -381,7 +374,7 @@ let connect ~hostname ~config fd =
             (Ssl.get_cipher_name ssl_cipher));
       (* Verification succeeded, or `allow_insecure` is true *)
       log_cert_info ~allow_insecure ssl_sock;
-      Ok ssl_socket
+      Ok ssl
     | Error e ->
       let verify_result = Ssl.get_verify_result ssl_sock in
       if verify_result <> 0
@@ -501,22 +494,18 @@ let setup_server_ctx
 
 (* assumes an `accept`ed socket *)
 let get_negotiated_alpn_protocol ssl_server =
-  match Eio_ssl.ssl_socket ssl_server with
-  | None -> assert false
-  | Some ssl_socket ->
-    (match Ssl.get_negotiated_alpn_protocol ssl_socket with
-    | Some "http/1.1" -> Versions.ALPN.HTTP_1_1
-    | Some "h2" -> Versions.ALPN.HTTP_2
-    | None (* Unable to negotiate a protocol *) | Some _ ->
-      (* Can't really happen - would mean that TLS negotiated a
-       * protocol that we didn't specify. *)
-      (* TODO(anmonteiro): LOG ERROR *)
-      assert false)
-
-type connection_handler = Eio_ssl.socket -> Eio.Net.Sockaddr.stream -> unit
+  let ssl_socket = Eio_ssl.ssl_socket ssl_server in
+  match Ssl.get_negotiated_alpn_protocol ssl_socket with
+  | Some "http/1.1" -> Versions.ALPN.HTTP_1_1
+  | Some "h2" -> Versions.ALPN.HTTP_2
+  | None (* Unable to negotiate a protocol *) | Some _ ->
+    (* Can't really happen - would mean that TLS negotiated a
+     * protocol that we didn't specify. *)
+    (* TODO(anmonteiro): LOG ERROR *)
+    assert false
 
 type accept =
-  { socket : Eio_ssl.socket
+  { socket : Eio_ssl.t
   ; alpn_version : Versions.ALPN.t
   }
 
@@ -524,9 +513,10 @@ type accept =
    SNI: https://stackoverflow.com/a/5113466/3417023 *)
 let accept ~clock ~(config : Server_conf.t) ~fd =
   let*! ctx = setup_server_ctx ~config in
+  let ssl_ctx = Eio_ssl.Context.create ~ctx fd in
   match
     Eio.Time.with_timeout clock config.accept_timeout (fun () ->
-        Ok (Eio_ssl.ssl_accept fd ctx))
+        Ok (Eio_ssl.accept ssl_ctx))
   with
   | Ok ssl_server ->
     let alpn_version = get_negotiated_alpn_protocol ssl_server in
