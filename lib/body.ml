@@ -341,10 +341,12 @@ let of_raw_body
     Fiber.first
       (fun () -> Promise.await p)
       (fun () ->
-        (* `None` closes the stream. The promise `t.error_received` remains
-         * fulfilled, which signals that the stream hasn't closed cleanly. *)
-        let _err = Promise.await t.error_received in
-        None)
+        match Promise.await t.error_received with
+        | (_ : Error.t) ->
+          (* `None` closes the stream. The promise `t.error_received` remains
+           * fulfilled, which signals that the stream hasn't closed cleanly.
+           *)
+          None)
   in
 
   let rec t =
