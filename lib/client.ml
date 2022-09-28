@@ -144,7 +144,7 @@ let create_https_connection
     (ssl_client :> Eio.Flow.two_way)
 
 let open_connection ~sw ~config ~clock ~network ~uri conn_info =
-  let*! socket = Connection.connect_eio ~sw ~config ~clock ~network conn_info in
+  let*! socket = Connection.connect ~sw ~config ~clock ~network conn_info in
   if config.Config.tcp_nodelay
   then (
     Unix.setsockopt (Eio_unix.FD.peek_opt socket |> Option.get) TCP_NODELAY true;
