@@ -420,6 +420,25 @@ module Body : sig
   (* * (unit, Error.t) result Eio.Promise.t *)
 end
 
+module Ws : sig
+  module Descriptor : sig
+    type t
+
+    val frames : t -> (Websocketaf.Websocket.Opcode.t * string) Stream.t
+    (** Stream of incoming websocket messages (frames) *)
+
+    val send_stream : t -> Bigstringaf.t IOVec.t Stream.t -> unit
+    val send_string_stream : t -> string Stream.t -> unit
+    val send_string : t -> string -> unit
+    val send_bigstring : t -> ?off:int -> ?len:int -> Bigstringaf.t -> unit
+    val send_ping : t -> unit
+    val send_pong : t -> unit
+    val flushed : t -> unit Eio.Promise.t
+    val close : t -> unit
+    val is_closed : t -> bool
+  end
+end
+
 module Request : sig
   type t = private
     { meth : Method.t
@@ -487,12 +506,6 @@ module Response : sig
     -> Status.t
     -> t
 
-  val upgrade
-    :  ?version:Versions.HTTP.t
-    -> ?headers:Headers.t
-    -> ((Gluten.impl -> unit) -> unit)
-    -> t
-
   val copy_file
     :  ?version:Versions.HTTP.t
     -> ?headers:Headers.t
@@ -504,6 +517,20 @@ module Response : sig
     -> ?headers:Headers.t
     -> string
     -> (t, Error.t) result
+
+  module Upgrade : sig
+    val generic
+      :  ?version:Versions.HTTP.t
+      -> ?headers:Headers.t
+      -> (sw:Eio.Switch.t -> (Gluten.impl -> unit) -> unit)
+      -> t
+
+    val websocket
+      :  f:(Ws.Descriptor.t -> unit)
+      -> ?headers:Headers.t
+      -> Request.t
+      -> t
+  end
 
   val or_internal_error : (t, Error.t) result -> t
   val persistent_connection : t -> bool
@@ -528,25 +555,6 @@ module Form : sig
       :  ?max_chunk_size:int
       -> Request.t
       -> ((string * t) list, Error.t) result
-  end
-end
-
-module Ws : sig
-  module Descriptor : sig
-    type t
-
-    val frames : t -> (Websocketaf.Websocket.Opcode.t * string) Stream.t
-    (** Stream of incoming websocket messages (frames) *)
-
-    val send_stream : t -> Bigstringaf.t IOVec.t Stream.t -> unit
-    val send_string_stream : t -> string Stream.t -> unit
-    val send_string : t -> string -> unit
-    val send_bigstring : t -> ?off:int -> ?len:int -> Bigstringaf.t -> unit
-    val send_ping : t -> unit
-    val send_pong : t -> unit
-    val flushed : t -> unit Eio.Promise.t
-    val close : t -> unit
-    val is_closed : t -> bool
   end
 end
 

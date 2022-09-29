@@ -204,38 +204,11 @@ let upgrade_connection
   let error_handler _wsd error =
     Promise.resolve notify_error (error :> Error.client)
   in
-  let websocket_handler wsd =
-    let frames, push_to_frames = Stream.create 256 in
-    Promise.resolve notify_wsd (Ws.Descriptor.create ~frames wsd);
-    let frame ~opcode ~is_fin:_ ~len payload =
-      let len = Int64.of_int len in
-      let { Body.stream; _ } =
-        Body.Raw.to_stream
-          (module Websocketaf.Payload : Body.Raw.Reader
-            with type t = Websocketaf.Payload.t)
-          ~body_length:(`Fixed len)
-          ~on_eof:(fun t ->
-            match Websocketaf.Wsd.error_code wsd with
-            | Some error ->
-              t.error_received <- Promise.create_resolved (error :> Error.t)
-            | None -> ())
-          payload
-      in
-      Fiber.fork ~sw (fun () ->
-          let frame = Body.stream_to_string ~length:(`Fixed len) stream in
-          push_to_frames (Some (opcode, frame)))
-    in
-
-    let eof () =
-      Log.info (fun m -> m "Websocket connection EOF");
-      push_to_frames None
-    in
-    { Websocketaf.Client_connection.frame; eof }
-  in
-
   Log.info (fun m -> m "Upgrading connection to the Websocket protocol");
   let ws_conn =
-    Websocketaf.Client_connection.create ~error_handler websocket_handler
+    Websocketaf.Client_connection.create
+      ~error_handler
+      (Ws.Handler.websocket_handler ~sw ~notify_wsd)
   in
   let result =
     Fiber.any

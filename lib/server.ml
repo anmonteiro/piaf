@@ -81,7 +81,7 @@ let is_requesting_h2c_upgrade ~config ~version ~scheme headers =
 
 let do_h2c_upgrade ~sw ~fd ~request_body server =
   let { config; error_handler; handler } = server in
-  let upgrade_handler client_address (request : Request.t) upgrade =
+  let upgrade_handler ~sw:_ client_address (request : Request.t) upgrade =
     let http_request =
       Httpaf.Request.create
         ~headers:
@@ -108,7 +108,7 @@ let do_h2c_upgrade ~sw ~fd ~request_body server =
       Headers.(
         of_list [ Well_known.connection, "Upgrade"; Well_known.upgrade, "h2c" ])
     in
-    Response.upgrade ~headers (upgrade_handler client_address request)
+    Response.Upgrade.generic ~headers (upgrade_handler client_address request)
   in
   request_handler
 

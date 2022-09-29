@@ -113,5 +113,31 @@ end = struct
 end
 
 module Handler = struct
-  type t = descriptor:Descriptor.t -> Bigstringaf.t IOVec.t Stream.t -> unit
+  let websocket_handler ~sw ~notify_wsd wsd =
+    let frames, push_to_frames = Stream.create 256 in
+    Promise.resolve notify_wsd (Descriptor.create ~frames wsd);
+    let frame ~opcode ~is_fin:_ ~len payload =
+      let len = Int64.of_int len in
+      let { Body.stream; _ } =
+        Body.Raw.to_stream
+          (module Websocketaf.Payload : Body.Raw.Reader
+            with type t = Websocketaf.Payload.t)
+          ~body_length:(`Fixed len)
+          ~on_eof:(fun t ->
+            match Websocketaf.Wsd.error_code wsd with
+            | Some error ->
+              t.error_received <- Promise.create_resolved (error :> Error.t)
+            | None -> ())
+          payload
+      in
+      Fiber.fork ~sw (fun () ->
+          let frame = Body.stream_to_string ~length:(`Fixed len) stream in
+          push_to_frames (Some (opcode, frame)))
+    in
+
+    let eof () =
+      Log.info (fun m -> m "Websocket connection EOF");
+      push_to_frames None
+    in
+    { Websocketaf.Websocket_connection.frame; eof }
 end

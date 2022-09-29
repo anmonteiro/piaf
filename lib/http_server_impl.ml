@@ -136,7 +136,7 @@ let handle_request : sw:Switch.t -> t -> Request.t -> unit =
           in
           (match Piaf_body.contents body with
           | `Empty upgrade_handler ->
-            if Piaf_body.Optional_handler.is_none upgrade_handler
+            if Piaf_body.Optional_upgrade_handler.is_none upgrade_handler
             then
               (* No upgrade *)
               Http.Reqd.respond_with_bigstring reqd response Bigstringaf.empty
@@ -146,7 +146,8 @@ let handle_request : sw:Switch.t -> t -> Request.t -> unit =
               match upgrade with
               | Some upgrade ->
                 Http.Reqd.respond_with_upgrade reqd response.headers (fun () ->
-                    Piaf_body.Optional_handler.call_if_some
+                    Piaf_body.Optional_upgrade_handler.call_if_some
+                      ~sw
                       upgrade_handler
                       upgrade)
               | None ->

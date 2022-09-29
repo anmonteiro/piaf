@@ -36,18 +36,18 @@ let src = Logs.Src.create "piaf.body" ~doc:"Piaf Body module"
 
 module Log = (val Logs.src_log src : Logs.LOG)
 
-module Optional_handler : sig
+module Optional_upgrade_handler : sig
   type t
 
   val none : t
-  val some : ((Gluten.impl -> unit) -> unit) -> t
+  val some : (sw:Switch.t -> (Gluten.impl -> unit) -> unit) -> t
   val is_none : t -> bool
   val is_some : t -> bool
-  val call_if_some : t -> (Gluten.impl -> unit) -> unit
+  val call_if_some : sw:Switch.t -> t -> (Gluten.impl -> unit) -> unit
 end = struct
-  type t = (Gluten.impl -> unit) -> unit
+  type t = sw:Switch.t -> (Gluten.impl -> unit) -> unit
 
-  let none = Sys.opaque_identity (fun _ -> ())
+  let none = Sys.opaque_identity (fun ~sw:_ _ -> ())
 
   let some f =
     if f == none
@@ -59,7 +59,7 @@ end = struct
 
   let is_none t = t == none
   let is_some t = not (is_none t)
-  let call_if_some t = t
+  let call_if_some ~sw t = t ~sw
 end
 
 module Unix_fd = struct
@@ -91,7 +91,7 @@ type sendfile_descr =
   }
 
 type contents =
-  [ `Empty of Optional_handler.t
+  [ `Empty of Optional_upgrade_handler.t
   | `String of string
   | `Bigstring of Bigstringaf.t IOVec.t
   | `Stream of body_stream
@@ -109,7 +109,7 @@ let default_error_received, _ = Promise.create ()
 let create ~length contents = { length; contents }
 let length { length; _ } = length
 let contents { contents; _ } = contents
-let empty = create ~length:(`Fixed 0L) (`Empty Optional_handler.none)
+let empty = create ~length:(`Fixed 0L) (`Empty Optional_upgrade_handler.none)
 
 let of_stream ?(length = `Chunked) stream =
   create
