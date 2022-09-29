@@ -1,4 +1,5 @@
 open Eio.Std
+open Piaf
 
 module Result = struct
   include Result
@@ -12,46 +13,28 @@ module Result = struct
     | Ok _, Error e | Error e, Ok _ | Error e, Error _ -> Error e
 end
 
-let stdin_loop ~stdin wsd =
-  let rec input_loop buf wsd =
-    let open Piaf in
-    let line = Eio.Buf_read.line buf in
-    traceln "< %s" line;
-    match line with
-    | "exit" -> Ws.Descriptor.close wsd
-    | _ ->
-      Ws.Descriptor.send_string wsd line;
-      input_loop buf wsd
-  in
-  let buf = Eio.Buf_read.of_flow stdin ~initial_size:100 ~max_size:1_000_000 in
-  input_loop buf wsd
-
-let rec consume_frames frames =
-  match Stream.take frames with
-  | Some (_code, frame) ->
-    Format.eprintf ">> %s@." frame;
-    consume_frames frames
-  | None -> ()
+let rec stdin_loop ~stdin buf wsd =
+  let line = Eio.Buf_read.line buf in
+  traceln "< %s" line;
+  if line = "exit"
+  then Ws.Descriptor.close wsd
+  else (
+    Ws.Descriptor.send_string wsd line;
+    stdin_loop ~stdin buf wsd)
 
 let request ~env ~sw host =
-  let open Piaf in
   let open Result in
-  let stdin = Eio.Stdenv.stdin env in
-  let* client =
-    Client.create
-      env
-      ~sw
-      ~config:
-        { Config.default with
-          follow_redirects = true
-        ; allow_insecure = true
-        ; flush_headers_immediately = true
-        }
-      (Uri.of_string host)
-  in
+  let* client = Client.create env ~sw (Uri.of_string host) in
   let+ wsd = Client.ws_upgrade client "/" in
-  let frames = Ws.Descriptor.frames wsd in
-  Fiber.both (fun () -> consume_frames frames) (fun () -> stdin_loop ~stdin wsd);
+  Fiber.both
+    (fun () ->
+      let stdin = Eio.Stdenv.stdin env in
+      let buf = Eio.Buf_read.of_flow stdin ~initial_size:100 ~max_size:1_000 in
+      stdin_loop ~stdin buf wsd)
+    (fun () ->
+      Stream.iter
+        ~f:(fun (_opcode, frame) -> Format.printf ">> %s@." frame)
+        (Ws.Descriptor.frames wsd));
   Client.shutdown client
 
 let setup_log ?style_renderer level =
