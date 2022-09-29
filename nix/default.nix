@@ -93,6 +93,7 @@ in
         httpaf-eio
         gluten-eio
         h2-eio
+        websocketaf-eio
 
         multipart_form
 
