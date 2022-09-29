@@ -1,21 +1,12 @@
 open Eio.Std
 open Piaf
 
-let connection_handler =
-  let websocket_handler wsd =
-    let frames = Ws.Descriptor.frames wsd in
-    Stream.iter
-      ~f:(fun (opcode, frame) ->
-        match opcode with
-        | #Websocketaf.Websocket.Opcode.standard_non_control ->
-          Ws.Descriptor.send_string wsd frame
-        | `Connection_close -> Ws.Descriptor.close wsd
-        | `Ping -> Ws.Descriptor.send_pong wsd
-        | `Pong | `Other _ -> ())
-      frames
-  in
-  fun { Server.request; _ } ->
-    Response.Upgrade.websocket ~f:websocket_handler request
+let connection_handler { Server.request; _ } =
+  Response.Upgrade.websocket request ~f:(fun wsd ->
+      let frames = Ws.Descriptor.frames wsd in
+      Stream.iter
+        ~f:(fun (_opcode, frame) -> Ws.Descriptor.send_string wsd frame)
+        frames)
 
 let setup_log ?style_renderer level =
   Fmt_tty.setup_std_outputs ?style_renderer ();
