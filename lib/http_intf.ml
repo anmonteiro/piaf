@@ -97,13 +97,13 @@ module type HTTPCommon = sig
 
   val scheme : Scheme.t
 
-  module Body : Body.BODY
+  module Body : Body.Raw.BODY
   module Client : Client with type write_body := Body.Writer.t
   module Server : Server with type write_body := Body.Writer.t
 end
 
 module type HTTPServerCommon = sig
-  module Body : Body.BODY
+  module Body : Body.Raw.BODY
   module Reqd : Reqd with type write_body := Body.Writer.t
 end
 
@@ -112,14 +112,8 @@ module type HTTP1 = sig
 
   val scheme : Scheme.t
 
-  module Body : Body.BODY
-
-  module Client : sig
-    include Client with type write_body := Body.Writer.t
-
-    val upgrade : t -> Gluten.impl -> unit
-  end
-
+  module Body : Body.Raw.BODY
+  module Client : Client with type write_body := Body.Writer.t
   module Server : Server with type write_body := Body.Writer.t
 end
 
@@ -134,7 +128,7 @@ module type HTTP2 = sig
 
   val scheme : Scheme.t
 
-  module Body : Body.BODY
+  module Body : Body.Raw.BODY
 
   module Client : sig
     include Client with type write_body := Body.Writer.t

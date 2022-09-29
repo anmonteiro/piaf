@@ -35,7 +35,7 @@ module Log = (val Logs.src_log src : Logs.LOG)
 
 let sendfile
     (type a)
-    (module Bodyw : Body.BODY with type Writer.t = a)
+    (module Writer : Body.Raw.Writer with type t = a)
     ~src_fd
     ~dst_fd
     raw_write_body
@@ -53,5 +53,5 @@ let sendfile
     Log.debug (fun m -> m "`sendfile` wrote %d bytes successfully" sent);
     Ok ()
   | Error e ->
-    Bodyw.Writer.close raw_write_body;
+    Writer.close raw_write_body;
     Error (Unix.Unix_error (e, "sendfile", "") (* TODO(anmonteiro): log err *))

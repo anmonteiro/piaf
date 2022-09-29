@@ -81,10 +81,10 @@ let create_connection
   Fiber.first (Fun.const (Ok conn)) (ptoerr connection_error_received)
 
 let flush_and_close
-    : type a. (module Body.BODY with type Writer.t = a) -> a -> unit
+    : type a. (module Body.Raw.Writer with type t = a) -> a -> unit
   =
  fun b request_body ->
-  Body.flush_and_close b request_body (fun () ->
+  Body.Raw.flush_and_close b request_body (fun () ->
       Log.info (fun m ->
           m "Request body has been completely and successfully uploaded"))
 
@@ -127,7 +127,7 @@ let handle_response
 
 let send_request
     :  sw:Switch.t -> Connection.t -> config:Config.t -> body:Body.t
-    -> Request.t -> (Response.t, Error.client) Result.t
+    -> Request.t -> (Response.t, Error.client) result
   =
  fun ~sw conn ~config ~body request ->
   let (Connection.Conn
@@ -161,23 +161,24 @@ let send_request
       | `Empty _ -> Bodyw.close request_body
       | `String s ->
         Bodyw.write_string request_body s;
-        flush_and_close (module Http.Body) request_body
+        flush_and_close (module Http.Body.Writer) request_body
       | `Bigstring { IOVec.buffer; off; len } ->
         Bodyw.schedule_bigstring request_body ~off ~len buffer;
-        flush_and_close (module Http.Body) request_body
-      | `Stream stream ->
+        flush_and_close (module Http.Body.Writer) request_body
+      | `Stream { stream; _ } ->
         Fiber.fork ~sw (fun () ->
             Stream.when_closed
-              ~f:(fun () -> flush_and_close (module Http.Body) request_body)
+              ~f:(fun () ->
+                flush_and_close (module Http.Body.Writer) request_body)
               stream);
-        Body.stream_write_body (module Http.Body) request_body stream
-      | `Sendfile (src_fd, _, _) ->
+        Body.Raw.stream_write_body (module Http.Body.Writer) request_body stream
+      | `Sendfile { fd = src_fd; _ } ->
         (match Http.scheme with
         | `HTTP ->
           Bodyw.close request_body;
           (match
              Posix.sendfile
-               (module Http.Body)
+               (module Http.Body.Writer)
                ~src_fd
                ~dst_fd:(Option.get (Eio_unix.FD.peek_opt fd))
                request_body
@@ -189,6 +190,71 @@ let send_request
            * TODO(anmonteiro): Return error message saying that. *)
           assert false));
   handle_response ~sw response_received error_received connection_error_received
+
+(* TODO: Don't upgrade if we're speaking HTTP/2 *)
+let upgrade_connection
+    : sw:Switch.t -> Connection.t -> (Ws.Descriptor.t, Error.client) result
+  =
+ fun ~sw conn ->
+  let (Connection.Conn { connection_error_received; runtime; _ }) = conn in
+  let (module Http1) = (module Http1.HTTP : Http_intf.HTTP1) in
+  let wsd_received, notify_wsd = Promise.create () in
+  let error_received, notify_error = Promise.create () in
+
+  let error_handler _wsd error =
+    Promise.resolve notify_error (error :> Error.client)
+  in
+  let websocket_handler wsd =
+    let frames, push_to_frames = Stream.create 256 in
+    Promise.resolve notify_wsd (Ws.Descriptor.create ~frames wsd);
+    let frame ~opcode ~is_fin:_ ~len payload =
+      let len = Int64.of_int len in
+      let { Body.stream; _ } =
+        Body.Raw.to_stream
+          (module Websocketaf.Payload : Body.Raw.Reader
+            with type t = Websocketaf.Payload.t)
+          ~body_length:(`Fixed len)
+          ~on_eof:(fun t ->
+            match Websocketaf.Wsd.error_code wsd with
+            | Some error ->
+              t.error_received <- Promise.create_resolved (error :> Error.t)
+            | None -> ())
+          payload
+      in
+      Fiber.fork ~sw (fun () ->
+          let frame = Body.stream_to_string ~length:(`Fixed len) stream in
+          push_to_frames (Some (opcode, frame)))
+    in
+
+    let eof () =
+      Log.info (fun m -> m "Websocket connection EOF");
+      push_to_frames None
+    in
+    { Websocketaf.Client_connection.frame; eof }
+  in
+
+  Log.info (fun m -> m "Upgrading connection to the Websocket protocol");
+  let ws_conn =
+    Websocketaf.Client_connection.create ~error_handler websocket_handler
+  in
+  let result =
+    Fiber.any
+      [ (fun () -> Ok (Promise.await wsd_received))
+      ; ptoerr error_received
+      ; ptoerr connection_error_received
+      ]
+  in
+  match result with
+  | Ok wsd ->
+    Log.info (fun m -> m "Websocket Upgrade confirmed");
+    Gluten_eio.Client.upgrade
+      runtime
+      (Gluten.make (module Websocketaf.Client_connection) ws_conn);
+
+    Ok wsd
+  | Error _ as error ->
+    (* TODO: Close the connection if we receive a connection error *)
+    error
 
 let can't_upgrade msg =
   Error (`Protocol_error (H2.Error_code.HTTP_1_1_Required, msg))

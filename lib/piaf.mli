@@ -398,21 +398,10 @@ module Body : sig
     -> f:(string -> unit)
     -> t
     -> (unit, Error.t) result
-  (* val iter_n *)
-  (* :  ?max_concurrency:int *)
-  (* -> (Bigstringaf.t Faraday.iovec -> unit Lwt.t) *)
-  (* -> t *)
-  (* -> (unit, Error.t) Lwt_result.t *)
 
-  (* val iter_string_n *)
-  (* :  ?max_concurrency:int *)
-  (* -> (string -> unit Lwt.t) *)
-  (* -> t *)
-  (* -> (unit, Error.t) Lwt_result.t *)
+  (** {3 Conversion to [Stream.t]} *)
 
-  (** {3 Conversion to [Lwt_stream.t]} *)
-
-  (** The functions below convert a [Piaf.Body.t] to an [Lwt_stream.t]. These
+  (** The functions below convert a [Piaf.Body.t] to a [Stream.t]. These
       functions should be used sparingly, and only when interacting with other
       APIs that require their argument to be a [Lwt_stream.t].
 
@@ -516,7 +505,7 @@ module Response : sig
     -> string
     -> (t, Error.t) result
 
-  val or_internal_error : (t, Error.t) Result.t -> t
+  val or_internal_error : (t, Error.t) result -> t
   val persistent_connection : t -> bool
   val pp_hum : Format.formatter -> t -> unit [@@ocaml.toplevel_printer]
 end
@@ -539,6 +528,25 @@ module Form : sig
       :  ?max_chunk_size:int
       -> Request.t
       -> ((string * t) list, Error.t) result
+  end
+end
+
+module Ws : sig
+  module Descriptor : sig
+    type t
+
+    val frames : t -> (Websocketaf.Websocket.Opcode.t * string) Stream.t
+    (** Stream of incoming websocket messages (frames) *)
+
+    val send_stream : t -> Bigstringaf.t IOVec.t Stream.t -> unit
+    val send_string_stream : t -> string Stream.t -> unit
+    val send_string : t -> string -> unit
+    val send_bigstring : t -> ?off:int -> ?len:int -> Bigstringaf.t -> unit
+    val send_ping : t -> unit
+    val send_pong : t -> unit
+    val flushed : t -> unit Eio.Promise.t
+    val close : t -> unit
+    val is_closed : t -> bool
   end
 end
 
@@ -617,6 +625,12 @@ module Client : sig
     -> (Response.t, Error.t) result
 
   val send : t -> Request.t -> (Response.t, Error.t) result
+
+  val ws_upgrade
+    :  t
+    -> ?headers:(string * string) list
+    -> string
+    -> (Ws.Descriptor.t, Error.t) result
 
   val shutdown : t -> unit
   (** [shutdown t] tears down the connection [t] and frees up all the resources

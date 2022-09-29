@@ -9,6 +9,8 @@
   h2-eio
   httpaf
   httpaf-eio
+  websocketaf
+  websocketaf-eio
   logs
   eio
   eio-ssl

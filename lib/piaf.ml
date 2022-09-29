@@ -47,3 +47,4 @@ module Status = Status
 module Versions = Versions
 module Server = Server
 module Cookies = Cookies
+module Ws = Ws

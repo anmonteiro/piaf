@@ -486,6 +486,23 @@ let patch t ?headers ?body target =
 
 let delete t ?headers ?body target = call t ?headers ?body ~meth:`DELETE target
 
+let ws_upgrade
+    :  t -> ?headers:(string * string) list -> string
+    -> (Ws.Descriptor.t, Error.t) result
+  =
+ fun t ?(headers = []) target ->
+  let (Conn { info; _ }) = t.conn in
+  let request =
+    Ws.upgrade_request
+      ~headers:(Httpaf.Headers.of_list headers)
+      ~scheme:info.scheme
+      ~nonce:"0123456789ABCDEF"
+      target
+  in
+  let*! response = send t request in
+  let*! () = Body.drain response.body in
+  (Http_impl.upgrade_connection ~sw:t.sw t.conn :> (_, Error.t) result)
+
 module Oneshot = struct
   (* Note: we're not sending `Connection: close`:
    * - HTTP/2 doesn't support the `Connection` header

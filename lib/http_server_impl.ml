@@ -76,7 +76,11 @@ let do_sendfile
   let fd = Option.get (Eio_unix.FD.peek_opt fd) in
   Http.Body.Writer.flush response_body (fun () ->
       match
-        Posix.sendfile (module Http.Body) ~src_fd ~dst_fd:fd response_body
+        Posix.sendfile
+          (module Http.Body.Writer)
+          ~src_fd
+          ~dst_fd:fd
+          response_body
       with
       | Ok () -> Http.Body.Writer.close response_body
       | Error exn ->
@@ -152,12 +156,15 @@ let handle_request : sw:Switch.t -> t -> Request.t -> unit =
           | `Bigstring { IOVec.buffer; off; len } ->
             let bstr = Bigstringaf.sub ~off ~len buffer in
             Http.Reqd.respond_with_bigstring reqd response bstr
-          | `Stream stream ->
+          | `Stream { stream; _ } ->
             let response_body =
               Http.Reqd.respond_with_streaming reqd response
             in
-            Piaf_body.stream_write_body (module Http.Body) response_body stream
-          | `Sendfile (src_fd, _, _) ->
+            Piaf_body.Raw.stream_write_body
+              (module Http.Body.Writer)
+              response_body
+              stream
+          | `Sendfile { fd = src_fd; _ } ->
             (match scheme with
             | `HTTP ->
               let response_body =
@@ -218,9 +225,12 @@ let handle_error
     | `Bigstring { IOVec.buffer; off; len } ->
       Writer.write_bigstring response_body ~off ~len buffer;
       Writer.close response_body
-    | `Stream stream ->
-      Piaf_body.stream_write_body (module Http.Body) response_body stream
-    | `Sendfile (src_fd, _, _) ->
+    | `Stream { stream; _ } ->
+      Piaf_body.Raw.stream_write_body
+        (module Http.Body.Writer)
+        response_body
+        stream
+    | `Sendfile { fd = src_fd; _ } ->
       (match scheme with
       | `HTTP ->
         do_sendfile

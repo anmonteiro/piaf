@@ -1,3 +1,7 @@
 (executables
- (names eio_get eio_echo_post)
+ (names
+  eio_get
+  eio_echo_post
+  echo_server_upgrade
+  eio_wscat)
  (libraries piaf logs logs.fmt fmt.tty eio_main))
