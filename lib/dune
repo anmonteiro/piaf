@@ -9,8 +9,8 @@
   h2-eio
   httpaf
   httpaf-eio
+  digestif
   websocketaf
-  websocketaf-eio
   logs
   eio
   eio-ssl
