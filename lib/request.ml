@@ -49,20 +49,30 @@ let create ~scheme ~version ?(headers = Headers.empty) ~meth ~body target =
 
 let of_http1 ?(body = Body.empty) ~scheme request =
   let { Httpaf.Request.meth; target; version; headers } = request in
-  { meth; target; version; headers = Headers.of_http1 headers; scheme; body }
+  { meth
+  ; target
+  ; version = Versions.HTTP.Raw.to_version_exn version
+  ; headers = Headers.of_http1 headers
+  ; scheme
+  ; body
+  }
 
 let of_h2 ?(body = Body.empty) request =
   let { H2.Request.meth; target; headers; scheme } = request in
   { meth
   ; target
-  ; version = Versions.HTTP.v2_0
+  ; version = Versions.HTTP.HTTP_2
   ; headers
   ; scheme = Scheme.of_string_exn scheme
   ; body
   }
 
 let to_http1 { meth; target; version; headers; _ } =
-  Httpaf.Request.create ~version ~headers:(Headers.to_http1 headers) meth target
+  Httpaf.Request.create
+    ~version:(Versions.HTTP.Raw.of_version version)
+    ~headers:(Headers.to_http1 headers)
+    meth
+    target
 
 let to_h2 { meth; target; headers; scheme; _ } =
   H2.Request.create ~scheme:(Scheme.to_string scheme) ~headers meth target
@@ -80,7 +90,7 @@ let pp_hum formatter { meth; target; version; headers; _ } =
     H2.Method.pp_hum
     meth
     target
-    Versions.HTTP.pp_hum
+    Versions.HTTP.pp
     version
     (Format.pp_print_list
        ~pp_sep:(fun f () -> Format.fprintf f "@\n")

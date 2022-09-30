@@ -215,13 +215,27 @@ module Status : module type of Status
 
 module Versions : sig
   module HTTP : sig
-    include module type of struct
-      include Httpaf.Version
-    end
+    type t =
+      | HTTP_1_0
+      | HTTP_1_1
+      | HTTP_2
 
-    val v1_0 : t
-    val v1_1 : t
-    val v2_0 : t
+    type http_version := t
+
+    val pp : Format.formatter -> t -> unit
+
+    module Raw : sig
+      include module type of struct
+        include Httpaf.Version
+      end
+
+      val v1_0 : t
+      val v1_1 : t
+      val v2_0 : t
+      val to_version : t -> http_version option
+      val to_version_exn : t -> http_version
+      val of_version : http_version -> t
+    end
   end
 
   module TLS : sig
@@ -239,15 +253,8 @@ module Versions : sig
   end
 
   module ALPN : sig
-    type nonrec t =
-      | HTTP_1_0
-      | HTTP_1_1
-      | HTTP_2
-
-    val of_version : HTTP.t -> t option
-    val to_version : t -> HTTP.t
-    val of_string : string -> t option
-    val to_string : t -> string
+    val of_string : string -> HTTP.t option
+    val to_string : HTTP.t -> string
   end
 end
 
@@ -267,7 +274,7 @@ module Config : sig
               option *)
     ; allow_insecure : bool
           (** Wether to allow insecure server connections when using SSL *)
-    ; max_http_version : Versions.ALPN.t
+    ; max_http_version : Versions.HTTP.t
           (** Use this as the highest HTTP version when sending requests *)
     ; h2c_upgrade : bool
           (** Send an upgrade to `h2c` (HTTP/2 over TCP) request to the server.
@@ -713,7 +720,7 @@ end
 module Request_info : sig
   type t =
     { scheme : Scheme.t
-    ; version : Versions.ALPN.t
+    ; version : Versions.HTTP.t
     ; client_address : Eio.Net.Sockaddr.stream
     }
 end
@@ -751,7 +758,7 @@ module Server : sig
 
     type t =
       { port : int
-      ; max_http_version : Versions.ALPN.t
+      ; max_http_version : Versions.HTTP.t
             (** Use this as the highest HTTP version when sending requests *)
       ; https : HTTPS.t option
       ; h2c_upgrade : bool
@@ -776,7 +783,7 @@ module Server : sig
       }
 
     val create
-      :  ?max_http_version:Versions.ALPN.t
+      :  ?max_http_version:Versions.HTTP.t
       -> ?https:HTTPS.t
       -> ?h2c_upgrade:bool
       -> ?tcp_nodelay:bool

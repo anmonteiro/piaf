@@ -36,5 +36,6 @@ let persistent_connection version headers =
   (* XXX: technically HTTP/2 HEADERS frames shouldn't have `connection` headers,
    * but that's enforced upstream in H2. *)
   | "close" -> false
-  | "keep-alive" -> Version.(compare version v1_0) >= 0
-  | _ | (exception Not_found) -> Version.(compare version v1_1) >= 0
+  | "keep-alive" -> true
+  | _ | (exception Not_found) ->
+    (match version with Version.HTTP_1_0 -> false | HTTP_1_1 | HTTP_2 -> true)

@@ -31,7 +31,7 @@ type t =
       ; handle : Eio.Flow.two_way
       ; scheme : Scheme.t
             (* ; connection_error_received : Error.server Promise.t *)
-      ; version : Versions.ALPN.t
+      ; version : Versions.HTTP.t
             (** HTTP version that this connection speaks *)
       ; upgrade : upgrade option
       ; handler : Request_info.t Server_intf.Handler.t
@@ -45,7 +45,7 @@ let create_descriptor
       -> (module Http_intf.HTTPServerCommon with type Reqd.t = reqd)
       -> fd:Eio.Flow.two_way
       -> scheme:Scheme.t
-      -> version:Versions.ALPN.t
+      -> version:Versions.HTTP.t
       -> handler:Request_info.t Server_intf.Handler.t
       -> client_address:Eio.Net.Sockaddr.stream
       -> reqd

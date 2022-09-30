@@ -196,38 +196,42 @@ let upgrade_connection
     : sw:Switch.t -> Connection.t -> (Ws.Descriptor.t, Error.client) result
   =
  fun ~sw conn ->
-  let (Connection.Conn { connection_error_received; runtime; _ }) = conn in
-  let (module Http1) = (module Http1.HTTP : Http_intf.HTTP1) in
-  let wsd_received, notify_wsd = Promise.create () in
-  let error_received, notify_error = Promise.create () in
+  let (Connection.Conn { version; connection_error_received; runtime; _ }) =
+    conn
+  in
+  match version with
+  | HTTP_1_0 | HTTP_2 -> assert false
+  | HTTP_1_1 ->
+    let wsd_received, notify_wsd = Promise.create () in
+    let error_received, notify_error = Promise.create () in
 
-  let error_handler _wsd error =
-    Promise.resolve notify_error (error :> Error.client)
-  in
-  Log.info (fun m -> m "Upgrading connection to the Websocket protocol");
-  let ws_conn =
-    Websocketaf.Client_connection.create
-      ~error_handler
-      (Ws.Handler.websocket_handler ~sw ~notify_wsd)
-  in
-  let result =
-    Fiber.any
-      [ (fun () -> Ok (Promise.await wsd_received))
-      ; ptoerr error_received
-      ; ptoerr connection_error_received
-      ]
-  in
-  match result with
-  | Ok wsd ->
-    Log.info (fun m -> m "Websocket Upgrade confirmed");
-    Gluten_eio.Client.upgrade
-      runtime
-      (Gluten.make (module Websocketaf.Client_connection) ws_conn);
+    let error_handler _wsd error =
+      Promise.resolve notify_error (error :> Error.client)
+    in
+    Log.info (fun m -> m "Upgrading connection to the Websocket protocol");
+    let ws_conn =
+      Websocketaf.Client_connection.create
+        ~error_handler
+        (Ws.Handler.websocket_handler ~sw ~notify_wsd)
+    in
+    let result =
+      Fiber.any
+        [ (fun () -> Ok (Promise.await wsd_received))
+        ; ptoerr error_received
+        ; ptoerr connection_error_received
+        ]
+    in
+    (match result with
+    | Ok wsd ->
+      Log.info (fun m -> m "Websocket Upgrade confirmed");
+      Gluten_eio.Client.upgrade
+        runtime
+        (Gluten.make (module Websocketaf.Client_connection) ws_conn);
 
-    Ok wsd
-  | Error _ as error ->
-    (* TODO: Close the connection if we receive a connection error *)
-    error
+      Ok wsd
+    | Error _ as error ->
+      (* TODO: Close the connection if we receive a connection error *)
+      error)
 
 let can't_upgrade msg =
   Error (`Protocol_error (H2.Error_code.HTTP_1_1_Required, msg))
@@ -287,7 +291,7 @@ let create_h2c_connection
             ; persistent = true
             ; runtime
             ; connection_error_received
-            ; version = Versions.HTTP.v2_0
+            ; version = HTTP_2
             }
         in
         Ok (connection, response)

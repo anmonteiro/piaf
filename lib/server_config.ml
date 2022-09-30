@@ -41,7 +41,7 @@ end
 
 type t =
   { port : int
-  ; max_http_version : Versions.ALPN.t
+  ; max_http_version : Versions.HTTP.t
         (** Use this as the highest HTTP version when sending requests *)
   ; https : HTTPS.t option
   ; h2c_upgrade : bool
@@ -65,7 +65,7 @@ type t =
   }
 
 let create
-    ?(max_http_version = Versions.ALPN.HTTP_1_1)
+    ?(max_http_version = Versions.HTTP.HTTP_1_1)
     ?https
     ?(h2c_upgrade = false)
     ?(tcp_nodelay = true)

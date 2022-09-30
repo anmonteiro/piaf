@@ -43,7 +43,7 @@ type t =
 
 (* TODO: Add content-length... *)
 let create
-    ?(version = Versions.HTTP.v1_1)
+    ?(version = Versions.HTTP.HTTP_1_1)
     ?(headers = Headers.empty)
     ?(body = Body.empty)
     status
@@ -147,7 +147,7 @@ let of_http1 ?(body = Body.empty) response =
   let { Httpaf.Response.status; version; headers; _ } = response in
   { status = (status :> Status.t)
   ; headers = H2.Headers.of_rev_list (Httpaf.Headers.to_rev_list headers)
-  ; version
+  ; version = Versions.HTTP.Raw.to_version_exn version
   ; body
   }
 
@@ -160,7 +160,10 @@ let to_http1 { status; headers; version; _ } =
     | #Httpaf.Status.t as http1_status -> http1_status
     | `Misdirected_request -> `Code (H2.Status.to_code status)
   in
-  Httpaf.Response.create ~version ~headers:http1_headers status
+  Httpaf.Response.create
+    ~version:(Versions.HTTP.Raw.of_version version)
+    ~headers:http1_headers
+    status
 
 let to_h2 { status; headers; _ } = H2.Response.create ~headers status
 
@@ -170,7 +173,7 @@ let of_h2 ?(body = Body.empty) response =
    * only pseudo-header that can appear in HTTP/2.0 responses, and H2 checks
    * that there aren't others. *)
   let headers = H2.Headers.remove headers ":status" in
-  { status; headers; version = { major = 2; minor = 0 }; body }
+  { status; headers; version = HTTP_2; body }
 
 let or_internal_error = function
   | Ok r -> r
@@ -194,7 +197,7 @@ let pp_hum formatter { headers; status; version; _ } =
   Format.fprintf
     formatter
     "@[%a %a%s@]@\n@[%a@]"
-    Versions.HTTP.pp_hum
+    Versions.HTTP.pp
     version
     Status.pp_hum
     status

@@ -53,16 +53,14 @@ let create_http_connection ~sw ~config ~conn_info ~uri fd =
       , config.max_http_version
       , config.h2c_upgrade )
     with
-    | true, _, _ -> (module Http2.HTTP : Http_intf.HTTP), Versions.HTTP.v2_0
-    | false, HTTP_2, true ->
-      (module Http1.HTTP : Http_intf.HTTP), Versions.HTTP.v1_1
+    | true, _, _ -> (module Http2.HTTP : Http_intf.HTTP), Versions.HTTP.HTTP_2
+    | false, HTTP_2, true -> (module Http1.HTTP : Http_intf.HTTP), HTTP_1_1
     | false, _, _ ->
       let version =
-        if Versions.HTTP.(
-             compare (Versions.ALPN.to_version config.max_http_version) v2_0)
+        if Versions.HTTP.Raw.(compare (of_version config.max_http_version) v2_0)
            >= 0
-        then Versions.HTTP.v1_1
-        else Versions.ALPN.to_version config.max_http_version
+        then Versions.HTTP.HTTP_1_1
+        else config.max_http_version
       in
       (module Http1.HTTP : Http_intf.HTTP), version
   in
@@ -108,26 +106,25 @@ let create_https_connection
        * version configured. *)
       let impl, version =
         if config.http2_prior_knowledge
-        then (module Http2.HTTPS : Http_intf.HTTPS), Versions.HTTP.v2_0
+        then (module Http2.HTTPS : Http_intf.HTTPS), Versions.HTTP.HTTP_2
         else
           ( (module Http1.HTTPS : Http_intf.HTTPS)
-          , if Versions.HTTP.(
-                 compare (Versions.ALPN.to_version config.max_http_version) v2_0)
+          , if Versions.HTTP.Raw.(
+                 compare (of_version config.max_http_version) v2_0)
                >= 0
-            then Versions.HTTP.v1_1
-            else Versions.ALPN.to_version config.max_http_version )
+            then HTTP_1_1
+            else config.max_http_version )
       in
-      Log.info (fun m -> m "Defaulting to %a" Versions.HTTP.pp_hum version);
+      Log.info (fun m -> m "Defaulting to %a" Versions.HTTP.pp version);
       impl, version
     | Some negotiated_proto ->
       Log.info (fun m -> m "ALPN: server agreed to use %s" negotiated_proto);
       (match Versions.ALPN.of_string negotiated_proto with
-      | Some HTTP_1_0 ->
-        (module Http1.HTTPS : Http_intf.HTTPS), Versions.HTTP.v1_0
-      | Some HTTP_1_1 ->
-        (module Http1.HTTPS : Http_intf.HTTPS), Versions.HTTP.v1_1
-      | Some HTTP_2 ->
-        (module Http2.HTTPS : Http_intf.HTTPS), Versions.HTTP.v2_0
+      | Some version ->
+        ( (match version with
+          | HTTP_1_0 | HTTP_1_1 -> (module Http1.HTTPS : Http_intf.HTTPS)
+          | HTTP_2 -> (module Http2.HTTPS : Http_intf.HTTPS))
+        , version )
       | None ->
         (* Can't really happen - would mean that TLS negotiated a
          * protocol that we didn't specify. *)
@@ -277,7 +274,7 @@ let rec return_response
   match request_info.is_h2c_upgrade, scheme, version, status, config with
   | ( true
     , `HTTP
-    , { Versions.HTTP.major = 1; minor = 1 }
+    , HTTP_1_1
     , `Switching_protocols
     , { Config.h2c_upgrade = true
       ; max_http_version = HTTP_2
@@ -316,10 +313,7 @@ let is_h2c_upgrade ~config ~version ~scheme =
     , config.h2c_upgrade
     , scheme )
   with
-  | false, cur_version, max_version, true, `HTTP ->
-    Versions.HTTP.(
-      equal (Versions.ALPN.to_version max_version) v2_0
-      && equal cur_version v1_1)
+  | false, Versions.HTTP.HTTP_1_1, HTTP_2, true, `HTTP -> true
   | _ -> false
 
 let make_request_info

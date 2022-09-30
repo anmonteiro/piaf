@@ -60,9 +60,9 @@ let create ?(error_handler = default_error_handler) ~config handler : t =
 let is_requesting_h2c_upgrade ~config ~version ~scheme headers =
   match version, config.Config.max_http_version, config.h2c_upgrade, scheme with
   | cur_version, max_version, true, `HTTP ->
-    if Versions.HTTP.(
-         equal (Versions.ALPN.to_version max_version) v2_0
-         && equal cur_version v1_1)
+    if Versions.HTTP.Raw.(
+         equal (of_version max_version) v2_0
+         && equal (of_version cur_version) v1_1)
     then
       match
         Headers.(
@@ -153,9 +153,10 @@ let https_connection_handler ~https ~clock t : connection_handler =
     | Ok { Openssl.socket = ssl_server; alpn_version } ->
       let (module Https) =
         match alpn_version with
-        | Versions.ALPN.HTTP_1_0 | Versions.ALPN.HTTP_1_1 ->
-          (module Http1.HTTPS : Http_intf.HTTPS)
-        | Versions.ALPN.HTTP_2 -> (module Http2.HTTPS : Http_intf.HTTPS)
+        | HTTP_1_0 | HTTP_1_1 -> (module Http1.HTTPS : Http_intf.HTTPS)
+        | HTTP_2 ->
+          (* TODO: What if `config.max_http_version` is HTTP/1.1? *)
+          (module Http2.HTTPS : Http_intf.HTTPS)
       in
 
       Https.Server.create_connection_handler

@@ -201,7 +201,7 @@ module MakeHTTP1 (Runtime_scheme : Scheme.Runtime.SCHEME) :
           ~upgrade
           ~fd
           ~scheme:Runtime_scheme.scheme
-          ~version:Versions.ALPN.HTTP_1_1
+          ~version:HTTP_1_1
           ~handler
           ~client_address:client_addr
           reqd

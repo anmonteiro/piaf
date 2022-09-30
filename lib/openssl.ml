@@ -390,7 +390,7 @@ let connect ~hostname ~config fd =
 module Server_conf = struct
   type t =
     { allow_insecure : bool
-    ; max_http_version : Versions.ALPN.t
+    ; max_http_version : Versions.HTTP.t
     ; cacert : Cert.t option
     ; capath : string option
     ; certificate : Cert.t * Cert.t (* cert, priv_key *)
@@ -496,8 +496,8 @@ let setup_server_ctx
 let get_negotiated_alpn_protocol ssl_server =
   let ssl_socket = Eio_ssl.ssl_socket ssl_server in
   match Ssl.get_negotiated_alpn_protocol ssl_socket with
-  | Some "http/1.1" -> Versions.ALPN.HTTP_1_1
-  | Some "h2" -> Versions.ALPN.HTTP_2
+  | Some "http/1.1" -> Versions.HTTP.HTTP_1_1
+  | Some "h2" -> HTTP_2
   | None (* Unable to negotiate a protocol *) | Some _ ->
     (* Can't really happen - would mean that TLS negotiated a
      * protocol that we didn't specify. *)
@@ -506,7 +506,7 @@ let get_negotiated_alpn_protocol ssl_server =
 
 type accept =
   { socket : Eio_ssl.t
-  ; alpn_version : Versions.ALPN.t
+  ; alpn_version : Versions.HTTP.t
   }
 
 (* TODO(anmonteiro): if we wanna support multiple hostnames, this is how to do
