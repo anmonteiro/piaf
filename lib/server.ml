@@ -144,9 +144,15 @@ let http_connection_handler t : connection_handler =
 
 let https_connection_handler ~https ~clock t : connection_handler =
   let { error_handler; handler; config } = t in
-  let ssl_config = Openssl.Server_conf.of_server_config ~https config in
   fun ~sw socket client_address ->
-    match Openssl.accept ~clock ~config:ssl_config ~fd:socket with
+    match
+      Openssl.accept
+        ~clock
+        ~config:https
+        ~max_http_version:config.max_http_version
+        ~timeout:config.accept_timeout
+        socket
+    with
     | Error (`Exn exn) -> Format.eprintf "EXN: %s@." (Printexc.to_string exn)
     | Error (`Connect_error string) ->
       Format.eprintf "CONNECT ERROR: %s@." string

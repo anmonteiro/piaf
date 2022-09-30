@@ -241,53 +241,22 @@ let set_client_verify ?cacert ?capath ~clientcert ctx =
   | Some (certificate, private_key) -> load_cert ~certificate ~private_key ctx
   | None -> Ok ()
 
-module Client_conf = struct
-  type t =
-    { min_tls_version : Versions.TLS.t
-    ; max_tls_version : Versions.TLS.t
-    ; alpn_protocols : string list
-    ; allow_insecure : bool
-    ; cacert : Cert.t option
-    ; capath : string option
-    ; clientcert : (Cert.t * Cert.t) option
-    }
-
-  let of_config
-      { Config.min_tls_version
-      ; max_tls_version
-      ; max_http_version
-      ; allow_insecure
-      ; cacert
-      ; capath
-      ; clientcert
-      ; _
-      }
-    =
-    let alpn_protocols = Versions.ALPN.protocols_of_version max_http_version in
-    { min_tls_version
-    ; max_tls_version
-    ; alpn_protocols
-    ; allow_insecure
-    ; cacert
-    ; capath
-    ; clientcert
-    }
-end
-
 let setup_client_ctx
     ~config:
-      Client_conf.
+      Config.
         { min_tls_version
         ; max_tls_version
-        ; alpn_protocols
         ; allow_insecure
         ; cacert
         ; capath
         ; clientcert
+        ; max_http_version
+        ; _
         }
     ~hostname
     fd
   =
+  let alpn_protocols = Versions.ALPN.protocols_of_version max_http_version in
   match
     Ssl.(
       create_context
@@ -333,10 +302,10 @@ let setup_client_ctx
 
 (* Assumes that the file descriptor is connected. *)
 let connect ~hostname ~config fd =
-  let ({ Client_conf.allow_insecure; min_tls_version; max_tls_version; _ } as
+  let ({ Config.allow_insecure; min_tls_version; max_tls_version; _ } as
       client_conf)
     =
-    Client_conf.of_config config
+    config
   in
   if Versions.TLS.compare min_tls_version max_tls_version > 0
   then (
@@ -387,44 +356,6 @@ let connect ~hostname ~config fd =
             m "%a" (pp_cert_verify_result ~allow_insecure) verify_result));
       Error e
 
-module Server_conf = struct
-  type t =
-    { allow_insecure : bool
-    ; max_http_version : Versions.HTTP.t
-    ; cacert : Cert.t option
-    ; capath : string option
-    ; certificate : Cert.t * Cert.t (* cert, priv_key *)
-    ; enforce_client_cert : bool
-    ; min_tls_version : Versions.TLS.t
-    ; max_tls_version : Versions.TLS.t
-    ; accept_timeout : float (* seconds *)
-    }
-
-  let of_server_config
-      ~https:
-        { Server_config.HTTPS.allow_insecure
-        ; cacert
-        ; capath
-        ; certificate
-        ; enforce_client_cert
-        ; min_tls_version
-        ; max_tls_version
-        ; _
-        }
-    = function
-    | { Server_config.max_http_version; accept_timeout; _ } ->
-      { allow_insecure
-      ; max_http_version
-      ; cacert
-      ; capath
-      ; certificate
-      ; enforce_client_cert
-      ; min_tls_version
-      ; max_tls_version
-      ; accept_timeout
-      }
-end
-
 let set_server_verify ~enforce_client_cert ctx =
   (* TODO(anmonteiro): enable if Logs.Debug? *)
   Ssl.set_client_verify_callback_verbose true;
@@ -445,17 +376,17 @@ let rec first_match l1 = function
 
 let setup_server_ctx
     ~config:
-      Server_conf.
+      Server_config.HTTPS.
         { min_tls_version
         ; max_tls_version
         ; allow_insecure
         ; cacert
         ; capath
         ; certificate = certificate, private_key
-        ; max_http_version
         ; enforce_client_cert
         ; _
         }
+    ~max_http_version
   =
   let alpn_protocols = Versions.ALPN.protocols_of_version max_http_version in
   match
@@ -511,12 +442,17 @@ type accept =
 
 (* TODO(anmonteiro): if we wanna support multiple hostnames, this is how to do
    SNI: https://stackoverflow.com/a/5113466/3417023 *)
-let accept ~clock ~(config : Server_conf.t) ~fd =
-  let*! ctx = setup_server_ctx ~config in
+let accept
+    ~clock
+    ~(config : Server_config.HTTPS.t)
+    ~max_http_version
+    ~timeout
+    fd
+  =
+  let*! ctx = setup_server_ctx ~config ~max_http_version in
   let ssl_ctx = Eio_ssl.Context.create ~ctx fd in
   match
-    Eio.Time.with_timeout clock config.accept_timeout (fun () ->
-        Ok (Eio_ssl.accept ssl_ctx))
+    Eio.Time.with_timeout clock timeout (fun () -> Ok (Eio_ssl.accept ssl_ctx))
   with
   | Ok ssl_server ->
     let alpn_version = get_negotiated_alpn_protocol ssl_server in
