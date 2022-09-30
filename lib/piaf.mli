@@ -317,6 +317,7 @@ module Error : sig
     [ `Exn of exn
     | `Protocol_error of H2.Error_code.t * string
     | `TLS_error of string
+    | `Upgrade_not_supported
     | `Msg of string
     ]
 
@@ -536,7 +537,7 @@ module Response : sig
       :  f:(Ws.Descriptor.t -> unit)
       -> ?headers:Headers.t
       -> Request.t
-      -> t
+      -> (t, Error.t) result
   end
 
   val or_internal_error : (t, Error.t) result -> t

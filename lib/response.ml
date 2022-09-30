@@ -104,43 +104,49 @@ module Upgrade = struct
       `Switching_protocols
 
   let websocket ~f ?(headers = Headers.empty) (request : Request.t) =
-    let wsd_received, notify_wsd = Promise.create () in
-    let _error_received, notify_error = Promise.create () in
-    let upgrade_handler ~sw upgrade =
-      let error_handler _wsd error =
-        Promise.resolve notify_error (error :> Error.client)
+    match request.version with
+    | HTTP_1_0 | HTTP_2 -> Error `Upgrade_not_supported
+    | HTTP_1_1 ->
+      let wsd_received, notify_wsd = Promise.create () in
+      let _error_received, notify_error = Promise.create () in
+      let upgrade_handler ~sw upgrade =
+        let error_handler _wsd error =
+          Promise.resolve notify_error (error :> Error.client)
+        in
+
+        let ws_conn =
+          Websocketaf.Server_connection.create_websocket
+            ~error_handler
+            (Ws.Handler.websocket_handler ~sw ~notify_wsd)
+        in
+        Fiber.fork ~sw (fun () -> f (Promise.await wsd_received));
+        upgrade (Gluten.make (module Websocketaf.Server_connection) ws_conn)
       in
 
-      let ws_conn =
-        Websocketaf.Server_connection.create_websocket
-          ~error_handler
-          (Ws.Handler.websocket_handler ~sw ~notify_wsd)
+      let httpaf_headers = Headers.to_http1 request.headers in
+      let sha1 s =
+        let open Digestif in
+        s |> SHA1.digest_string |> SHA1.to_raw_string
       in
-      Fiber.fork ~sw (fun () -> f (Promise.await wsd_received));
-      upgrade (Gluten.make (module Websocketaf.Server_connection) ws_conn)
-    in
 
-    let httpaf_headers = Headers.to_http1 request.headers in
-    let sha1 s =
-      let open Digestif in
-      s |> SHA1.digest_string |> SHA1.to_raw_string
-    in
-
-    match
-      Websocketaf.Handshake.upgrade_headers
-        ~sha1
-        ~request_method:request.meth
-        httpaf_headers
-    with
-    | Ok upgrade_headers ->
-      generic
-        ~headers:Headers.(add_list (of_list upgrade_headers) (to_list headers))
-        upgrade_handler
-    | Error err_str ->
-      of_string
-        ~body:err_str
-        ~headers:Headers.(of_list Well_known.[ connection, Values.close ])
-        `Bad_request
+      (match
+         Websocketaf.Handshake.upgrade_headers
+           ~sha1
+           ~request_method:request.meth
+           httpaf_headers
+       with
+      | Ok upgrade_headers ->
+        Ok
+          (generic
+             ~headers:
+               Headers.(add_list (of_list upgrade_headers) (to_list headers))
+             upgrade_handler)
+      | Error err_str ->
+        Ok
+          (of_string
+             ~body:err_str
+             ~headers:Headers.(of_list Well_known.[ connection, Values.close ])
+             `Bad_request))
 end
 
 let of_http1 ?(body = Body.empty) response =

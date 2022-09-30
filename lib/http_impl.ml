@@ -191,7 +191,6 @@ let send_request
           assert false));
   handle_response ~sw response_received error_received connection_error_received
 
-(* TODO: Don't upgrade if we're speaking HTTP/2 *)
 let upgrade_connection
     : sw:Switch.t -> Connection.t -> (Ws.Descriptor.t, Error.client) result
   =
@@ -200,7 +199,7 @@ let upgrade_connection
     conn
   in
   match version with
-  | HTTP_1_0 | HTTP_2 -> assert false
+  | HTTP_1_0 | HTTP_2 -> Error `Upgrade_not_supported
   | HTTP_1_1 ->
     let wsd_received, notify_wsd = Promise.create () in
     let error_received, notify_error = Promise.create () in

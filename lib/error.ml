@@ -7,6 +7,7 @@ type common =
   [ `Exn of exn
   | `Protocol_error of H2.Error_code.t * string
   | `TLS_error of string
+  | `Upgrade_not_supported
   | `Msg of string
   ]
 
@@ -52,6 +53,7 @@ let to_string = function
   | `Bad_gateway -> "Bad Gateway"
   | `Bad_request -> "Bad Request"
   | `Internal_server_error -> "Internal Server Error"
+  | `Upgrade_not_supported -> "Upgrades not supported in this HTTP Version"
   | `Msg string -> string
 
 let pp_hum formatter t = Format.fprintf formatter "%s" (to_string t)
