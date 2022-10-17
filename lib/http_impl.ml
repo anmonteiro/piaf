@@ -81,10 +81,10 @@ let create_connection
   Fiber.first (Fun.const (Ok conn)) (ptoerr connection_error_received)
 
 let flush_and_close
-    : type a. (module Body.BODY with type Writer.t = a) -> a -> unit
+    : type a. (module Body.Raw.Writer with type t = a) -> a -> unit
   =
  fun b request_body ->
-  Body.flush_and_close b request_body (fun () ->
+  Body.Raw.flush_and_close b request_body (fun () ->
       Log.info (fun m ->
           m "Request body has been completely and successfully uploaded"))
 
@@ -127,7 +127,7 @@ let handle_response
 
 let send_request
     :  sw:Switch.t -> Connection.t -> config:Config.t -> body:Body.t
-    -> Request.t -> (Response.t, Error.client) Result.t
+    -> Request.t -> (Response.t, Error.client) result
   =
  fun ~sw conn ~config ~body request ->
   let (Connection.Conn
@@ -161,23 +161,24 @@ let send_request
       | `Empty _ -> Bodyw.close request_body
       | `String s ->
         Bodyw.write_string request_body s;
-        flush_and_close (module Http.Body) request_body
+        flush_and_close (module Http.Body.Writer) request_body
       | `Bigstring { IOVec.buffer; off; len } ->
         Bodyw.schedule_bigstring request_body ~off ~len buffer;
-        flush_and_close (module Http.Body) request_body
-      | `Stream stream ->
+        flush_and_close (module Http.Body.Writer) request_body
+      | `Stream { stream; _ } ->
         Fiber.fork ~sw (fun () ->
             Stream.when_closed
-              ~f:(fun () -> flush_and_close (module Http.Body) request_body)
+              ~f:(fun () ->
+                flush_and_close (module Http.Body.Writer) request_body)
               stream);
-        Body.stream_write_body (module Http.Body) request_body stream
-      | `Sendfile (src_fd, _, _) ->
+        Body.Raw.stream_write_body (module Http.Body.Writer) request_body stream
+      | `Sendfile { fd = src_fd; _ } ->
         (match Http.scheme with
         | `HTTP ->
           Bodyw.close request_body;
           (match
              Posix.sendfile
-               (module Http.Body)
+               (module Http.Body.Writer)
                ~src_fd
                ~dst_fd:(Option.get (Eio_unix.FD.peek_opt fd))
                request_body
@@ -189,6 +190,47 @@ let send_request
            * TODO(anmonteiro): Return error message saying that. *)
           assert false));
   handle_response ~sw response_received error_received connection_error_received
+
+let upgrade_connection
+    : sw:Switch.t -> Connection.t -> (Ws.Descriptor.t, Error.client) result
+  =
+ fun ~sw conn ->
+  let (Connection.Conn { version; connection_error_received; runtime; _ }) =
+    conn
+  in
+  match version with
+  | HTTP_1_0 | HTTP_2 -> Error `Upgrade_not_supported
+  | HTTP_1_1 ->
+    let wsd_received, notify_wsd = Promise.create () in
+    let error_received, notify_error = Promise.create () in
+
+    let error_handler _wsd error =
+      Promise.resolve notify_error (error :> Error.client)
+    in
+    Log.info (fun m -> m "Upgrading connection to the Websocket protocol");
+    let ws_conn =
+      Websocketaf.Client_connection.create
+        ~error_handler
+        (Ws.Handler.websocket_handler ~sw ~notify_wsd)
+    in
+    let result =
+      Fiber.any
+        [ (fun () -> Ok (Promise.await wsd_received))
+        ; ptoerr error_received
+        ; ptoerr connection_error_received
+        ]
+    in
+    (match result with
+    | Ok wsd ->
+      Log.info (fun m -> m "Websocket Upgrade confirmed");
+      Gluten_eio.Client.upgrade
+        runtime
+        (Gluten.make (module Websocketaf.Client_connection) ws_conn);
+
+      Ok wsd
+    | Error _ as error ->
+      (* TODO: Close the connection if we receive a connection error *)
+      error)
 
 let can't_upgrade msg =
   Error (`Protocol_error (H2.Error_code.HTTP_1_1_Required, msg))
@@ -248,7 +290,7 @@ let create_h2c_connection
             ; persistent = true
             ; runtime
             ; connection_error_received
-            ; version = Versions.HTTP.v2_0
+            ; version = HTTP_2
             }
         in
         Ok (connection, response)

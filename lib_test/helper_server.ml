@@ -194,7 +194,7 @@ module H2c = struct
       (ALPN.H2_handler.request_handler client_addr)
 
   let connection_handler =
-    let upgrade_handler client_addr (request : Request.t) upgrade =
+    let upgrade_handler client_addr (request : Request.t) ~sw:_ upgrade =
       let request =
         Httpaf.Request.create
           ~headers:
@@ -213,7 +213,7 @@ module H2c = struct
           of_list
             [ Well_known.connection, "Upgrade"; Well_known.upgrade, "h2c" ])
       in
-      Response.upgrade ~headers (upgrade_handler client_address request)
+      Response.Upgrade.generic ~headers (upgrade_handler client_address request)
 
   let listen ~sw ~network port =
     Server.Command.listen

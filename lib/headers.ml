@@ -74,23 +74,21 @@ let add_length_related_headers ~body_length headers =
 let canonicalize_headers ~body_length ~host ~version headers =
   let headers =
     match version with
-    | { Versions.HTTP.major = 2; _ } ->
+    | Versions.HTTP.HTTP_2 ->
       of_list
         ((Well_known.HTTP2.host, host)
         :: List.map
              (fun (name, value) -> String.lowercase_ascii name, value)
              headers)
-    | { major = 1; _ } ->
+    | HTTP_1_0 | HTTP_1_1 ->
       add_unless_exists (of_list headers) Well_known.HTTP1.host host
-    | _ -> failwith "unsupported version"
   in
   add_length_related_headers ~body_length headers
 
 let host t ~version =
   match version with
-  | { Versions.HTTP.major = 2; _ } -> get t Well_known.HTTP2.host
-  | { major = 1; _ } -> get t Well_known.HTTP1.host
-  | _ -> None
+  | Versions.HTTP.HTTP_2 -> get t Well_known.HTTP2.host
+  | HTTP_1_0 | HTTP_1_1 -> get t Well_known.HTTP1.host
 
 let of_http1 headers = of_rev_list (Httpaf.Headers.to_rev_list headers)
 let to_http1 headers = Httpaf.Headers.of_rev_list (to_rev_list headers)

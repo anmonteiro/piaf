@@ -60,9 +60,9 @@ let create ?(error_handler = default_error_handler) ~config handler : t =
 let is_requesting_h2c_upgrade ~config ~version ~scheme headers =
   match version, config.Config.max_http_version, config.h2c_upgrade, scheme with
   | cur_version, max_version, true, `HTTP ->
-    if Versions.HTTP.(
-         equal (Versions.ALPN.to_version max_version) v2_0
-         && equal cur_version v1_1)
+    if Versions.HTTP.Raw.(
+         equal (of_version max_version) v2_0
+         && equal (of_version cur_version) v1_1)
     then
       match
         Headers.(
@@ -81,7 +81,7 @@ let is_requesting_h2c_upgrade ~config ~version ~scheme headers =
 
 let do_h2c_upgrade ~sw ~fd ~request_body server =
   let { config; error_handler; handler } = server in
-  let upgrade_handler client_address (request : Request.t) upgrade =
+  let upgrade_handler ~sw:_ client_address (request : Request.t) upgrade =
     let http_request =
       Httpaf.Request.create
         ~headers:
@@ -108,7 +108,7 @@ let do_h2c_upgrade ~sw ~fd ~request_body server =
       Headers.(
         of_list [ Well_known.connection, "Upgrade"; Well_known.upgrade, "h2c" ])
     in
-    Response.upgrade ~headers (upgrade_handler client_address request)
+    Response.Upgrade.generic ~headers (upgrade_handler client_address request)
   in
   request_handler
 
@@ -144,18 +144,25 @@ let http_connection_handler t : connection_handler =
 
 let https_connection_handler ~https ~clock t : connection_handler =
   let { error_handler; handler; config } = t in
-  let ssl_config = Openssl.Server_conf.of_server_config ~https config in
   fun ~sw socket client_address ->
-    match Openssl.accept ~clock ~config:ssl_config ~fd:socket with
+    match
+      Openssl.accept
+        ~clock
+        ~config:https
+        ~max_http_version:config.max_http_version
+        ~timeout:config.accept_timeout
+        socket
+    with
     | Error (`Exn exn) -> Format.eprintf "EXN: %s@." (Printexc.to_string exn)
     | Error (`Connect_error string) ->
       Format.eprintf "CONNECT ERROR: %s@." string
     | Ok { Openssl.socket = ssl_server; alpn_version } ->
       let (module Https) =
         match alpn_version with
-        | Versions.ALPN.HTTP_1_0 | Versions.ALPN.HTTP_1_1 ->
-          (module Http1.HTTPS : Http_intf.HTTPS)
-        | Versions.ALPN.HTTP_2 -> (module Http2.HTTPS : Http_intf.HTTPS)
+        | HTTP_1_0 | HTTP_1_1 -> (module Http1.HTTPS : Http_intf.HTTPS)
+        | HTTP_2 ->
+          (* TODO: What if `config.max_http_version` is HTTP/1.1? *)
+          (module Http2.HTTPS : Http_intf.HTTPS)
       in
 
       Https.Server.create_connection_handler

@@ -29,6 +29,7 @@
  * POSSIBILITY OF SUCH DAMAGE.
  *---------------------------------------------------------------------------*)
 
+open Eio.Std
 open Monads.Bindings
 module Status = H2.Status
 
@@ -42,7 +43,7 @@ type t =
 
 (* TODO: Add content-length... *)
 let create
-    ?(version = Versions.HTTP.v1_1)
+    ?(version = Versions.HTTP.HTTP_1_1)
     ?(headers = Headers.empty)
     ?(body = Body.empty)
     status
@@ -91,21 +92,68 @@ let copy_file ?version ?(headers = Headers.empty) path =
        ~body:(Body.of_stream ~length:`Chunked stream)
        `OK)
 
-let upgrade ?version ?(headers = Headers.empty) upgrade_handler =
-  create
-    ?version
-    ~headers
-    ~body:
-      (Body.create
-         ~length:(`Fixed 0L)
-         (`Empty (Body.Optional_handler.some upgrade_handler)))
-    `Switching_protocols
+module Upgrade = struct
+  let generic ?version ?(headers = Headers.empty) upgrade_handler =
+    create
+      ?version
+      ~headers
+      ~body:
+        (Body.create
+           ~length:(`Fixed 0L)
+           (`Empty (Body.Optional_upgrade_handler.some upgrade_handler)))
+      `Switching_protocols
+
+  let websocket ~f ?(headers = Headers.empty) (request : Request.t) =
+    match request.version with
+    | HTTP_1_0 | HTTP_2 -> Error `Upgrade_not_supported
+    | HTTP_1_1 ->
+      let wsd_received, notify_wsd = Promise.create () in
+      let _error_received, notify_error = Promise.create () in
+      let upgrade_handler ~sw upgrade =
+        let error_handler _wsd error =
+          Promise.resolve notify_error (error :> Error.client)
+        in
+
+        let ws_conn =
+          Websocketaf.Server_connection.create_websocket
+            ~error_handler
+            (Ws.Handler.websocket_handler ~sw ~notify_wsd)
+        in
+        Fiber.fork ~sw (fun () -> f (Promise.await wsd_received));
+        upgrade (Gluten.make (module Websocketaf.Server_connection) ws_conn)
+      in
+
+      let httpaf_headers = Headers.to_http1 request.headers in
+      let sha1 s =
+        let open Digestif in
+        s |> SHA1.digest_string |> SHA1.to_raw_string
+      in
+
+      (match
+         Websocketaf.Handshake.upgrade_headers
+           ~sha1
+           ~request_method:request.meth
+           httpaf_headers
+       with
+      | Ok upgrade_headers ->
+        Ok
+          (generic
+             ~headers:
+               Headers.(add_list (of_list upgrade_headers) (to_list headers))
+             upgrade_handler)
+      | Error err_str ->
+        Ok
+          (of_string
+             ~body:err_str
+             ~headers:Headers.(of_list Well_known.[ connection, Values.close ])
+             `Bad_request))
+end
 
 let of_http1 ?(body = Body.empty) response =
   let { Httpaf.Response.status; version; headers; _ } = response in
   { status = (status :> Status.t)
   ; headers = H2.Headers.of_rev_list (Httpaf.Headers.to_rev_list headers)
-  ; version
+  ; version = Versions.HTTP.Raw.to_version_exn version
   ; body
   }
 
@@ -118,7 +166,10 @@ let to_http1 { status; headers; version; _ } =
     | #Httpaf.Status.t as http1_status -> http1_status
     | `Misdirected_request -> `Code (H2.Status.to_code status)
   in
-  Httpaf.Response.create ~version ~headers:http1_headers status
+  Httpaf.Response.create
+    ~version:(Versions.HTTP.Raw.of_version version)
+    ~headers:http1_headers
+    status
 
 let to_h2 { status; headers; _ } = H2.Response.create ~headers status
 
@@ -128,7 +179,7 @@ let of_h2 ?(body = Body.empty) response =
    * only pseudo-header that can appear in HTTP/2.0 responses, and H2 checks
    * that there aren't others. *)
   let headers = H2.Headers.remove headers ":status" in
-  { status; headers; version = { major = 2; minor = 0 }; body }
+  { status; headers; version = HTTP_2; body }
 
 let or_internal_error = function
   | Ok r -> r
@@ -152,7 +203,7 @@ let pp_hum formatter { headers; status; version; _ } =
   Format.fprintf
     formatter
     "@[%a %a%s@]@\n@[%a@]"
-    Versions.HTTP.pp_hum
+    Versions.HTTP.pp
     version
     Status.pp_hum
     status

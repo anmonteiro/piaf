@@ -1,5 +1,5 @@
 type t =
   { scheme : Scheme.t
-  ; version : Versions.ALPN.t
+  ; version : Versions.HTTP.t
   ; client_address : Eio.Net.Sockaddr.stream
   }

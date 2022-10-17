@@ -215,13 +215,27 @@ module Status : module type of Status
 
 module Versions : sig
   module HTTP : sig
-    include module type of struct
-      include Httpaf.Version
-    end
+    type t =
+      | HTTP_1_0
+      | HTTP_1_1
+      | HTTP_2
 
-    val v1_0 : t
-    val v1_1 : t
-    val v2_0 : t
+    type http_version := t
+
+    val pp : Format.formatter -> t -> unit
+
+    module Raw : sig
+      include module type of struct
+        include Httpaf.Version
+      end
+
+      val v1_0 : t
+      val v1_1 : t
+      val v2_0 : t
+      val to_version : t -> http_version option
+      val to_version_exn : t -> http_version
+      val of_version : http_version -> t
+    end
   end
 
   module TLS : sig
@@ -239,15 +253,8 @@ module Versions : sig
   end
 
   module ALPN : sig
-    type nonrec t =
-      | HTTP_1_0
-      | HTTP_1_1
-      | HTTP_2
-
-    val of_version : HTTP.t -> t option
-    val to_version : t -> HTTP.t
-    val of_string : string -> t option
-    val to_string : t -> string
+    val of_string : string -> HTTP.t option
+    val to_string : HTTP.t -> string
   end
 end
 
@@ -267,7 +274,7 @@ module Config : sig
               option *)
     ; allow_insecure : bool
           (** Wether to allow insecure server connections when using SSL *)
-    ; max_http_version : Versions.ALPN.t
+    ; max_http_version : Versions.HTTP.t
           (** Use this as the highest HTTP version when sending requests *)
     ; h2c_upgrade : bool
           (** Send an upgrade to `h2c` (HTTP/2 over TCP) request to the server.
@@ -310,6 +317,7 @@ module Error : sig
     [ `Exn of exn
     | `Protocol_error of H2.Error_code.t * string
     | `TLS_error of string
+    | `Upgrade_not_supported
     | `Msg of string
     ]
 
@@ -398,21 +406,10 @@ module Body : sig
     -> f:(string -> unit)
     -> t
     -> (unit, Error.t) result
-  (* val iter_n *)
-  (* :  ?max_concurrency:int *)
-  (* -> (Bigstringaf.t Faraday.iovec -> unit Lwt.t) *)
-  (* -> t *)
-  (* -> (unit, Error.t) Lwt_result.t *)
 
-  (* val iter_string_n *)
-  (* :  ?max_concurrency:int *)
-  (* -> (string -> unit Lwt.t) *)
-  (* -> t *)
-  (* -> (unit, Error.t) Lwt_result.t *)
+  (** {3 Conversion to [Stream.t]} *)
 
-  (** {3 Conversion to [Lwt_stream.t]} *)
-
-  (** The functions below convert a [Piaf.Body.t] to an [Lwt_stream.t]. These
+  (** The functions below convert a [Piaf.Body.t] to a [Stream.t]. These
       functions should be used sparingly, and only when interacting with other
       APIs that require their argument to be a [Lwt_stream.t].
 
@@ -429,6 +426,25 @@ module Body : sig
 
   val to_string_stream : t -> string Stream.t
   (* * (unit, Error.t) result Eio.Promise.t *)
+end
+
+module Ws : sig
+  module Descriptor : sig
+    type t
+
+    val frames : t -> (Websocketaf.Websocket.Opcode.t * string) Stream.t
+    (** Stream of incoming websocket messages (frames) *)
+
+    val send_stream : t -> Bigstringaf.t IOVec.t Stream.t -> unit
+    val send_string_stream : t -> string Stream.t -> unit
+    val send_string : t -> string -> unit
+    val send_bigstring : t -> ?off:int -> ?len:int -> Bigstringaf.t -> unit
+    val send_ping : t -> unit
+    val send_pong : t -> unit
+    val flushed : t -> unit Eio.Promise.t
+    val close : t -> unit
+    val is_closed : t -> bool
+  end
 end
 
 module Request : sig
@@ -498,12 +514,6 @@ module Response : sig
     -> Status.t
     -> t
 
-  val upgrade
-    :  ?version:Versions.HTTP.t
-    -> ?headers:Headers.t
-    -> ((Gluten.impl -> unit) -> unit)
-    -> t
-
   val copy_file
     :  ?version:Versions.HTTP.t
     -> ?headers:Headers.t
@@ -516,7 +526,21 @@ module Response : sig
     -> string
     -> (t, Error.t) result
 
-  val or_internal_error : (t, Error.t) Result.t -> t
+  module Upgrade : sig
+    val generic
+      :  ?version:Versions.HTTP.t
+      -> ?headers:Headers.t
+      -> (sw:Eio.Switch.t -> (Gluten.impl -> unit) -> unit)
+      -> t
+
+    val websocket
+      :  f:(Ws.Descriptor.t -> unit)
+      -> ?headers:Headers.t
+      -> Request.t
+      -> (t, Error.t) result
+  end
+
+  val or_internal_error : (t, Error.t) result -> t
   val persistent_connection : t -> bool
   val pp_hum : Format.formatter -> t -> unit [@@ocaml.toplevel_printer]
 end
@@ -618,6 +642,12 @@ module Client : sig
 
   val send : t -> Request.t -> (Response.t, Error.t) result
 
+  val ws_upgrade
+    :  t
+    -> ?headers:(string * string) list
+    -> string
+    -> (Ws.Descriptor.t, Error.t) result
+
   val shutdown : t -> unit
   (** [shutdown t] tears down the connection [t] and frees up all the resources
       associated with it. *)
@@ -691,7 +721,7 @@ end
 module Request_info : sig
   type t =
     { scheme : Scheme.t
-    ; version : Versions.ALPN.t
+    ; version : Versions.HTTP.t
     ; client_address : Eio.Net.Sockaddr.stream
     }
 end
@@ -729,7 +759,7 @@ module Server : sig
 
     type t =
       { port : int
-      ; max_http_version : Versions.ALPN.t
+      ; max_http_version : Versions.HTTP.t
             (** Use this as the highest HTTP version when sending requests *)
       ; https : HTTPS.t option
       ; h2c_upgrade : bool
@@ -754,7 +784,7 @@ module Server : sig
       }
 
     val create
-      :  ?max_http_version:Versions.ALPN.t
+      :  ?max_http_version:Versions.HTTP.t
       -> ?https:HTTPS.t
       -> ?h2c_upgrade:bool
       -> ?tcp_nodelay:bool

@@ -31,7 +31,7 @@ type t =
       ; handle : Eio.Flow.two_way
       ; scheme : Scheme.t
             (* ; connection_error_received : Error.server Promise.t *)
-      ; version : Versions.ALPN.t
+      ; version : Versions.HTTP.t
             (** HTTP version that this connection speaks *)
       ; upgrade : upgrade option
       ; handler : Request_info.t Server_intf.Handler.t
@@ -45,7 +45,7 @@ let create_descriptor
       -> (module Http_intf.HTTPServerCommon with type Reqd.t = reqd)
       -> fd:Eio.Flow.two_way
       -> scheme:Scheme.t
-      -> version:Versions.ALPN.t
+      -> version:Versions.HTTP.t
       -> handler:Request_info.t Server_intf.Handler.t
       -> client_address:Eio.Net.Sockaddr.stream
       -> reqd
@@ -76,7 +76,11 @@ let do_sendfile
   let fd = Option.get (Eio_unix.FD.peek_opt fd) in
   Http.Body.Writer.flush response_body (fun () ->
       match
-        Posix.sendfile (module Http.Body) ~src_fd ~dst_fd:fd response_body
+        Posix.sendfile
+          (module Http.Body.Writer)
+          ~src_fd
+          ~dst_fd:fd
+          response_body
       with
       | Ok () -> Http.Body.Writer.close response_body
       | Error exn ->
@@ -132,7 +136,7 @@ let handle_request : sw:Switch.t -> t -> Request.t -> unit =
           in
           (match Piaf_body.contents body with
           | `Empty upgrade_handler ->
-            if Piaf_body.Optional_handler.is_none upgrade_handler
+            if Piaf_body.Optional_upgrade_handler.is_none upgrade_handler
             then
               (* No upgrade *)
               Http.Reqd.respond_with_bigstring reqd response Bigstringaf.empty
@@ -142,7 +146,8 @@ let handle_request : sw:Switch.t -> t -> Request.t -> unit =
               match upgrade with
               | Some upgrade ->
                 Http.Reqd.respond_with_upgrade reqd response.headers (fun () ->
-                    Piaf_body.Optional_handler.call_if_some
+                    Piaf_body.Optional_upgrade_handler.call_if_some
+                      ~sw
                       upgrade_handler
                       upgrade)
               | None ->
@@ -152,12 +157,15 @@ let handle_request : sw:Switch.t -> t -> Request.t -> unit =
           | `Bigstring { IOVec.buffer; off; len } ->
             let bstr = Bigstringaf.sub ~off ~len buffer in
             Http.Reqd.respond_with_bigstring reqd response bstr
-          | `Stream stream ->
+          | `Stream { stream; _ } ->
             let response_body =
               Http.Reqd.respond_with_streaming reqd response
             in
-            Piaf_body.stream_write_body (module Http.Body) response_body stream
-          | `Sendfile (src_fd, _, _) ->
+            Piaf_body.Raw.stream_write_body
+              (module Http.Body.Writer)
+              response_body
+              stream
+          | `Sendfile { fd = src_fd; _ } ->
             (match scheme with
             | `HTTP ->
               let response_body =
@@ -218,9 +226,12 @@ let handle_error
     | `Bigstring { IOVec.buffer; off; len } ->
       Writer.write_bigstring response_body ~off ~len buffer;
       Writer.close response_body
-    | `Stream stream ->
-      Piaf_body.stream_write_body (module Http.Body) response_body stream
-    | `Sendfile (src_fd, _, _) ->
+    | `Stream { stream; _ } ->
+      Piaf_body.Raw.stream_write_body
+        (module Http.Body.Writer)
+        response_body
+        stream
+    | `Sendfile { fd = src_fd; _ } ->
       (match scheme with
       | `HTTP ->
         do_sendfile

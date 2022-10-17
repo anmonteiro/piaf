@@ -93,6 +93,8 @@ in
         httpaf-eio
         gluten-eio
         h2-eio
+        websocketaf
+        digestif
 
         multipart_form
 

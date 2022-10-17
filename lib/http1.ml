@@ -32,7 +32,7 @@
 open Eio.Std
 module Piaf_body = Body
 
-module type BODY = Body.BODY
+module type BODY = Body.Raw.BODY
 
 module Body :
   BODY
@@ -91,8 +91,9 @@ module MakeHTTP1 (Runtime_scheme : Scheme.Runtime.SCHEME) :
         (* TODO: revisit whether this is necessary. *)
         if request_method = `HEAD then Body.Reader.close body;
         let body =
-          Piaf_body.of_raw_body
-            (module Body : BODY with type Reader.t = Httpaf.Body.Reader.t)
+          Piaf_body.Raw.to_t
+            (module Body.Reader : Piaf_body.Raw.Reader
+              with type t = Httpaf.Body.Reader.t)
             ~body_length:
               (Httpaf.Response.body_length ~request_method response
                 :> Piaf_body.length)
@@ -177,15 +178,14 @@ module MakeHTTP1 (Runtime_scheme : Scheme.Runtime.SCHEME) :
       let request = Httpaf.Reqd.request reqd in
       let body_length = Httpaf.Request.body_length request in
       let request_body =
-        Piaf_body.of_raw_body
-          (module Body : BODY with type Reader.t = Httpaf.Body.Reader.t)
+        Piaf_body.Raw.to_t
+          (module Body.Reader : Piaf_body.Raw.Reader
+            with type t = Httpaf.Body.Reader.t)
           ~body_length:(body_length :> Piaf_body.length)
-          ~on_eof:(fun body ->
+          ~on_eof:(fun t ->
             match Httpaf.Reqd.error_code reqd with
             | Some error ->
-              Piaf_body.embed_error_received
-                body
-                (Promise.create_resolved (error :> Error.t))
+              t.error_received <- Promise.create_resolved (error :> Error.t)
             | None -> ())
           (Httpaf.Reqd.request_body reqd)
       in
@@ -201,7 +201,7 @@ module MakeHTTP1 (Runtime_scheme : Scheme.Runtime.SCHEME) :
           ~upgrade
           ~fd
           ~scheme:Runtime_scheme.scheme
-          ~version:Versions.ALPN.HTTP_1_1
+          ~version:HTTP_1_1
           ~handler
           ~client_address:client_addr
           reqd

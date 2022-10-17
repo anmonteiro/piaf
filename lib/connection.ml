@@ -167,7 +167,6 @@ type t =
       ; mutable persistent : bool
       ; runtime : Gluten_eio.Client.t
       ; connection_error_received : Error.client Promise.t
-      ; version : Versions.HTTP.t
-            (** HTTP version that this connection speaks *)
+      ; version : Versions.HTTP.t (* HTTP version that this connection speaks *)
       }
       -> t

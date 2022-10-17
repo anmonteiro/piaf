@@ -36,18 +36,18 @@ let src = Logs.Src.create "piaf.body" ~doc:"Piaf Body module"
 
 module Log = (val Logs.src_log src : Logs.LOG)
 
-module Optional_handler : sig
+module Optional_upgrade_handler : sig
   type t
 
   val none : t
-  val some : ((Gluten.impl -> unit) -> unit) -> t
+  val some : (sw:Switch.t -> (Gluten.impl -> unit) -> unit) -> t
   val is_none : t -> bool
   val is_some : t -> bool
-  val call_if_some : t -> (Gluten.impl -> unit) -> unit
+  val call_if_some : sw:Switch.t -> t -> (Gluten.impl -> unit) -> unit
 end = struct
-  type t = (Gluten.impl -> unit) -> unit
+  type t = sw:Switch.t -> (Gluten.impl -> unit) -> unit
 
-  let none = Sys.opaque_identity (fun _ -> ())
+  let none = Sys.opaque_identity (fun ~sw:_ _ -> ())
 
   let some f =
     if f == none
@@ -59,7 +59,7 @@ end = struct
 
   let is_none t = t == none
   let is_some t = not (is_none t)
-  let call_if_some t = t
+  let call_if_some ~sw t = t ~sw
 end
 
 module Unix_fd = struct
@@ -77,40 +77,45 @@ type length =
   | `Close_delimited
   ]
 
+type body_stream =
+  { stream : Bigstringaf.t IOVec.t Stream.t
+  ; mutable read_counter : int
+  ; mutable error_received : Error.t Promise.t
+  }
+
+type sendfile_descr =
+  { fd : Unix.file_descr
+  ; waiter : unit Promise.t
+  ; notifier : unit Promise.u
+  ; mutable error_received : Error.t Promise.t
+  }
+
 type contents =
-  [ `Empty of Optional_handler.t
+  [ `Empty of Optional_upgrade_handler.t
   | `String of string
   | `Bigstring of Bigstringaf.t IOVec.t
-  | `Stream of Bigstringaf.t IOVec.t Stream.t
-  | `Sendfile of
-    Unix.file_descr
-    * (* Waiter and notifier for when the fd closes. *)
-    unit Promise.t
-    * unit Promise.u
+  | `Stream of body_stream
+  | `Sendfile of sendfile_descr
   ]
 
 type t =
   { length : length
   ; contents : contents
-  ; mutable error_received : Error.t Promise.t
-  ; mutable read_counter : int
   }
 
 (* Never resolves, giving a chance for the normal successful flow to always
  * resolve. *)
 let default_error_received, _ = Promise.create ()
-
-let create ~length contents =
-  { length
-  ; contents
-  ; error_received = default_error_received
-  ; read_counter = 0
-  }
-
+let create ~length contents = { length; contents }
 let length { length; _ } = length
 let contents { contents; _ } = contents
-let empty = create ~length:(`Fixed 0L) (`Empty Optional_handler.none)
-let of_stream ?(length = `Chunked) stream = create ~length (`Stream stream)
+let empty = create ~length:(`Fixed 0L) (`Empty Optional_upgrade_handler.none)
+
+let of_stream ?(length = `Chunked) stream =
+  create
+    ~length
+    (`Stream
+      { stream; read_counter = 0; error_received = default_error_received })
 
 let of_string_stream ?(length = `Chunked) stream =
   let stream =
@@ -120,7 +125,10 @@ let of_string_stream ?(length = `Chunked) stream =
         IOVec.make (Bigstringaf.of_string ~off:0 ~len s) ~off:0 ~len)
       stream
   in
-  create ~length (`Stream stream)
+  create
+    ~length
+    (`Stream
+      { stream; read_counter = 0; error_received = default_error_received })
 
 let of_string s =
   let length = `Fixed (Int64.of_int (String.length s)) in
@@ -148,8 +156,12 @@ let sendfile ?length path =
       `Fixed (Int64.of_int st_size)
     | Some length -> length
   in
-  let t, u = Promise.create () in
-  Ok (create ~length (`Sendfile (fd, t, u)))
+  let waiter, notifier = Promise.create () in
+  Ok
+    (create
+       ~length
+       (`Sendfile
+         { fd; waiter; notifier; error_received = default_error_received }))
 
 (* TODO: accept buffer for I/O, so that caller can pool buffers? *)
 let stream_of_fd ?on_close fd =
@@ -180,10 +192,11 @@ let to_stream { contents; _ } =
     Stream.of_list
       [ IOVec.make (Bigstringaf.of_string ~off:0 ~len s) ~off:0 ~len ]
   | `Bigstring iovec -> Stream.of_list [ iovec ]
-  | `Stream stream -> stream
-  | `Sendfile (fd, _, u) -> stream_of_fd ~on_close:(Promise.resolve u) fd
+  | `Stream { stream; _ } -> stream
+  | `Sendfile { fd; notifier; _ } ->
+    stream_of_fd ~on_close:(Promise.resolve notifier) fd
 
-let stream_to_string { length; _ } stream =
+let stream_to_string ~length stream =
   let len =
     match length with
     | `Fixed n -> Int64.to_int n
@@ -201,11 +214,14 @@ let stream_to_string { length; _ } stream =
     stream;
   Buffer.contents result_buffer
 
-let or_error t ~stream v =
+let error_p : contents -> Error.t Promise.t = function
+  | `Sendfile { error_received; _ } | `Stream { error_received; _ } ->
+    error_received
+  | _ -> default_error_received
+
+let or_error ~error_p ~stream v =
   Promise.await (Stream.closed stream);
-  match Promise.peek t.error_received with
-  | Some error -> Error error
-  | None -> Ok v
+  match Promise.peek error_p with Some error -> Error error | None -> Ok v
 
 let to_string ({ contents; _ } as t) =
   match contents with
@@ -213,13 +229,13 @@ let to_string ({ contents; _ } as t) =
   | `String s -> Ok s
   | `Bigstring { IOVec.buffer; off; len } ->
     Ok (Bigstringaf.substring ~off ~len buffer)
-  | `Stream stream ->
-    let str = stream_to_string t stream in
-    or_error t ~stream str
-  | `Sendfile (fd, _, u) ->
-    let stream = stream_of_fd ~on_close:(Promise.resolve u) fd in
-    let str = stream_to_string t stream in
-    or_error t ~stream str
+  | `Stream { stream; error_received; _ } ->
+    let str = stream_to_string ~length:t.length stream in
+    or_error ~error_p:error_received ~stream str
+  | `Sendfile { fd; error_received; notifier; _ } ->
+    let stream = stream_of_fd ~on_close:(Promise.resolve notifier) fd in
+    let str = stream_to_string ~length:t.length stream in
+    or_error ~error_p:error_received ~stream str
 
 let to_string_stream { contents; _ } =
   match contents with
@@ -227,55 +243,64 @@ let to_string_stream { contents; _ } =
   | `String s -> Stream.of_list [ s ]
   | `Bigstring { IOVec.buffer; off; len } ->
     Stream.of_list [ Bigstringaf.substring ~off ~len buffer ]
-  | `Stream stream ->
+  | `Stream { stream; _ } ->
     Stream.map
       ~f:(fun { IOVec.buffer; off; len } ->
         Bigstringaf.substring buffer ~off ~len)
       stream
-  | `Sendfile (fd, _, u) ->
-    let stream = stream_of_fd ~on_close:(Promise.resolve u) fd in
+  | `Sendfile { fd; notifier; _ } ->
+    let stream = stream_of_fd ~on_close:(Promise.resolve notifier) fd in
     Stream.map
       ~f:(fun { IOVec.buffer; off; len } ->
         Bigstringaf.substring buffer ~off ~len)
       stream
 
-let drain ({ contents; _ } as t) =
+let drain { contents; _ } =
   match contents with
   | `Empty _ | `String _ | `Bigstring _ -> Ok ()
-  | `Stream stream ->
+  | `Stream { stream; error_received; _ } ->
     Stream.drain stream;
-    or_error t ~stream ()
-  | `Sendfile (fd, _, _) ->
+    or_error ~error_p:error_received ~stream ()
+  | `Sendfile { fd; _ } ->
     Unix_fd.ensure_closed fd;
     Ok ()
 
 let drain_available { contents; _ } =
   match contents with
   | `Empty _ | `String _ | `Bigstring _ -> ()
-  | `Stream stream -> Stream.drain_available stream
-  | `Sendfile (fd, _, _) -> Unix_fd.ensure_closed fd
+  | `Stream { stream; _ } -> Stream.drain_available stream
+  | `Sendfile { fd; _ } -> Unix_fd.ensure_closed fd
 
 let is_closed t =
   match t.contents with
   | `Empty _ | `String _ | `Bigstring _ -> true
-  | `Stream stream -> Stream.is_closed stream
-  | `Sendfile (fd, _, _) -> not (Unix_fd.is_valid fd)
+  | `Stream { stream; _ } -> Stream.is_closed stream
+  | `Sendfile { fd; _ } -> not (Unix_fd.is_valid fd)
 
-let is_errored t = Promise.is_resolved t.error_received
+let is_errored t =
+  match t.contents with
+  | `Sendfile { error_received; _ } | `Stream { error_received; _ } ->
+    Promise.is_resolved error_received
+  | _ -> false
 
 let closed t =
   match t.contents with
   | `Empty _ | `String _ | `Bigstring _ -> Ok ()
-  | `Stream stream -> or_error t ~stream ()
-  | `Sendfile (_fd, p, _u) ->
-    Promise.await p;
-    Ok ()
+  | `Stream { stream; error_received; _ } ->
+    or_error ~error_p:error_received ~stream ()
+  | `Sendfile { waiter; _ } -> Ok (Promise.await waiter)
 
 let when_closed ~f t = f (closed t)
 
+let embed_error_received t error_received =
+  match t.contents with
+  | `Stream s -> s.error_received <- error_received
+  | `Sendfile s -> s.error_received <- error_received
+  | _ -> ()
+
 (* "Primitive" body types for http/af / h2 compatibility *)
-module type BODY = sig
-  module Reader : sig
+module Raw = struct
+  module type Reader = sig
     type t
 
     val close : t -> unit
@@ -289,7 +314,7 @@ module type BODY = sig
     val is_closed : t -> bool
   end
 
-  module Writer : sig
+  module type Writer = sig
     type t
 
     val write_char : t -> char -> unit
@@ -300,131 +325,142 @@ module type BODY = sig
     val close : t -> unit
     val is_closed : t -> bool
   end
+
+  module type BODY = sig
+    module Reader : Reader
+    module Writer : Writer
+  end
+
+  let to_stream
+      : type a.
+        (module Reader with type t = a)
+        -> ?on_eof:(body_stream -> unit)
+        -> body_length:length
+        -> a
+        -> body_stream
+    =
+   fun (module Reader) ?on_eof ~body_length body ->
+    let read_fn t () =
+      let t = Lazy.force t in
+      let p, u = Promise.create () in
+      let on_read_direct buffer ~off ~len =
+        Promise.resolve u (Some (IOVec.make buffer ~off ~len))
+      and on_read_with_yield buffer ~off ~len =
+        Fiber.yield ();
+        Promise.resolve u (Some (IOVec.make buffer ~off ~len))
+      in
+      t.read_counter <- t.read_counter + 1;
+      let on_read =
+        if t.read_counter > 128
+        then (
+          t.read_counter <- 0;
+          on_read_with_yield)
+        else on_read_direct
+      in
+      Reader.schedule_read
+        body
+        ~on_eof:(fun () ->
+          Option.iter (fun f -> f t) on_eof;
+          Reader.close body;
+          Promise.resolve u None)
+        ~on_read;
+      Fiber.first
+        (fun () -> Promise.await p)
+        (fun () ->
+          match Promise.await t.error_received with
+          | (_ : Error.t) ->
+            (* `None` closes the stream. The promise `t.error_received` remains
+             * fulfilled, which signals that the stream hasn't closed cleanly.
+             *)
+            None)
+    in
+
+    let rec t =
+      lazy
+        (let stream =
+           match body_length with
+           | `Fixed 0L -> Stream.empty ()
+           | _ -> Stream.from ~f:(read_fn t)
+         in
+         { stream; error_received = default_error_received; read_counter = 0 })
+    in
+    Lazy.force t
+
+  let to_t
+      : type a.
+        (module Reader with type t = a)
+        -> ?on_eof:(body_stream -> unit)
+        -> body_length:length
+        -> a
+        -> t
+    =
+   fun (module Reader) ?on_eof ~body_length body ->
+    let stream = to_stream (module Reader) ?on_eof ~body_length body in
+    create ~length:body_length (`Stream stream)
+
+  let flush_and_close
+      : type a. (module Writer with type t = a) -> a -> (unit -> unit) -> unit
+    =
+   fun (module Writer) body f ->
+    Writer.close body;
+    Writer.flush body f
+
+  let stream_write_body
+      : type a.
+        (module Writer with type t = a)
+        -> a
+        -> Bigstringaf.t IOVec.t Stream.t
+        -> unit
+    =
+   fun (module Writer) body stream ->
+    Stream.iter
+      ~f:(fun { IOVec.buffer; off; len } ->
+        (* If the peer left abruptly the connection will be shutdown. Avoid
+         * crashing the server with exceptions related to the writer being
+         * closed. *)
+        if not (Writer.is_closed body)
+        then (
+          Writer.schedule_bigstring body ~off ~len buffer;
+          let p, u = Promise.create () in
+          Writer.flush body (fun () ->
+              Promise.resolve u ();
+              Log.debug (fun m -> m "Flushed output chunk of length %d" len));
+          Promise.await p)
+        else ())
+      stream;
+    flush_and_close (module Writer) body ignore
 end
-
-let embed_error_received t error_received = t.error_received <- error_received
-
-let of_raw_body
-    : type a.
-      (module BODY with type Reader.t = a)
-      -> ?on_eof:(t -> unit)
-      -> body_length:length
-      -> a
-      -> t
-  =
- fun (module Http_body) ?on_eof ~body_length body ->
-  let module Body = Http_body.Reader in
-  let read_fn t () =
-    let t = Lazy.force t in
-    let p, u = Promise.create () in
-    let on_read_direct buffer ~off ~len =
-      Promise.resolve u (Some (IOVec.make buffer ~off ~len))
-    and on_read_with_yield buffer ~off ~len =
-      Fiber.yield ();
-      Promise.resolve u (Some (IOVec.make buffer ~off ~len))
-    in
-    t.read_counter <- t.read_counter + 1;
-    let on_read =
-      if t.read_counter > 128
-      then (
-        t.read_counter <- 0;
-        on_read_with_yield)
-      else on_read_direct
-    in
-    Body.schedule_read
-      body
-      ~on_eof:(fun () ->
-        Option.iter (fun f -> f t) on_eof;
-        Body.close body;
-        Promise.resolve u None)
-      ~on_read;
-    Fiber.first
-      (fun () -> Promise.await p)
-      (fun () ->
-        match Promise.await t.error_received with
-        | (_ : Error.t) ->
-          (* `None` closes the stream. The promise `t.error_received` remains
-           * fulfilled, which signals that the stream hasn't closed cleanly.
-           *)
-          None)
-  in
-
-  let rec t =
-    lazy
-      (let stream =
-         match body_length with
-         | `Fixed 0L -> Stream.empty ()
-         | _ -> Stream.from ~f:(read_fn t)
-       in
-       of_stream ~length:body_length stream)
-  in
-  Lazy.force t
-
-let flush_and_close
-    : type a.
-      (module BODY with type Writer.t = a) -> a -> (unit -> unit) -> unit
-  =
- fun (module B) body f ->
-  let module Body = B.Writer in
-  Body.close body;
-  Body.flush body f
-
-let stream_write_body
-    : type a.
-      (module BODY with type Writer.t = a)
-      -> a
-      -> Bigstringaf.t IOVec.t Stream.t
-      -> unit
-  =
- fun (module B) body stream ->
-  let module Body = B.Writer in
-  Stream.iter
-    ~f:(fun { IOVec.buffer; off; len } ->
-      (* If the peer left abruptly the connection will be shutdown. Avoid
-       * crashing the server with exceptions related to the writer being
-       * closed. *)
-      if not (Body.is_closed body)
-      then (
-        Body.schedule_bigstring body ~off ~len buffer;
-        let p, u = Promise.create () in
-        Body.flush body (fun () ->
-            Promise.resolve u ();
-            Log.debug (fun m -> m "Flushed output chunk of length %d" len));
-        Promise.await p)
-      else ())
-    stream;
-  flush_and_close (module B) body ignore
 
 (* Traversal *)
 let fold ~f ~init t =
   let stream = to_stream t in
   let ret = Stream.fold ~f ~init stream in
-  or_error t ~stream ret
+  or_error ~error_p:(error_p t.contents) ~stream ret
 
 let fold_string ~f ~init t =
   let stream = to_string_stream t in
   let ret = Stream.fold ~f ~init stream in
-  or_error t ~stream ret
+  or_error ~error_p:(error_p t.contents) ~stream ret
 
 let iter ~f t =
   let stream = to_stream t in
   Stream.iter ~f stream;
-  or_error t ~stream ()
+  or_error ~error_p:(error_p t.contents) ~stream ()
 
 let iter_string ~f t =
   let stream = to_string_stream t in
   Stream.iter ~f stream;
-  or_error t ~stream ()
+  or_error ~error_p:(error_p t.contents) ~stream ()
 
 let iter_p ~sw ~f t =
   let stream = to_stream t in
   Stream.iter_p ~sw ~f stream;
-  or_error t ~stream ()
+  or_error ~error_p:(error_p t.contents) ~stream ()
 
 let iter_string_p ~sw ~f t =
   let stream = to_string_stream t in
   Stream.iter_p ~sw ~f stream;
-  or_error t ~stream ()
+  or_error ~error_p:(error_p t.contents) ~stream ()
 
 let to_list t =
   let stream = to_stream t in
@@ -433,23 +469,3 @@ let to_list t =
 let to_string_list t =
   let stream = to_string_stream t in
   Stream.to_list stream
-
-(* let iter_s f t = *)
-(* let* stream, or_error = to_stream t in *)
-(* let* () = Lwt_stream.iter_s f stream in *)
-(* or_error *)
-
-(* let iter_string_s f t = *)
-(* let* stream, or_error = to_string_stream t in *)
-(* let* () = Lwt_stream.iter_s f stream in *)
-(* or_error *)
-
-(* let iter_n ?max_concurrency f t = *)
-(* let* stream, or_error = to_stream t in *)
-(* let* () = Lwt_stream.iter_n ?max_concurrency f stream in *)
-(* or_error *)
-
-(* let iter_string_n ?max_concurrency f t = *)
-(* let* stream, or_error = to_string_stream t in *)
-(* let* () = Lwt_stream.iter_n ?max_concurrency f stream in *)
-(* or_error *)

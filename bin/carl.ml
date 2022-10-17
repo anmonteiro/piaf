@@ -78,7 +78,7 @@ type cli =
   ; head : bool
   ; headers : (string * string) list
   ; include_ : bool
-  ; max_http_version : Versions.ALPN.t
+  ; max_http_version : Versions.HTTP.t
   ; h2c_upgrade : bool
   ; http2_prior_knowledge : bool
   ; cacert : Cert.t option
@@ -109,7 +109,7 @@ let pp_response_headers formatter { Response.headers; status; version; _ } =
   Format.fprintf
     formatter
     "@[%a %a%s@]@\n@[%a@]"
-    Versions.HTTP.pp_hum
+    Versions.HTTP.pp
     version
     Status.pp_hum
     status
@@ -746,7 +746,7 @@ module CLI = struct
         (match use_http_2, use_http_1_1, use_http_1_0 with
         | true, _, _ | false, false, false ->
           (* Default to the highest supported if no override specified. *)
-          Versions.ALPN.HTTP_2
+          Versions.HTTP.HTTP_2
         | false, true, _ -> HTTP_1_1
         | false, false, true -> HTTP_1_0)
     ; h2c_upgrade = use_http_2

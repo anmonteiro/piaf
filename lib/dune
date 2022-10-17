@@ -9,6 +9,8 @@
   h2-eio
   httpaf
   httpaf-eio
+  digestif
+  websocketaf
   logs
   eio
   eio-ssl
@@ -20,4 +22,4 @@
   piaf.stream)
  (foreign_stubs
   (language c)
-  (names piaf_bigarray_read piaf_fdutils)))
+  (names piaf_bigarray_read piaf_openssl_rand piaf_fdutils)))

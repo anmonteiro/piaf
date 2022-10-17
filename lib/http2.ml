@@ -42,7 +42,7 @@ let make_client_error_handler real_handler type_ error =
 
 module Piaf_body = Body
 
-module type BODY = Body.BODY
+module type BODY = Body.Raw.BODY
 
 module Body :
   BODY
@@ -107,8 +107,9 @@ end = struct
           | `Other _ -> `GET
         in
         let body =
-          Piaf_body.of_raw_body
-            (module Body : BODY with type Reader.t = H2.Body.Reader.t)
+          Piaf_body.Raw.to_t
+            (module Body.Reader : Piaf_body.Raw.Reader
+              with type t = H2.Body.Reader.t)
             ~body_length:
               (H2.Response.body_length ~request_method response
                 :> Piaf_body.length)
@@ -182,15 +183,14 @@ end = struct
     let request = H2.Reqd.request reqd in
     let body_length = H2.Request.body_length request in
     let request_body =
-      Piaf_body.of_raw_body
-        (module Body : BODY with type Reader.t = H2.Body.Reader.t)
+      Piaf_body.Raw.to_t
+        (module Body.Reader : Piaf_body.Raw.Reader
+          with type t = H2.Body.Reader.t)
         ~body_length:(body_length :> Piaf_body.length)
-        ~on_eof:(fun body ->
+        ~on_eof:(fun t ->
           match H2.Reqd.error_code reqd with
           | Some error ->
-            Piaf_body.embed_error_received
-              body
-              (Promise.create_resolved (error :> Error.t))
+            t.error_received <- Promise.create_resolved (error :> Error.t)
           | None -> ())
         (H2.Reqd.request_body reqd)
     in
@@ -205,7 +205,7 @@ end = struct
         (module HttpServer)
         ~fd
         ~scheme:Runtime_scheme.scheme
-        ~version:Versions.ALPN.HTTP_1_1
+        ~version:HTTP_1_1
         ~handler
         ~client_address:client_addr
         reqd
@@ -263,8 +263,9 @@ module HTTP : Http_intf.HTTP2 with type scheme = Scheme.http = struct
           | `Other _ -> `GET
         in
         let body =
-          Piaf_body.of_raw_body
-            (module Body : BODY with type Reader.t = H2.Body.Reader.t)
+          Piaf_body.Raw.to_t
+            (module Body.Reader : Piaf_body.Raw.Reader
+              with type t = H2.Body.Reader.t)
             ~body_length:
               (H2.Response.body_length ~request_method response
                 :> Piaf_body.length)

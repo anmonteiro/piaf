@@ -133,7 +133,7 @@ let test_https ~sw env () =
           follow_redirects = true
         ; max_redirects = 1
         ; allow_insecure = true
-        ; max_http_version = Versions.ALPN.HTTP_1_1
+        ; max_http_version = Versions.HTTP.HTTP_1_1
         }
       env
       (Uri.of_string "http://localhost:8080/alpn")
@@ -160,7 +160,7 @@ let test_https ~sw env () =
           follow_redirects = true
         ; max_redirects = 1
         ; allow_insecure = true
-        ; max_http_version = Versions.ALPN.HTTP_2
+        ; max_http_version = HTTP_2
         }
       env
       (Uri.of_string "http://localhost:8080/alpn")
@@ -169,7 +169,7 @@ let test_https ~sw env () =
   Alcotest.check
     response_testable
     "expected response"
-    (Response.create ~version:Versions.HTTP.v2_0 `OK)
+    (Response.create ~version:HTTP_2 `OK)
     response;
   let body = Body.to_string response.body in
   Alcotest.(check (result string error_testable))
@@ -207,7 +207,7 @@ let test_https_server_certs ~sw env () =
           follow_redirects = true
         ; max_redirects = 1
         ; allow_insecure = false
-        ; max_http_version = Versions.ALPN.HTTP_1_1
+        ; max_http_version = HTTP_1_1
         ; cacert = Some (Cert.Filepath (Helper_server.cert_path // "ca.pem"))
         }
       env
@@ -218,7 +218,7 @@ let test_https_server_certs ~sw env () =
     response_testable
     "expected response"
     (Response.create
-       ~version:Versions.HTTP.v1_1
+       ~version:HTTP_1_1
        ~headers:Headers.(of_list [ Well_known.content_length, "1" ])
        `OK)
     response;
@@ -237,7 +237,7 @@ let test_https_server_certs ~sw env () =
           follow_redirects = true
         ; max_redirects = 1
         ; allow_insecure = false
-        ; max_http_version = Versions.ALPN.HTTP_1_1
+        ; max_http_version = HTTP_1_1
         ; cacert = Some (Cert.Certpem certstring)
         }
       env
@@ -248,7 +248,7 @@ let test_https_server_certs ~sw env () =
     response_testable
     "expected response"
     (Response.create
-       ~version:Versions.HTTP.v1_1
+       ~version:HTTP_1_1
        ~headers:Headers.(of_list [ Well_known.content_length, "1" ])
        `OK)
     response;
@@ -278,7 +278,7 @@ let test_https_server_certs ~sw env () =
           follow_redirects = true
         ; max_redirects = 1
         ; allow_insecure = false
-        ; max_http_version = Versions.ALPN.HTTP_1_1
+        ; max_http_version = HTTP_1_1
         ; cacert = Some (Cert.Certpem certstring)
         }
       env
@@ -289,7 +289,7 @@ let test_https_server_certs ~sw env () =
     response_testable
     "expected response"
     (Response.create
-       ~version:Versions.HTTP.v1_1
+       ~version:HTTP_1_1
        ~headers:Headers.(of_list [ Well_known.content_length, "1" ])
        `OK)
     response;
@@ -313,7 +313,7 @@ let test_https_server_certs ~sw env () =
           follow_redirects = true
         ; max_redirects = 1
         ; allow_insecure = false
-        ; max_http_version = Versions.ALPN.HTTP_1_1
+        ; max_http_version = HTTP_1_1
         ; cacert = Some (Cert.Filepath (Helper_server.cert_path // "ca.pem"))
         }
       env
@@ -325,7 +325,7 @@ let test_https_server_certs ~sw env () =
     response_testable
     "expected response"
     (Response.create
-       ~version:Versions.HTTP.v1_1
+       ~version:HTTP_1_1
        ~headers:Headers.(of_list [ Well_known.content_length, "1" ])
        `OK)
     response;
@@ -353,7 +353,7 @@ let test_https_client_certs ~sw env () =
           follow_redirects = true
         ; max_redirects = 1
         ; allow_insecure = false
-        ; max_http_version = Versions.ALPN.HTTP_1_1
+        ; max_http_version = HTTP_1_1
         ; cacert = Some (Cert.Filepath (Helper_server.cert_path // "ca.pem"))
         ; clientcert = Some (Cert.Certpem clientcert, Cert.Certpem clientkey)
         }
@@ -365,7 +365,7 @@ let test_https_client_certs ~sw env () =
     response_testable
     "expected response"
     (Response.create
-       ~version:Versions.HTTP.v1_1
+       ~version:HTTP_1_1
        ~headers:Headers.(of_list [ Well_known.content_length, "1" ])
        `OK)
     response;
@@ -381,7 +381,7 @@ let test_https_client_certs ~sw env () =
           follow_redirects = true
         ; max_redirects = 1
         ; allow_insecure = false
-        ; max_http_version = Versions.ALPN.HTTP_1_1
+        ; max_http_version = HTTP_1_1
         ; cacert = Some (Cert.Filepath (Helper_server.cert_path // "ca.pem"))
         ; clientcert = Some (Cert.Filepath clientcert, Cert.Filepath clientkey)
         }
@@ -393,7 +393,7 @@ let test_https_client_certs ~sw env () =
     response_testable
     "expected response"
     (Response.create
-       ~version:Versions.HTTP.v1_1
+       ~version:HTTP_1_1
        ~headers:Headers.(of_list [ Well_known.content_length, "1" ])
        `OK)
     response;
@@ -409,7 +409,7 @@ let test_https_client_certs ~sw env () =
           follow_redirects = true
         ; max_redirects = 1
         ; allow_insecure = false
-        ; max_http_version = Versions.ALPN.HTTP_1_1
+        ; max_http_version = HTTP_1_1
         ; cacert = Some (Cert.Filepath (Helper_server.cert_path // "ca.pem"))
         }
       env
@@ -471,7 +471,7 @@ let test_h2c ~sw env () =
   Alcotest.check
     response_testable
     "expected response"
-    (Response.create ~version:Versions.HTTP.v2_0 `OK)
+    (Response.create ~version:HTTP_2 `OK)
     response;
   let body = Body.to_string response.body in
   Alcotest.(check (result string error_testable))
@@ -486,7 +486,7 @@ let test_h2c ~sw env () =
         { Config.default with
           h2c_upgrade = true
         ; (* But no HTTP/2 enabled *)
-          max_http_version = Versions.ALPN.HTTP_1_1
+          max_http_version = HTTP_1_1
         }
       env
       (Uri.of_string "http://localhost:9000/h2c")
