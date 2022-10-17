@@ -67,7 +67,9 @@ module Time = struct
       year
 end
 
-let () = Ssl.init ~thread_safe:true ()
+let () = Ssl.init ()
+
+external random_string : int -> string = "piaf_random_bytes"
 
 let pp_cert_verify_result ~allow_insecure formatter verify_result =
   let verify_error_string = Ssl.get_verify_error_string verify_result in

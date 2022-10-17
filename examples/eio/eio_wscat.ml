@@ -30,12 +30,12 @@ let request ~env ~sw host =
     (fun () ->
       let stdin = Eio.Stdenv.stdin env in
       let buf = Eio.Buf_read.of_flow stdin ~initial_size:100 ~max_size:1_000 in
-      stdin_loop ~stdin buf wsd)
+      stdin_loop ~stdin buf wsd;
+      Client.shutdown client)
     (fun () ->
       Stream.iter
         ~f:(fun (_opcode, frame) -> Format.printf ">> %s@." frame)
-        (Ws.Descriptor.frames wsd));
-  Client.shutdown client
+        (Ws.Descriptor.frames wsd))
 
 let setup_log ?style_renderer level =
   Fmt_tty.setup_std_outputs ?style_renderer ();
@@ -44,7 +44,7 @@ let setup_log ?style_renderer level =
   ()
 
 let () =
-  setup_log (Some Logs.Info);
+  setup_log (Some Logs.Debug);
   let host = ref None in
   Arg.parse
     []

@@ -137,6 +137,7 @@ module Handler = struct
 
     let eof () =
       Log.info (fun m -> m "Websocket connection EOF");
+      Websocketaf.Wsd.close wsd;
       push_to_frames None
     in
     { Websocketaf.Websocket_connection.frame; eof }

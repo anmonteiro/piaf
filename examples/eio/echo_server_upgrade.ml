@@ -7,6 +7,7 @@ let connection_handler { Server.request; _ } =
       Stream.iter
         ~f:(fun (_opcode, frame) -> Ws.Descriptor.send_string wsd frame)
         frames)
+  |> Result.get_ok
 
 let setup_log ?style_renderer level =
   Fmt_tty.setup_std_outputs ?style_renderer ();
@@ -15,7 +16,7 @@ let setup_log ?style_renderer level =
   ()
 
 let () =
-  setup_log Logs.Info;
+  setup_log Logs.Debug;
   let port = ref 8080 in
   Arg.parse
     [ "-p", Arg.Set_int port, " Listening port number (8080 by default)" ]

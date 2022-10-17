@@ -486,11 +486,16 @@ let ws_upgrade
   =
  fun t ?(headers = []) target ->
   let (Conn { info; _ }) = t.conn in
+  (* From RFC6455§4.1:
+   *   The value of this header field MUST be a nonce consisting of a randomly
+   *   selected 16-byte value that has been base64-encoded (see Section 4 of
+   *   [RFC4648]). The nonce MUST be selected randomly for each connection. *)
+  let nonce = Openssl.random_string 16 in
   let request =
     Ws.upgrade_request
       ~headers:(Httpaf.Headers.of_list headers)
       ~scheme:info.scheme
-      ~nonce:"0123456789ABCDEF"
+      ~nonce
       target
   in
   let*! response = send t request in
