@@ -42,12 +42,10 @@
 CAMLprim value piaf_random_bytes(value size) {
   int len = Int_val(size);
   int ret = 0;
-  /* unsigned char *buf; */
 
   value buf = caml_alloc_string(len);
 
   caml_release_runtime_system();
-  /* buf = malloc(len * sizeof(char)); */
   ret = RAND_bytes((unsigned char *)buf, len);
   caml_acquire_runtime_system();
 
