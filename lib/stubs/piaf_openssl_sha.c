@@ -34,25 +34,24 @@
 #include <caml/memory.h>
 #include <caml/threads.h>
 
-#include <openssl/rand.h>
+#include <openssl/sha.h>
 
-CAMLprim value piaf_random_bytes(value size) {
-  CAMLparam1(size);
+CAMLprim value piaf_sha1(value bytes) {
+  CAMLparam1(bytes);
+  unsigned char *input_buf = Bytes_val(bytes);
+  int len = caml_string_length(bytes);
+  unsigned char *ret;
 
-  int len = Int_val(size);
-  int ret = 0;
-
-  value buf = caml_alloc_string(len);
-  unsigned char *bufc = Bytes_val(buf);
+  value result_buf = caml_alloc_string(SHA_DIGEST_LENGTH);
+  unsigned char *result_bufc = Bytes_val(result_buf);
 
   caml_release_runtime_system();
-  ret = RAND_bytes(bufc, len);
+  ret = SHA1(input_buf, len, result_bufc);
   caml_acquire_runtime_system();
 
-  /* RAND_bytes() and RAND_priv_bytes() return 1 on success */
-  if (ret != 1) {
-    caml_failwith("piaf_random_bytes: failed generating random bytes");
+  if (ret == NULL) {
+    caml_failwith("piaf_sha1: failed computing SHA1 digest");
   }
 
-  CAMLreturn(buf);
+  CAMLreturn(result_buf);
 }

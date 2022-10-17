@@ -41,7 +41,6 @@ let
       multipart_form
 
       dune-site
-      digestif
 
       # Not in checkInputs because we also run tests in the musl64 build
       alcotest
@@ -94,12 +93,10 @@ in
         gluten-eio
         h2-eio
         websocketaf
-        digestif
 
         multipart_form
 
         dune-site
-        digestif
 
         # Not in checkInputs because we also run tests in the musl64 build
         alcotest
