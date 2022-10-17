@@ -70,6 +70,7 @@ end
 let () = Ssl.init ()
 
 external random_string : int -> string = "piaf_random_bytes"
+external sha1 : string -> string = "piaf_sha1"
 
 let pp_cert_verify_result ~allow_insecure formatter verify_result =
   let verify_error_string = Ssl.get_verify_error_string verify_result in

@@ -124,14 +124,10 @@ module Upgrade = struct
       in
 
       let httpaf_headers = Headers.to_http1 request.headers in
-      let sha1 s =
-        let open Digestif in
-        s |> SHA1.digest_string |> SHA1.to_raw_string
-      in
 
       (match
          Websocketaf.Handshake.upgrade_headers
-           ~sha1
+           ~sha1:Openssl.sha1
            ~request_method:request.meth
            httpaf_headers
        with
