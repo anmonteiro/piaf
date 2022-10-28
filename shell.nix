@@ -1,8 +1,8 @@
-{ pkgs, release-mode ? false }:
+{ pkgs, nix-filter, release-mode ? false }:
 
 let
   inherit (pkgs) lib;
-  piafPkgs = pkgs.recurseIntoAttrs (import ./nix { inherit pkgs; }).native;
+  piafPkgs = pkgs.recurseIntoAttrs (import ./nix { inherit pkgs nix-filter; }).native;
   piafDrvs = lib.filterAttrs (_: value: lib.isDerivation value) piafPkgs;
 
   filterDrvs = inputs:

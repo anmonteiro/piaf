@@ -1,4 +1,4 @@
-{ stdenv, lib, ocamlPackages, static ? false, doCheck }:
+{ stdenv, lib, nix-filter, ocamlPackages, static ? false, doCheck }:
 
 with ocamlPackages;
 
@@ -7,10 +7,9 @@ rec {
     pname = "piaf";
     version = "0.0.1-dev";
 
-    src = lib.filterGitSource {
-      src = ./..;
-      dirs = [ "lib" "lib_test" "multipart" "multipart_test" "vendor" ];
-      files = [ "dune" "dune-project" "piaf.opam" ];
+    src = nix-filter.lib.filter {
+      root = ./..;
+      include = [ "lib" "lib_test" "multipart" "multipart_test" "vendor" "dune" "dune-project" "piaf.opam" ];
     };
 
     useDune2 = true;
@@ -57,10 +56,9 @@ rec {
     name = "carl";
     version = "0.0.1-dev";
 
-    src = lib.filterGitSource {
-      src = ./..;
-      dirs = [ "bin" ];
-      files = [ "dune" "dune-project" ];
+    src = nix-filter.lib.filter {
+      root = ./..;
+      include = [ "bin" "dune" "dune-project" ];
     };
 
     nativeBuildInputs = [ dune ocaml findlib ];
