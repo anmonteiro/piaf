@@ -192,7 +192,7 @@ let send_request
   handle_response ~sw response_received error_received connection_error_received
 
 let upgrade_connection
-    : sw:Switch.t -> Connection.t -> (Ws.Descriptor.t, Error.client) result
+    : sw:Switch.t -> Connection.t -> (Ws.Descriptor.t, [> Error.client ]) result
   =
  fun ~sw conn ->
   let (Connection.Conn { version; connection_error_received; runtime; _ }) =
@@ -228,7 +228,7 @@ let upgrade_connection
         (Gluten.make (module Websocketaf.Client_connection) ws_conn);
 
       Ok wsd
-    | Error _ as error ->
+    | Error #Error.client as error ->
       (* TODO: Close the connection if we receive a connection error *)
       error)
 

@@ -364,12 +364,12 @@ module Body : sig
   val of_string_stream : ?length:length -> string Stream.t -> t
   val of_string : string -> t
   val of_bigstring : ?off:int -> ?len:int -> Bigstringaf.t -> t
-  val sendfile : ?length:length -> string -> (t, Error.t) result
-  val to_string : t -> (string, Error.t) result
-  val drain : t -> (unit, Error.t) result
+  val sendfile : ?length:length -> string -> (t, [> Error.t ]) result
+  val to_string : t -> (string, [> Error.t ]) result
+  val drain : t -> (unit, [> Error.t ]) result
   val is_closed : t -> bool
-  val closed : t -> (unit, Error.t) result
-  val when_closed : f:((unit, Error.t) result -> unit) -> t -> unit
+  val closed : t -> (unit, [> Error.t ]) result
+  val when_closed : f:((unit, [> Error.t ]) result -> unit) -> t -> unit
   val is_errored : t -> bool
 
   (** {2 Destruction} *)
@@ -383,29 +383,32 @@ module Body : sig
     :  f:('a -> Bigstringaf.t IOVec.t -> 'a)
     -> init:'a
     -> t
-    -> ('a, Error.t) result
+    -> ('a, [> Error.t ]) result
 
   val fold_string
     :  f:('a -> string -> 'a)
     -> init:'a
     -> t
-    -> ('a, Error.t) result
+    -> ('a, [> Error.t ]) result
 
-  val iter : f:(Bigstringaf.t IOVec.t -> unit) -> t -> (unit, Error.t) result
+  val iter
+    :  f:(Bigstringaf.t IOVec.t -> unit)
+    -> t
+    -> (unit, [> Error.t ]) result
 
   val iter_p
     :  sw:Eio.Switch.t
     -> f:(Bigstringaf.t IOVec.t -> unit)
     -> t
-    -> (unit, Error.t) result
+    -> (unit, [> Error.t ]) result
 
-  val iter_string : f:(string -> unit) -> t -> (unit, Error.t) result
+  val iter_string : f:(string -> unit) -> t -> (unit, [> Error.t ]) result
 
   val iter_string_p
     :  sw:Eio.Switch.t
     -> f:(string -> unit)
     -> t
-    -> (unit, Error.t) result
+    -> (unit, [> Error.t ]) result
 
   (** {3 Conversion to [Stream.t]} *)
 
@@ -422,10 +425,10 @@ module Body : sig
       peer. *)
 
   val to_stream : t -> Bigstringaf.t IOVec.t Stream.t
-  (* * (unit, Error.t) result Eio.Promise.t *)
+  (* * (unit, [> Error.t ]) result Eio.Promise.t *)
 
   val to_string_stream : t -> string Stream.t
-  (* * (unit, Error.t) result Eio.Promise.t *)
+  (* * (unit, [> Error.t ]) result Eio.Promise.t *)
 end
 
 module Ws : sig
@@ -518,13 +521,13 @@ module Response : sig
     :  ?version:Versions.HTTP.t
     -> ?headers:Headers.t
     -> string
-    -> (t, Error.t) result
+    -> (t, [> Error.t ]) result
 
   val sendfile
     :  ?version:Versions.HTTP.t
     -> ?headers:Headers.t
     -> string
-    -> (t, Error.t) result
+    -> (t, [> Error.t ]) result
 
   module Upgrade : sig
     val generic
@@ -537,7 +540,7 @@ module Response : sig
       :  f:(Ws.Descriptor.t -> unit)
       -> ?headers:Headers.t
       -> Request.t
-      -> (t, Error.t) result
+      -> (t, [> Error.t ]) result
   end
 
   val or_internal_error : (t, Error.t) result -> t
@@ -557,12 +560,12 @@ module Form : sig
     val stream
       :  ?max_chunk_size:int
       -> Request.t
-      -> (t Stream.t, Error.t) result
+      -> (t Stream.t, [> Error.t ]) result
 
     val assoc
       :  ?max_chunk_size:int
       -> Request.t
-      -> ((string * t) list, Error.t) result
+      -> ((string * t) list, [> Error.t ]) result
   end
 end
 
@@ -584,7 +587,7 @@ module Client : sig
     -> sw:Eio.Switch.t
     -> Eio.Stdenv.t
     -> Uri.t
-    -> (t, Error.t) result
+    -> (t, [> Error.t ]) result
   (** [create ?config uri] opens a connection to [uri] (initially) that can be
       used to issue multiple requests to the remote endpoint.
 
@@ -596,41 +599,41 @@ module Client : sig
     :  t
     -> ?headers:(string * string) list
     -> string
-    -> (Response.t, Error.t) result
+    -> (Response.t, [> Error.t ]) result
 
   val get
     :  t
     -> ?headers:(string * string) list
     -> string
-    -> (Response.t, Error.t) result
+    -> (Response.t, [> Error.t ]) result
 
   val post
     :  t
     -> ?headers:(string * string) list
     -> ?body:Body.t
     -> string
-    -> (Response.t, Error.t) result
+    -> (Response.t, [> Error.t ]) result
 
   val put
     :  t
     -> ?headers:(string * string) list
     -> ?body:Body.t
     -> string
-    -> (Response.t, Error.t) result
+    -> (Response.t, [> Error.t ]) result
 
   val patch
     :  t
     -> ?headers:(string * string) list
     -> ?body:Body.t
     -> string
-    -> (Response.t, Error.t) result
+    -> (Response.t, [> Error.t ]) result
 
   val delete
     :  t
     -> ?headers:(string * string) list
     -> ?body:Body.t
     -> string
-    -> (Response.t, Error.t) result
+    -> (Response.t, [> Error.t ]) result
 
   val request
     :  t
@@ -638,15 +641,15 @@ module Client : sig
     -> ?body:Body.t
     -> meth:Method.t
     -> string
-    -> (Response.t, Error.t) result
+    -> (Response.t, [> Error.t ]) result
 
-  val send : t -> Request.t -> (Response.t, Error.t) result
+  val send : t -> Request.t -> (Response.t, [> Error.t ]) result
 
   val ws_upgrade
     :  t
     -> ?headers:(string * string) list
     -> string
-    -> (Ws.Descriptor.t, Error.t) result
+    -> (Ws.Descriptor.t, [> Error.t ]) result
 
   val shutdown : t -> unit
   (** [shutdown t] tears down the connection [t] and frees up all the resources
@@ -659,7 +662,7 @@ module Client : sig
       -> sw:Eio.Switch.t
       -> Eio.Stdenv.t
       -> Uri.t
-      -> (Response.t, Error.t) result
+      -> (Response.t, [> Error.t ]) result
 
     val get
       :  ?config:Config.t
@@ -667,7 +670,7 @@ module Client : sig
       -> sw:Eio.Switch.t
       -> Eio.Stdenv.t
       -> Uri.t
-      -> (Response.t, Error.t) result
+      -> (Response.t, [> Error.t ]) result
 
     val post
       :  ?config:Config.t
@@ -676,7 +679,7 @@ module Client : sig
       -> sw:Eio.Switch.t
       -> Eio.Stdenv.t
       -> Uri.t
-      -> (Response.t, Error.t) result
+      -> (Response.t, [> Error.t ]) result
 
     val put
       :  ?config:Config.t
@@ -685,7 +688,7 @@ module Client : sig
       -> sw:Eio.Switch.t
       -> Eio.Stdenv.t
       -> Uri.t
-      -> (Response.t, Error.t) result
+      -> (Response.t, [> Error.t ]) result
 
     val patch
       :  ?config:Config.t
@@ -694,7 +697,7 @@ module Client : sig
       -> sw:Eio.Switch.t
       -> Eio.Stdenv.t
       -> Uri.t
-      -> (Response.t, Error.t) result
+      -> (Response.t, [> Error.t ]) result
 
     val delete
       :  ?config:Config.t
@@ -703,7 +706,7 @@ module Client : sig
       -> sw:Eio.Switch.t
       -> Eio.Stdenv.t
       -> Uri.t
-      -> (Response.t, Error.t) result
+      -> (Response.t, [> Error.t ]) result
 
     val request
       :  ?config:Config.t
@@ -713,7 +716,7 @@ module Client : sig
       -> Eio.Stdenv.t
       -> meth:Method.t
       -> Uri.t
-      -> (Response.t, Error.t) result
+      -> (Response.t, [> Error.t ]) result
     (** Use another request method. *)
   end
 end

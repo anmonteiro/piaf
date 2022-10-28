@@ -289,8 +289,8 @@ let rec return_response
       Log.debug (fun m -> m "Received 101, server accepted HTTP/2 upgrade");
       let (module Http2) = (module Http2.HTTP : Http_intf.HTTP2) in
       let*! () = Body.drain body in
-      let*! h2_conn, response =
-        (Http_impl.create_h2c_connection
+      (match
+         Http_impl.create_h2c_connection
            ~config
            ~conn_info
            ~uri
@@ -298,10 +298,11 @@ let rec return_response
            ~fd
            ~http_request:request
            runtime
-          :> (Connection.t * Response.t, Error.t) result)
-      in
-      t.conn <- h2_conn;
-      return_response t request_info response
+       with
+      | Error #Error.client as err -> err
+      | Ok (h2_conn, response) ->
+        t.conn <- h2_conn;
+        return_response t request_info response)
     | _ -> Ok response)
   | _ -> Ok response
 
@@ -365,105 +366,108 @@ let rec send_request_and_handle_response
   =
   let { conn = Conn ({ info; uri; _ } as conn); config; _ } = t in
 
-  let*! response =
-    (Http_impl.send_request ~sw:t.sw t.conn ~config ~body request
-      :> (Response.t, Error.t) result)
-  in
-  if conn.persistent
-  then conn.persistent <- Response.persistent_connection response;
-  (* TODO: 201 created can also return a Location header. Should we follow
-   * those? *)
-  match
-    ( H2.Status.is_redirection response.status
-    , config.follow_redirects
-    , remaining_redirects
-    , Headers.(get response.headers Well_known.location) )
-  with
-  | true, true, 0, _ ->
-    (* Response is a redirect, but we can't follow any more. *)
-    let msg =
-      Format.asprintf "Maximum (%d) redirects followed" config.max_redirects
-    in
-    Log.err (fun m -> m "%s" msg);
-    Error (`Connect_error msg)
-  | true, true, _, Some location ->
-    let { Connection_info.scheme; _ } = info in
-    let new_uri = Uri.parse_with_base_uri ~scheme ~uri location in
-    let*! did_reuse =
-      (reuse_or_set_up_new_connection t new_uri :> (bool, Error.t) result)
-    in
-    (* If we reused the (persistent) connection, throw away the response body,
-     * because we're not going to expose it to consumers.
-     *
-     * Otherwise, if we couldn't reuse the connection, drain the response body.
-     * The old connection will already have been shutdown by
-     * `change_connection`. *)
-    if did_reuse
-    then
-      Fiber.fork ~sw:t.sw (fun () ->
-          let (_drained : _ result) = Body.drain response.body in
-          ());
-    if Status.is_permanent_redirection response.status then conn.uri <- new_uri;
-    let target = Uri.path_and_query new_uri in
-    (* From RFC7231§6.4:
-     *   Note: In HTTP/1.0, the status codes 301 (Moved Permanently) and 302
-     *   (Found) were defined for the first type of redirect ([RFC1945],
-     *   Section 9.3).  Early user agents split on whether the method applied
-     *   to the redirect target would be the same as the original request or
-     *   would be rewritten as GET.  Although HTTP originally defined the former
-     *   semantics for 301 and 302 (to match its original implementation at
-     *   CERN), and defined 303 (See Other) to match the latter semantics,
-     *   prevailing practice gradually converged on the latter semantics for
-     *   301 and 302 as well.  The first revision of HTTP/1.1 added 307
-     *   (Temporary Redirect) to indicate the former semantics without being
-     *   impacted by divergent practice.  Over 10 years later, most user agents
-     *   still do method rewriting for 301 and 302; therefore, this
-     *   specification makes that behavior conformant when the original request
-     *   is POST. *)
-    let meth' =
-      match meth, response.status with
-      | `POST, (`Found | `Moved_permanently) -> `GET
-      | _ -> meth
-    in
-    let request_info' =
-      make_request_info
-        t
-        ~remaining_redirects:(remaining_redirects - 1)
-        ~meth:meth'
-        ~headers
-        ~body
-        target
-    in
-    send_request_and_handle_response t ~body request_info'
-  (* Either not a redirect, or we shouldn't follow redirects. *)
-  | false, _, _, _ | _, false, _, _ | true, true, _, None ->
-    return_response t request_info response
+  match Http_impl.send_request ~sw:t.sw t.conn ~config ~body request with
+  | Error (#Error.client as err) -> Error err
+  | Ok response ->
+    if conn.persistent
+    then conn.persistent <- Response.persistent_connection response;
+    (* TODO: 201 created can also return a Location header. Should we follow
+     * those? *)
+    (match
+       ( H2.Status.is_redirection response.status
+       , config.follow_redirects
+       , remaining_redirects
+       , Headers.(get response.headers Well_known.location) )
+     with
+    | true, true, 0, _ ->
+      (* Response is a redirect, but we can't follow any more. *)
+      let msg =
+        Format.asprintf "Maximum (%d) redirects followed" config.max_redirects
+      in
+      Log.err (fun m -> m "%s" msg);
+      Error (`Connect_error msg)
+    | true, true, _, Some location ->
+      let { Connection_info.scheme; _ } = info in
+      let new_uri = Uri.parse_with_base_uri ~scheme ~uri location in
+      (* If we reused the (persistent) connection, throw away the response body,
+       * because we're not going to expose it to consumers.
+       *
+       * Otherwise, if we couldn't reuse the connection, drain the response body.
+       * The old connection will already have been shutdown by
+       * `change_connection`. *)
+      (match reuse_or_set_up_new_connection t new_uri with
+      | Error #Error.client as err -> err
+      | Ok did_reuse ->
+        if did_reuse
+        then
+          Fiber.fork ~sw:t.sw (fun () ->
+              let (_drained : _ result) = Body.drain response.body in
+              ());
+        if Status.is_permanent_redirection response.status
+        then conn.uri <- new_uri;
+        let target = Uri.path_and_query new_uri in
+        (* From RFC7231§6.4:
+        *   Note: In HTTP/1.0, the status codes 301 (Moved Permanently) and 302
+         *   (Found) were defined for the first type of redirect ([RFC1945],
+         *   Section 9.3).  Early user agents split on whether the method applied
+         *   to the redirect target would be the same as the original request or
+         *   would be rewritten as GET.  Although HTTP originally defined the former
+         *   semantics for 301 and 302 (to match its original implementation at
+         *   CERN), and defined 303 (See Other) to match the latter semantics,
+         *   prevailing practice gradually converged on the latter semantics for
+         *   301 and 302 as well.  The first revision of HTTP/1.1 added 307
+         *   (Temporary Redirect) to indicate the former semantics without being
+         *   impacted by divergent practice.  Over 10 years later, most user agents
+         *   still do method rewriting for 301 and 302; therefore, this
+         *   specification makes that behavior conformant when the original request
+         *   is POST. *)
+        let meth' =
+          match meth, response.status with
+          | `POST, (`Found | `Moved_permanently) -> `GET
+          | _ -> meth
+        in
+        let request_info' =
+          make_request_info
+            t
+            ~remaining_redirects:(remaining_redirects - 1)
+            ~meth:meth'
+            ~headers
+            ~body
+            target
+        in
+        send_request_and_handle_response t ~body request_info')
+    (* Either not a redirect, or we shouldn't follow redirects. *)
+    | false, _, _, _ | _, false, _, _ | true, true, _, None ->
+      return_response t request_info response)
 
 let create ?(config = Config.default) ~sw env uri =
   let*! conn_info = Connection_info.of_uri uri in
   let clock = Eio.Stdenv.clock env in
   let network = Eio.Stdenv.net env in
-  let+! conn =
-    (open_connection ~config ~sw ~clock ~network ~uri:conn_info.uri conn_info
-      :> (Connection.t, Error.t) result)
-  in
-  { conn; config; clock; network; sw }
+  match
+    open_connection ~config ~sw ~clock ~network ~uri:conn_info.uri conn_info
+  with
+  | Ok conn -> Ok { conn; config; clock; network; sw }
+  | Error (#Error.client as err) -> Error err
 
 let call t ~meth ?(headers = []) ?(body = Body.empty) target =
   (* Need to try to reconnect to the base host on every call, if redirects are
    * enabled, because the connection manager could have tried to follow a
    * temporary redirect. We remember permanent redirects. *)
   let (Connection.Conn { impl = (module Http); connection; uri; _ }) = t.conn in
-  let*! (_reused : bool) =
+  let reused =
     if t.config.follow_redirects || Http_impl.is_closed (module Http) connection
-    then (reuse_or_set_up_new_connection t uri :> (bool, Error.t) result)
+    then reuse_or_set_up_new_connection t uri
     else Ok true
   in
-  let headers = t.config.default_headers @ headers in
-  let request_info = make_request_info t ~meth ~headers ~body target in
-  let (Connection.Conn conn) = t.conn in
-  conn.persistent <- Request.persistent_connection request_info.request;
-  send_request_and_handle_response t ~body request_info
+  match reused with
+  | Error #Error.client as err -> err
+  | Ok _ ->
+    let headers = t.config.default_headers @ headers in
+    let request_info = make_request_info t ~meth ~headers ~body target in
+    let (Connection.Conn conn) = t.conn in
+    conn.persistent <- Request.persistent_connection request_info.request;
+    send_request_and_handle_response t ~body request_info
 
 let request t ?headers ?body ~meth target = call t ?headers ?body ~meth target
 
@@ -482,7 +486,7 @@ let delete t ?headers ?body target = call t ?headers ?body ~meth:`DELETE target
 
 let ws_upgrade
     :  t -> ?headers:(string * string) list -> string
-    -> (Ws.Descriptor.t, Error.t) result
+    -> (Ws.Descriptor.t, [> Error.client ]) result
   =
  fun t ?(headers = []) target ->
   let (Conn { info; _ }) = t.conn in
@@ -499,8 +503,9 @@ let ws_upgrade
       target
   in
   let*! response = send t request in
-  let*! () = Body.drain response.body in
-  (Http_impl.upgrade_connection ~sw:t.sw t.conn :> (_, Error.t) result)
+  match Body.drain response.body with
+  | Error #Error.t as err -> err
+  | Ok () -> Http_impl.upgrade_connection ~sw:t.sw t.conn
 
 module Oneshot = struct
   (* Note: we're not sending `Connection: close`:

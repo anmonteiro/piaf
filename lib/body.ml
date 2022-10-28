@@ -214,14 +214,16 @@ let stream_to_string ~length stream =
     stream;
   Buffer.contents result_buffer
 
-let error_p : contents -> Error.t Promise.t = function
+let error_p : contents -> [> Error.t ] Promise.t = function
   | `Sendfile { error_received; _ } | `Stream { error_received; _ } ->
     error_received
   | _ -> default_error_received
 
 let or_error ~error_p ~stream v =
   Promise.await (Stream.closed stream);
-  match Promise.peek error_p with Some error -> Error error | None -> Ok v
+  match Promise.peek error_p with
+  | Some (#Error.t as err) -> Error err
+  | None -> Ok v
 
 let to_string ({ contents; _ } as t) =
   match contents with
