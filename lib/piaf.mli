@@ -364,7 +364,7 @@ module Body : sig
   val of_string_stream : ?length:length -> string Stream.t -> t
   val of_string : string -> t
   val of_bigstring : ?off:int -> ?len:int -> Bigstringaf.t -> t
-  val sendfile : ?length:length -> string -> (t, [> Error.t ]) result
+  val sendfile : ?length:length -> string -> (t, [> Error.common ]) result
   val to_string : t -> (string, [> Error.t ]) result
   val drain : t -> (unit, [> Error.t ]) result
   val is_closed : t -> bool
@@ -521,13 +521,13 @@ module Response : sig
     :  ?version:Versions.HTTP.t
     -> ?headers:Headers.t
     -> string
-    -> (t, [> Error.t ]) result
+    -> (t, [> Error.common ]) result
 
   val sendfile
     :  ?version:Versions.HTTP.t
     -> ?headers:Headers.t
     -> string
-    -> (t, [> Error.t ]) result
+    -> (t, [> Error.common ]) result
 
   module Upgrade : sig
     val generic
@@ -540,7 +540,7 @@ module Response : sig
       :  f:(Ws.Descriptor.t -> unit)
       -> ?headers:Headers.t
       -> Request.t
-      -> (t, [> Error.t ]) result
+      -> (t, [> Error.common ]) result
   end
 
   val or_internal_error : (t, Error.t) result -> t
@@ -560,12 +560,12 @@ module Form : sig
     val stream
       :  ?max_chunk_size:int
       -> Request.t
-      -> (t Stream.t, [> Error.t ]) result
+      -> (t Stream.t, [> `Msg of string ]) result
 
     val assoc
       :  ?max_chunk_size:int
       -> Request.t
-      -> ((string * t) list, [> Error.t ]) result
+      -> ((string * t) list, [> `Msg of string ]) result
   end
 end
 
@@ -587,7 +587,7 @@ module Client : sig
     -> sw:Eio.Switch.t
     -> Eio.Stdenv.t
     -> Uri.t
-    -> (t, [> Error.t ]) result
+    -> (t, [> Error.client ]) result
   (** [create ?config uri] opens a connection to [uri] (initially) that can be
       used to issue multiple requests to the remote endpoint.
 
