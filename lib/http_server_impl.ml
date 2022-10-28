@@ -107,7 +107,7 @@ let handle_request : sw:Switch.t -> t -> Request.t -> unit =
         let ({ Response.headers; body; _ } as response) =
           handler
             { Server_intf.Handler.ctx =
-                { Request_info.client_address; scheme; version }
+                { Request_info.client_address; scheme; version; sw }
             ; request
             }
         in

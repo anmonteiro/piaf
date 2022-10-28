@@ -726,6 +726,7 @@ module Request_info : sig
     { scheme : Scheme.t
     ; version : Versions.HTTP.t
     ; client_address : Eio.Net.Sockaddr.stream
+    ; sw : Eio.Switch.t
     }
 end
 
