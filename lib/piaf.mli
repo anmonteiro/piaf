@@ -365,7 +365,7 @@ module Body : sig
   val of_string : string -> t
   val of_bigstring : ?off:int -> ?len:int -> Bigstringaf.t -> t
   val sendfile : ?length:length -> string -> (t, Error.t) result
-  val to_string : t -> (string, Error.t) result
+  val to_string : t -> (string, [> Error.t]) result
   val drain : t -> (unit, Error.t) result
   val is_closed : t -> bool
   val closed : t -> (unit, Error.t) result
