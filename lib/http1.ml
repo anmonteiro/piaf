@@ -91,7 +91,7 @@ module MakeHTTP1 (Runtime_scheme : Scheme.Runtime.SCHEME) :
         (* TODO: revisit whether this is necessary. *)
         if request_method = `HEAD then Body.Reader.close body;
         let body =
-          Piaf_body.Raw.to_t
+          Piaf_body.Raw.to_response_body
             (module Body.Reader : Piaf_body.Raw.Reader
               with type t = Httpaf.Body.Reader.t)
             ~body_length:
@@ -178,14 +178,14 @@ module MakeHTTP1 (Runtime_scheme : Scheme.Runtime.SCHEME) :
       let request = Httpaf.Reqd.request reqd in
       let body_length = Httpaf.Request.body_length request in
       let request_body =
-        Piaf_body.Raw.to_t
+        Piaf_body.Raw.to_request_body
           (module Body.Reader : Piaf_body.Raw.Reader
             with type t = Httpaf.Body.Reader.t)
           ~body_length:(body_length :> Piaf_body.length)
           ~on_eof:(fun t ->
             match Httpaf.Reqd.error_code reqd with
             | Some error ->
-              t.error_received <- Promise.create_resolved (error :> Error.t)
+              t.error_received := Promise.create_resolved (error :> Error.t)
             | None -> ())
           (Httpaf.Reqd.request_body reqd)
       in

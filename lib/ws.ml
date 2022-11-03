@@ -123,10 +123,11 @@ module Handler = struct
           (module Websocketaf.Payload : Body.Raw.Reader
             with type t = Websocketaf.Payload.t)
           ~body_length:(`Fixed len)
+          ~body_error:(`Msg "")
           ~on_eof:(fun t ->
             match Websocketaf.Wsd.error_code wsd with
             | Some error ->
-              t.error_received <- Promise.create_resolved (error :> Error.t)
+              t.error_received := Promise.create_resolved (error :> Error.t)
             | None -> ())
           payload
       in
