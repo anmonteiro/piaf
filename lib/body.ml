@@ -80,14 +80,14 @@ type length =
 type body_stream =
   { stream : Bigstringaf.t IOVec.t Stream.t
   ; mutable read_counter : int
-  ; mutable error_received : Error.t Promise.t
+  ; error_received : Error.t Promise.t ref
   }
 
 type sendfile_descr =
   { fd : Unix.file_descr
   ; waiter : unit Promise.t
   ; notifier : unit Promise.u
-  ; mutable error_received : Error.t Promise.t
+  ; error_received : Error.t Promise.t ref
   }
 
 type contents =
@@ -115,7 +115,7 @@ let of_stream ?(length = `Chunked) stream =
   create
     ~length
     (`Stream
-      { stream; read_counter = 0; error_received = default_error_received })
+      { stream; read_counter = 0; error_received = ref default_error_received })
 
 let of_string_stream ?(length = `Chunked) stream =
   let stream =
@@ -128,7 +128,7 @@ let of_string_stream ?(length = `Chunked) stream =
   create
     ~length
     (`Stream
-      { stream; read_counter = 0; error_received = default_error_received })
+      { stream; read_counter = 0; error_received = ref default_error_received })
 
 let of_string s =
   let length = `Fixed (Int64.of_int (String.length s)) in
@@ -161,7 +161,7 @@ let sendfile ?length path =
     (create
        ~length
        (`Sendfile
-         { fd; waiter; notifier; error_received = default_error_received }))
+         { fd; waiter; notifier; error_received = ref default_error_received }))
 
 (* TODO: accept buffer for I/O, so that caller can pool buffers? *)
 let stream_of_fd ?on_close fd =
@@ -214,14 +214,14 @@ let stream_to_string ~length stream =
     stream;
   Buffer.contents result_buffer
 
-let error_p : contents -> [> Error.t ] Promise.t = function
+let error_p : contents -> [> Error.t ] Promise.t ref = function
   | `Sendfile { error_received; _ } | `Stream { error_received; _ } ->
     error_received
-  | _ -> default_error_received
+  | _ -> ref default_error_received
 
 let or_error ~error_p ~stream v =
   Promise.await (Stream.closed stream);
-  match Promise.peek error_p with
+  match Promise.peek !error_p with
   | Some (#Error.t as err) -> Error err
   | None -> Ok v
 
@@ -282,7 +282,7 @@ let is_closed t =
 let is_errored t =
   match t.contents with
   | `Sendfile { error_received; _ } | `Stream { error_received; _ } ->
-    Promise.is_resolved error_received
+    Promise.is_resolved !error_received
   | _ -> false
 
 let closed t =
@@ -296,8 +296,8 @@ let when_closed ~f t = f (closed t)
 
 let embed_error_received t error_received =
   match t.contents with
-  | `Stream s -> s.error_received <- error_received
-  | `Sendfile s -> s.error_received <- error_received
+  | `Stream s -> s.error_received := error_received
+  | `Sendfile s -> s.error_received := error_received
   | _ -> ()
 
 (* "Primitive" body types for http/af / h2 compatibility *)
@@ -338,16 +338,20 @@ module Raw = struct
         (module Reader with type t = a)
         -> ?on_eof:(body_stream -> unit)
         -> body_length:length
+        -> body_error:Error.t
         -> a
         -> body_stream
     =
-   fun (module Reader) ?on_eof ~body_length body ->
+   fun (module Reader) ?on_eof ~body_length ~body_error body ->
+    let total_len = ref 0L in
     let read_fn t () =
       let t = Lazy.force t in
       let p, u = Promise.create () in
       let on_read_direct buffer ~off ~len =
+        total_len := Int64.add !total_len (Int64.of_int len);
         Promise.resolve u (Some (IOVec.make buffer ~off ~len))
       and on_read_with_yield buffer ~off ~len =
+        total_len := Int64.add !total_len (Int64.of_int len);
         Fiber.yield ();
         Promise.resolve u (Some (IOVec.make buffer ~off ~len))
       in
@@ -359,17 +363,25 @@ module Raw = struct
           on_read_with_yield)
         else on_read_direct
       in
-      Reader.schedule_read
-        body
-        ~on_eof:(fun () ->
-          Option.iter (fun f -> f t) on_eof;
-          Reader.close body;
-          Promise.resolve u None)
-        ~on_read;
+      let on_eof () =
+        Option.iter (fun f -> f t) on_eof;
+        Reader.close body;
+        (if not (Promise.is_resolved !(t.error_received))
+        then
+          match body_length with
+          | `Error e ->
+            t.error_received := Promise.create_resolved (e :> Error.t)
+          | `Fixed promised_length ->
+            if Int64.compare !total_len promised_length < 0
+            then t.error_received := Promise.create_resolved body_error
+          | `Chunked | `Unknown | `Close_delimited -> ());
+        Promise.resolve u None
+      in
+      Reader.schedule_read body ~on_eof ~on_read;
       Fiber.first
         (fun () -> Promise.await p)
         (fun () ->
-          match Promise.await t.error_received with
+          match Promise.await !(t.error_received) with
           | (_ : Error.t) ->
             (* `None` closes the stream. The promise `t.error_received` remains
              * fulfilled, which signals that the stream hasn't closed cleanly.
@@ -384,7 +396,10 @@ module Raw = struct
            | `Fixed 0L -> Stream.empty ()
            | _ -> Stream.from ~f:(read_fn t)
          in
-         { stream; error_received = default_error_received; read_counter = 0 })
+         { stream
+         ; error_received = ref default_error_received
+         ; read_counter = 0
+         })
     in
     Lazy.force t
 
@@ -393,12 +408,40 @@ module Raw = struct
         (module Reader with type t = a)
         -> ?on_eof:(body_stream -> unit)
         -> body_length:length
+        -> body_error:Error.t
         -> a
         -> t
     =
-   fun (module Reader) ?on_eof ~body_length body ->
-    let stream = to_stream (module Reader) ?on_eof ~body_length body in
+   fun (module Reader) ?on_eof ~body_length ~body_error body ->
+    let stream =
+      to_stream (module Reader) ?on_eof ~body_error ~body_length body
+    in
     create ~length:body_length (`Stream stream)
+
+  let to_request_body
+      : type a.
+        (module Reader with type t = a)
+        -> ?on_eof:(body_stream -> unit)
+        -> body_length:length
+        -> a
+        -> t
+    =
+   fun reader ?on_eof ~body_length body ->
+    to_t reader ?on_eof ~body_length ~body_error:`Bad_request body
+
+  let incomplete_body_error =
+    `Malformed_response "missing bytes in response body"
+
+  let to_response_body
+      : type a.
+        (module Reader with type t = a)
+        -> ?on_eof:(body_stream -> unit)
+        -> body_length:length
+        -> a
+        -> t
+    =
+   fun reader ?on_eof ~body_length body ->
+    to_t reader ?on_eof ~body_length ~body_error:incomplete_body_error body
 
   let flush_and_close
       : type a. (module Writer with type t = a) -> a -> (unit -> unit) -> unit
