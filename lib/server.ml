@@ -195,6 +195,7 @@ module Command = struct
       ~sw
       ~network
       ~port
+      ?(backlog = 128)
       connection_handler
     =
     let command_p, command_u = Promise.create () in
@@ -222,7 +223,7 @@ module Command = struct
                   Eio.Net.listen
                     ~reuse_addr:true
                     ~reuse_port:true
-                    ~backlog:10_000
+                    ~backlog
                     ~sw
                     network
                     address
