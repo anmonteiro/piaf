@@ -8,6 +8,8 @@ val listen
   -> ?check_client_cert:bool
   -> ?certfile:string
   -> ?certkey:string
+  -> ?bind_to_address:Eio.Net.Ipaddr.v4v6
+  -> ?backlog:int
   -> sw:Eio.Switch.t
   -> network:Eio.Net.t
   -> unit
@@ -18,6 +20,13 @@ val teardown : t -> unit
 module H2c : sig
   type t
 
-  val listen : sw:Eio.Switch.t -> network:Eio.Net.t -> int -> t
+  val listen
+    :  sw:Eio.Switch.t
+    -> network:Eio.Net.t
+    -> bind_to_address:Eio.Net.Ipaddr.v4v6
+    -> port:int
+    -> backlog:int
+    -> t
+
   val teardown : t -> unit
 end

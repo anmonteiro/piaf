@@ -32,8 +32,10 @@ let main port =
         ~h2c_upgrade:true
         ~https:
           (HTTPS.create
-             ~cacert:(Filepath ca) (* ~allow_insecure:true *)
-             (* ~enforce_client_cert:true *)
+             ~cacert:(Filepath ca)
+               (* ~allow_insecure:true *)
+               (* ~enforce_client_cert:true *)
+             ~port
              (Filepath cert, Filepath priv_key))
         port)
   in
