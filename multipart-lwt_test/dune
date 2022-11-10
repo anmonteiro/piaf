@@ -1,4 +1,0 @@
-(test
- (name multipart_test)
- (package piaf-lwt)
- (libraries alcotest piaf-lwt.multipart alcotest-lwt))
