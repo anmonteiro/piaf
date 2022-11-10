@@ -54,7 +54,6 @@ let
           ".ocamlformat"
           ".ocamlformat-ignore"
           "piaf.opam"
-          "piaf-lwt.opam"
           "dune-project"
           "dune"
         ] ++ (builtins.map inDirectory [
@@ -62,10 +61,6 @@ let
           "lib_test"
           "multipart"
           "multipart_test"
-          "lib-lwt"
-          "lib-lwt_test"
-          "multipart-lwt"
-          "multipart-lwt_test"
           "stream"
           "examples"
         ]);
