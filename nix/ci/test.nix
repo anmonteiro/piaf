@@ -67,12 +67,9 @@ let
       };
 
       buildPhase = ''
-        # Run these 2 tests serially as they use the same server ports
-        dune runtest -p piaf-lwt
-        ${if (lib.hasPrefix "5_" ocamlVersion) then
-          "dune runtest -p piaf"
-          else ""}
+        dune runtest -p piaf
       '';
+
       installPhase = ''
         touch $out
       '';
