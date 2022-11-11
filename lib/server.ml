@@ -227,6 +227,7 @@ module Command = struct
                     network
                     address
                 in
+                Unix.set_nonblock (Eio_unix.FD.peek_opt socket |> Option.get);
                 Log.info (fun m -> m "Server listening on port %d" port);
                 while true do
                   Eio.Net.accept_fork
@@ -238,8 +239,6 @@ module Command = struct
                             "Error in connection handler: %s"
                             (Printexc.to_string exn)))
                     (fun socket addr ->
-                      Unix.set_nonblock
-                        (Eio_unix.FD.peek_opt socket |> Option.get);
                       Switch.run (fun sw -> connection_handler ~sw socket addr))
                 done);
             Promise.resolve command_u command));
