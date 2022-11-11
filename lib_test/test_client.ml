@@ -19,8 +19,7 @@ let response_testable =
 let error_testable = Alcotest.of_pp Error.pp_hum
 
 let test_simple_get ~sw env () =
-  let network = Eio.Stdenv.net env in
-  let server = Helper_server.listen ~sw ~network ~http_port:8080 () in
+  let server = Helper_server.listen ~sw ~env ~http_port:8080 () in
   Switch.run (fun sw ->
       let response =
         Client.Oneshot.get env ~sw (Uri.of_string "http://localhost:8080")
@@ -41,8 +40,7 @@ let test_simple_get ~sw env () =
   Helper_server.teardown server
 
 let test_redirection ~sw env () =
-  let network = Eio.Stdenv.net env in
-  let server = Helper_server.listen ~sw ~network ~http_port:8080 () in
+  let server = Helper_server.listen ~sw ~env ~http_port:8080 () in
   let response =
     Client.Oneshot.get
       ~sw
@@ -96,8 +94,7 @@ let test_redirection ~sw env () =
   Helper_server.teardown server
 
 let test_redirection_post ~sw env () =
-  let network = Eio.Stdenv.net env in
-  let server = Helper_server.listen ~sw ~network ~http_port:8080 () in
+  let server = Helper_server.listen ~sw ~env ~http_port:8080 () in
   (* Request issues `GET` to the actual redirect target *)
   let response =
     Client.Oneshot.post
@@ -122,8 +119,7 @@ let test_redirection_post ~sw env () =
   Helper_server.teardown server
 
 let test_https ~sw env () =
-  let network = Eio.Stdenv.net env in
-  let server = Helper_server.listen ~sw ~network ~http_port:8080 () in
+  let server = Helper_server.listen ~sw ~env ~http_port:8080 () in
   (* HTTP/1.1 *)
   let response =
     Client.Oneshot.get
@@ -196,8 +192,7 @@ let test_https ~sw env () =
   Helper_server.teardown server
 
 let test_https_server_certs ~sw env () =
-  let network = Eio.Stdenv.net env in
-  let server = Helper_server.listen ~sw ~network ~http_port:8080 () in
+  let server = Helper_server.listen ~sw ~env ~http_port:8080 () in
   (* Verify server cert from file *)
   let response =
     Client.Oneshot.get
@@ -259,7 +254,7 @@ let test_https_server_certs ~sw env () =
   let server =
     Helper_server.listen
       ~sw
-      ~network
+      ~env
       ~http_port:8080
       ~certfile:"server_rsa_san.pem"
       ~certkey:"server_rsa_san.key"
@@ -299,7 +294,7 @@ let test_https_server_certs ~sw env () =
   let server =
     Helper_server.listen
       ~sw
-      ~network
+      ~env
       ~http_port:8080
       ~certfile:"server_san_ip.pem"
       ~certkey:"server_san_ip.key"
@@ -332,10 +327,9 @@ let test_https_server_certs ~sw env () =
   Helper_server.teardown server
 
 let test_https_client_certs ~sw env () =
-  let network = Eio.Stdenv.net env in
   (* Client certificate *)
   let server =
-    Helper_server.listen ~sw ~network ~http_port:8080 ~check_client_cert:true ()
+    Helper_server.listen ~sw ~env ~http_port:8080 ~check_client_cert:true ()
   in
   let inchannel = open_in (Helper_server.cert_path // "client.pem") in
   let clientcert =
@@ -400,7 +394,7 @@ let test_https_client_certs ~sw env () =
   Result.get_ok (Body.drain response.body);
   Helper_server.teardown server;
   (* No client certificate provided *)
-  let server = Helper_server.listen ~sw ~network ~check_client_cert:true () in
+  let server = Helper_server.listen ~sw ~env ~check_client_cert:true () in
   let response =
     Client.Oneshot.get
       ~sw
@@ -435,14 +429,14 @@ let test_https_client_certs ~sw env () =
   Helper_server.teardown server
 
 let test_h2c ~sw env () =
-  let network = Eio.Stdenv.net env in
   let server =
     Helper_server.H2c.listen
       ~sw
-      ~network
+      ~env
       ~bind_to_address:Eio.Net.Ipaddr.V4.loopback
       ~port:9000
       ~backlog:128
+      ~domains:1
   in
   (* Not configured to follow the h2c upgrade *)
   let response =
@@ -515,8 +509,7 @@ let test_h2c ~sw env () =
   Helper_server.H2c.teardown server
 
 let test_default_headers ~sw env () =
-  let network = Eio.Stdenv.net env in
-  let server = Helper_server.listen ~sw ~network ~http_port:8080 () in
+  let server = Helper_server.listen ~sw ~env ~http_port:8080 () in
   let default_headers = Headers.[ Well_known.authorization, "Bearer token" ] in
   let expected_response =
     Response.create

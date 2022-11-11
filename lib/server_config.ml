@@ -65,6 +65,7 @@ type t =
   ; backlog : int
         (** The maximum length of the queue of pending connections. *)
   ; address : Eio.Net.Ipaddr.v4v6  (** The address to listen on. *)
+  ; domains : int  (** The number of domains to use. *)
   }
 
 let create
@@ -78,6 +79,7 @@ let create
     ?(flush_headers_immediately = false)
     ?(backlog = 128)
     ?(address = Eio.Net.Ipaddr.V4.loopback)
+    ?(domains = 1)
     port
   =
   { port
@@ -93,6 +95,7 @@ let create
   ; flush_headers_immediately
   ; backlog
   ; address
+  ; domains
   }
 
 let to_http1_config { body_buffer_size; buffer_size; _ } =

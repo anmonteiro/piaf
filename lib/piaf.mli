@@ -788,6 +788,7 @@ module Server : sig
       ; backlog : int
             (** The maximum length of the queue of pending connections. *)
       ; address : Eio.Net.Ipaddr.v4v6  (** The address to listen on. *)
+      ; domains : int  (** The number of domains to use. *)
       }
 
     val create
@@ -801,6 +802,7 @@ module Server : sig
       -> ?flush_headers_immediately:bool
       -> ?backlog:int
       -> ?address:Eio.Net.Ipaddr.v4v6
+      -> ?domains:int
       -> int
       -> t
   end
@@ -866,10 +868,11 @@ module Server : sig
 
     val listen
       :  sw:Eio.Switch.t
-      -> network:Eio.Net.t
+      -> env:Eio.Stdenv.t
       -> bind_to_address:Eio.Net.Ipaddr.v4v6
       -> port:int
       -> backlog:int
+      -> domains:int
       -> connection_handler
       -> t
     (** [listen ~sw ?bind_to_address ~network ~port connection_handler] starts a

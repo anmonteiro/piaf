@@ -1,6 +1,8 @@
 open Piaf
 open Eio
 
+let recommended_domain_count = Domain.recommended_domain_count ()
+
 let connection_handler (params : Request_info.t Server.ctx) =
   match params.request with
   | { Request.meth = `GET; _ } -> Response.of_string ~body:"Hello World" `OK
@@ -10,7 +12,13 @@ let connection_handler (params : Request_info.t Server.ctx) =
 
 let run ~host ~port env handler =
   Switch.run @@ fun sw ->
-  let config = Server.Config.create ~address:host ~buffer_size:0x1000 port in
+  let config =
+    Server.Config.create
+      ~address:host
+      ~buffer_size:0x1000
+      ~domains:recommended_domain_count
+      port
+  in
   let server = Server.create ~config handler in
   let _command = Server.Command.start ~sw env server in
   Logs.info (fun m -> m "Server listening on port %d" port)
@@ -26,5 +34,5 @@ let setup_log ?style_renderer level =
   Logs.set_reporter (Logs_fmt.reporter ())
 
 let () =
-  setup_log (Some Debug);
-  Eio_main.run start
+  setup_log (Some Info);
+  Eio_main.run (fun env -> start env)

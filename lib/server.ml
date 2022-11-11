@@ -190,15 +190,15 @@ module Command = struct
 
   let shutdown t = t.resolver ()
 
-  let listen ~sw ~network ~bind_to_address ~port ~backlog connection_handler =
+  let run ~sw ~network ~port ~address ~socket connection_handler =
     let command_p, command_u = Promise.create () in
     let released_p, released_u = Promise.create () in
     Fiber.fork ~sw (fun () ->
-        let address = `Tcp (bind_to_address, port) in
         Fiber.fork_sub
           ~sw
           ~on_error:(function
             | Server_shutdown ->
+              Eio.Net.close socket;
               Log.debug (fun m -> m "Server teardown finished")
             | exn -> raise exn)
           (fun sw ->
@@ -212,15 +212,6 @@ module Command = struct
 
             let command = create ~network ~address ~resolver in
             Fiber.fork ~sw (fun () ->
-                let socket =
-                  Eio.Net.listen
-                    ~reuse_addr:true
-                    ~reuse_port:true
-                    ~backlog
-                    ~sw
-                    network
-                    address
-                in
                 Log.info (fun m -> m "Server listening on port %d" port);
                 while true do
                   Eio.Net.accept_fork
@@ -237,9 +228,41 @@ module Command = struct
             Promise.resolve command_u command));
     Promise.await command_p
 
+  let listen
+      ~sw
+      ~env
+      ~bind_to_address
+      ~port
+      ~backlog
+      ~domains
+      connection_handler
+    =
+    let domain_mgr = Eio.Stdenv.domain_mgr env in
+    let network = Eio.Stdenv.net env in
+    let address = `Tcp (bind_to_address, port) in
+    Logs.err (fun m -> m "Listening on %d" port);
+    let socket =
+      Eio.Net.listen
+        ~reuse_addr:true
+        ~reuse_port:true
+        ~backlog
+        ~sw
+        network
+        address
+    in
+    for _ = 2 to domains do
+      Eio.Fiber.fork ~sw (fun () ->
+          Eio.Domain_manager.run domain_mgr (fun () ->
+              Switch.run @@ fun sw ->
+              let _ =
+                run ~sw ~network ~port ~address ~socket connection_handler
+              in
+              ()))
+    done;
+    run ~sw ~network ~port ~address ~socket connection_handler
+
   let start ~sw env server =
     let { config; _ } = server in
-    let network = Eio.Stdenv.net env in
     let clock = Eio.Stdenv.clock env in
     (* TODO(anmonteiro): config option to listen only in HTTPS? *)
     let connection_handler = http_connection_handler server in
@@ -247,9 +270,10 @@ module Command = struct
       listen
         ~bind_to_address:config.address
         ~sw
-        ~network
+        ~env
         ~port:config.port
         ~backlog:config.backlog
+        ~domains:config.domains
         connection_handler
     in
     match config.https with
@@ -265,9 +289,10 @@ module Command = struct
         listen
           ~bind_to_address:config.address
           ~sw
-          ~network
+          ~env
           ~port:https.port
           ~backlog:config.backlog
+          ~domains:config.domains
           connection_handler
       in
       { command with
