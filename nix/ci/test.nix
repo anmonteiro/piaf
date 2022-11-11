@@ -54,7 +54,6 @@ let
           ".ocamlformat"
           ".ocamlformat-ignore"
           "piaf.opam"
-          "piaf-lwt.opam"
           "dune-project"
           "dune"
         ] ++ (builtins.map inDirectory [
@@ -62,22 +61,15 @@ let
           "lib_test"
           "multipart"
           "multipart_test"
-          "lib-lwt"
-          "lib-lwt_test"
-          "multipart-lwt"
-          "multipart-lwt_test"
           "stream"
           "examples"
         ]);
       };
 
       buildPhase = ''
-        # Run these 2 tests serially as they use the same server ports
-        dune runtest -p piaf-lwt
-        ${if (lib.hasPrefix "5_" ocamlVersion) then
-          "dune runtest -p piaf"
-          else ""}
+        dune runtest -p piaf
       '';
+
       installPhase = ''
         touch $out
       '';
