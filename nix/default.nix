@@ -14,13 +14,13 @@ rec {
         "dune-project"
         "piaf.opam"
         "dune-project"
-      ] ++ (builtins.map inDirectory [
         "lib"
         "lib_test"
+        "sendfile"
         "stream"
         "multipart"
         "multipart_test"
-      ]);
+      ];
     };
 
     useDune2 = true;
