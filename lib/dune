@@ -17,7 +17,7 @@
   ssl
   uri
   ipaddr
-  sendfile
+  piaf.sendfile
   piaf.stream)
  (foreign_stubs
   (language c)
