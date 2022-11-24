@@ -1,0 +1,7 @@
+(library
+ (public_name piaf.sendfile)
+ (name sendfile)
+ (libraries unix)
+ (foreign_stubs
+  (language c)
+  (names sendfile_stubs)))

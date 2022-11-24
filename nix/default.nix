@@ -33,7 +33,6 @@ rec {
       ssl
       uri
       ipaddr
-      sendfile
 
       httpaf-eio
       gluten-eio
