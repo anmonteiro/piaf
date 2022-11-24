@@ -344,7 +344,7 @@ module Raw = struct
     =
    fun (module Reader) ?on_eof ~body_length ~body_error body ->
     let total_len = ref 0L in
-    let read_fn t () =
+    let rec read_fn () =
       let t = Lazy.force t in
       let p, u = Promise.create () in
       let on_read_direct buffer ~off ~len =
@@ -356,13 +356,6 @@ module Raw = struct
         Promise.resolve u (Some (IOVec.make buffer ~off ~len))
       in
       t.read_counter <- t.read_counter + 1;
-      let on_read =
-        if t.read_counter > 128
-        then (
-          t.read_counter <- 0;
-          on_read_with_yield)
-        else on_read_direct
-      in
       let on_eof () =
         Option.iter (fun f -> f t) on_eof;
         Reader.close body;
@@ -377,6 +370,13 @@ module Raw = struct
           | `Chunked | `Unknown | `Close_delimited -> ());
         Promise.resolve u None
       in
+      let on_read =
+        if t.read_counter > 128
+        then (
+          t.read_counter <- 0;
+          on_read_with_yield)
+        else on_read_direct
+      in
       Reader.schedule_read body ~on_eof ~on_read;
       Fiber.first
         (fun () -> Promise.await p)
@@ -387,19 +387,12 @@ module Raw = struct
              * fulfilled, which signals that the stream hasn't closed cleanly.
              *)
             None)
-    in
-
-    let rec t =
+    and t =
       lazy
-        (let stream =
-           match body_length with
-           | `Fixed 0L -> Stream.empty ()
-           | _ -> Stream.from ~f:(read_fn t)
-         in
-         { stream
-         ; error_received = ref default_error_received
-         ; read_counter = 0
-         })
+        { stream = Stream.from ~f:read_fn
+        ; error_received = ref default_error_received
+        ; read_counter = 0
+        }
     in
     Lazy.force t
 
@@ -413,10 +406,13 @@ module Raw = struct
         -> t
     =
    fun (module Reader) ?on_eof ~body_length ~body_error body ->
-    let stream =
-      to_stream (module Reader) ?on_eof ~body_error ~body_length body
-    in
-    create ~length:body_length (`Stream stream)
+    match body_length with
+    | `Fixed 0L -> empty
+    | _ ->
+      create
+        ~length:body_length
+        (`Stream
+          (to_stream (module Reader) ?on_eof ~body_error ~body_length body))
 
   let to_request_body
       : type a.

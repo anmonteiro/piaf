@@ -150,15 +150,15 @@ module MakeHTTP1 (Runtime_scheme : Scheme.Runtime.SCHEME) :
         respond_with_upgrade t (Headers.to_http1 headers) upgrade_handler
     end
 
+    module HttpServer = struct
+      module Reqd = Reqd
+      module Body = Body
+    end
+
     let make_error_handler ~fd error_handler
         : Eio.Net.Sockaddr.stream -> Httpaf.Server_connection.error_handler
       =
      fun client_addr ?request error start_response ->
-      let module HttpServer = struct
-        module Reqd = Reqd
-        module Body = Body
-      end
-      in
       let start_response headers = start_response (Headers.to_http1 headers) in
       Http_server_impl.handle_error
         ?request:(Option.map request_of_http1 request)
@@ -183,18 +183,13 @@ module MakeHTTP1 (Runtime_scheme : Scheme.Runtime.SCHEME) :
             with type t = Httpaf.Body.Reader.t)
           ~body_length:(body_length :> Piaf_body.length)
           ~on_eof:(fun t ->
-            match Httpaf.Reqd.error_code reqd with
-            | Some error ->
-              t.error_received := Promise.create_resolved (error :> Error.t)
-            | None -> ())
+            Option.iter
+              (fun error ->
+                t.error_received := Promise.create_resolved (error :> Error.t))
+              (Httpaf.Reqd.error_code reqd))
           (Httpaf.Reqd.request_body reqd)
       in
       let request = request_of_http1 ~body:request_body request in
-      let module HttpServer = struct
-        module Reqd = Reqd
-        module Body = Body
-      end
-      in
       let descriptor =
         Http_server_impl.create_descriptor
           (module HttpServer)
@@ -208,23 +203,18 @@ module MakeHTTP1 (Runtime_scheme : Scheme.Runtime.SCHEME) :
       in
       Http_server_impl.handle_request ~sw descriptor request
 
-    let create_connection_handler
-        :  config:Server_config.t
-        -> request_handler:Request_info.t Server_intf.Handler.t
-        -> error_handler:Server_intf.error_handler
-        -> Server_intf.connection_handler
+    let create_connection_handler ~config ~request_handler ~error_handler
+        : Server_intf.connection_handler
       =
-     fun ~config ~request_handler ~error_handler ->
-      ();
-      fun ~sw fd sockaddr ->
-        let request_handler = make_request_handler ~sw ~fd request_handler in
-        let error_handler = make_error_handler ~fd error_handler in
-        create_connection_handler
-          ~config:(Server_config.to_http1_config config)
-          ~request_handler
-          ~error_handler
-          sockaddr
-          fd
+     fun ~sw fd sockaddr ->
+      let request_handler = make_request_handler ~sw ~fd request_handler in
+      let error_handler = make_error_handler ~fd error_handler in
+      create_connection_handler
+        ~config:(Server_config.to_http1_config config)
+        ~request_handler
+        ~error_handler
+        sockaddr
+        fd
   end
 end
 
