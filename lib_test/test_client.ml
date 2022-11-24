@@ -436,7 +436,14 @@ let test_https_client_certs ~sw env () =
 
 let test_h2c ~sw env () =
   let network = Eio.Stdenv.net env in
-  let server = Helper_server.H2c.listen ~sw ~network 9000 in
+  let server =
+    Helper_server.H2c.listen
+      ~sw
+      ~network
+      ~bind_to_address:Eio.Net.Ipaddr.V4.loopback
+      ~port:9000
+      ~backlog:128
+  in
   (* Not configured to follow the h2c upgrade *)
   let response =
     Client.Oneshot.get

@@ -785,6 +785,9 @@ module Server : sig
             (** Specifies whether to flush message headers to the transport
                 immediately, or if Piaf should wait for the first body bytes to
                 be written. Defaults to [false]. *)
+      ; backlog : int
+            (** The maximum length of the queue of pending connections. *)
+      ; address : Eio.Net.Ipaddr.v4v6  (** The address to listen on. *)
       }
 
     val create
@@ -796,6 +799,8 @@ module Server : sig
       -> ?buffer_size:int
       -> ?body_buffer_size:int
       -> ?flush_headers_immediately:bool
+      -> ?backlog:int
+      -> ?address:Eio.Net.Ipaddr.v4v6
       -> int
       -> t
   end
@@ -856,20 +861,15 @@ module Server : sig
     type server := t
     type t
 
-    val start
-      :  ?bind_to_address:Eio.Net.Ipaddr.v4v6
-      -> sw:Eio.Switch.t
-      -> Eio.Stdenv.t
-      -> server
-      -> t
-
+    val start : sw:Eio.Switch.t -> Eio.Stdenv.t -> server -> t
     val shutdown : t -> unit
 
     val listen
-      :  ?bind_to_address:Eio.Net.Ipaddr.v4v6
-      -> sw:Eio.Switch.t
+      :  sw:Eio.Switch.t
       -> network:Eio.Net.t
+      -> bind_to_address:Eio.Net.Ipaddr.v4v6
       -> port:int
+      -> backlog:int
       -> connection_handler
       -> t
     (** [listen ~sw ?bind_to_address ~network ~port connection_handler] starts a

@@ -190,13 +190,7 @@ module Command = struct
 
   let shutdown t = t.resolver ()
 
-  let listen
-      ?(bind_to_address = Eio.Net.Ipaddr.V4.loopback)
-      ~sw
-      ~network
-      ~port
-      connection_handler
-    =
+  let listen ~sw ~network ~bind_to_address ~port ~backlog connection_handler =
     let command_p, command_u = Promise.create () in
     let released_p, released_u = Promise.create () in
     Fiber.fork ~sw (fun () ->
@@ -222,7 +216,7 @@ module Command = struct
                   Eio.Net.listen
                     ~reuse_addr:true
                     ~reuse_port:true
-                    ~backlog:10_000
+                    ~backlog
                     ~sw
                     network
                     address
@@ -243,14 +237,20 @@ module Command = struct
             Promise.resolve command_u command));
     Promise.await command_p
 
-  let start ?bind_to_address ~sw env server =
+  let start ~sw env server =
     let { config; _ } = server in
     let network = Eio.Stdenv.net env in
     let clock = Eio.Stdenv.clock env in
     (* TODO(anmonteiro): config option to listen only in HTTPS? *)
     let connection_handler = http_connection_handler server in
     let ({ resolver = http_resolver; _ } as command) =
-      listen ?bind_to_address ~sw ~network ~port:config.port connection_handler
+      listen
+        ~bind_to_address:config.address
+        ~sw
+        ~network
+        ~port:config.port
+        ~backlog:config.backlog
+        connection_handler
     in
     match config.https with
     | None -> command
@@ -262,7 +262,13 @@ module Command = struct
           { server with config = { server.config with https = Some https } }
       in
       let { resolver = https_resolver; _ } =
-        listen ?bind_to_address ~sw ~network ~port:https.port connection_handler
+        listen
+          ~bind_to_address:config.address
+          ~sw
+          ~network
+          ~port:https.port
+          ~backlog:config.backlog
+          connection_handler
       in
       { command with
         resolver =

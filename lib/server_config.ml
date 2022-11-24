@@ -62,6 +62,9 @@ type t =
         (** Specifies whether to flush message headers to the transport
             immediately, or if Piaf should wait for the first body bytes to be
             written. Defaults to [false]. *)
+  ; backlog : int
+        (** The maximum length of the queue of pending connections. *)
+  ; address : Eio.Net.Ipaddr.v4v6  (** The address to listen on. *)
   }
 
 let create
@@ -73,6 +76,8 @@ let create
     ?(buffer_size = 0x4000)
     ?(body_buffer_size = 0x1000)
     ?(flush_headers_immediately = false)
+    ?(backlog = 128)
+    ?(address = Eio.Net.Ipaddr.V4.loopback)
     port
   =
   { port
@@ -86,6 +91,8 @@ let create
   ; (* TODO: we don't really support push yet. *)
     enable_http2_server_push = false
   ; flush_headers_immediately
+  ; backlog
+  ; address
   }
 
 let to_http1_config { body_buffer_size; buffer_size; _ } =

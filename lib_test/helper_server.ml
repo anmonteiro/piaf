@@ -34,11 +34,13 @@ let request_handler { Server.request; _ } =
   | _ -> assert false
 
 module HTTP = struct
-  let listen ~sw ~network port =
+  let listen ~sw ~network ~bind_to_address ~backlog port =
     Server.Command.listen
       ~sw
+      ~bind_to_address
       ~port
       ~network
+      ~backlog
       (Server.http_connection_handler
          (Server.create ~config:(Server.Config.create port) request_handler))
 end
@@ -108,15 +110,23 @@ module ALPN = struct
       ?(check_client_cert = false)
       ?(certfile = "server.pem")
       ?(certkey = "server.key")
+      ~bind_to_address
       ~sw
       ~network
+      ~backlog
       port
     =
     let ca = cert_path // "ca.pem" in
     let cert = cert_path // certfile in
     let priv_key = cert_path // certkey in
 
-    Server.Command.listen ~sw ~network ~port (fun ~sw:_ fd client_addr ->
+    Server.Command.listen
+      ~bind_to_address
+      ~sw
+      ~network
+      ~port
+      ~backlog
+      (fun ~sw:_ fd client_addr ->
         let server_ctx = Ssl.create_context Ssl.TLSv1_3 Ssl.Server_context in
         Ssl.disable_protocols server_ctx [ Ssl.SSLv23; Ssl.TLSv1_1 ];
         Ssl.load_verify_locations server_ctx ca "";
@@ -155,11 +165,15 @@ let listen
     ?(check_client_cert = false)
     ?(certfile = "server.pem")
     ?(certkey = "server.key")
+    ?(bind_to_address = Eio.Net.Ipaddr.V4.loopback)
+    ?(backlog = 128)
     ~sw
     ~network
     ()
   =
-  let http_server () = HTTP.listen ~sw ~network http_port in
+  let http_server () =
+    HTTP.listen ~sw ~network ~bind_to_address ~backlog http_port
+  in
   let https_server () =
     ALPN.https_server
       ~sw
@@ -167,6 +181,8 @@ let listen
       ~check_client_cert
       ~certfile
       ~certkey
+      ~bind_to_address
+      ~backlog
       https_port
   in
   let server, https_server = Fiber.pair http_server https_server in
@@ -215,11 +231,13 @@ module H2c = struct
       in
       Response.Upgrade.generic ~headers (upgrade_handler client_address request)
 
-  let listen ~sw ~network port =
+  let listen ~sw ~network ~bind_to_address ~port ~backlog =
     Server.Command.listen
       ~sw
       ~network
+      ~bind_to_address
       ~port
+      ~backlog
       (Server.http_connection_handler
          (Server.create ~config:(Server.Config.create port) connection_handler))
 
