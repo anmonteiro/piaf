@@ -56,14 +56,14 @@ let
           "piaf.opam"
           "dune-project"
           "dune"
-        ] ++ (builtins.map inDirectory [
           "lib"
           "lib_test"
           "multipart"
           "multipart_test"
+          "sendfile"
           "stream"
           "examples"
-        ]);
+        ];
       };
 
       buildPhase = ''
