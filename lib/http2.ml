@@ -156,15 +156,15 @@ end = struct
            option)
   end
 
+  module HttpServer = struct
+    module Reqd = Reqd
+    module Body = Body
+  end
+
   let make_error_handler ~fd error_handler
       : Eio.Net.Sockaddr.stream -> H2.Server_connection.error_handler
     =
    fun client_addr ?request error start_response ->
-    let module HttpServer = struct
-      module Reqd = Reqd
-      module Body = Body
-    end
-    in
     let start_response headers = start_response headers in
     Http_server_impl.handle_error
       ?request:(Option.map Request.of_h2 request)
@@ -195,11 +195,6 @@ end = struct
         (H2.Reqd.request_body reqd)
     in
     let request = Request.of_h2 ~body:request_body request in
-    let module HttpServer = struct
-      module Reqd = Reqd
-      module Body = Body
-    end
-    in
     let descriptor =
       Http_server_impl.create_descriptor
         (module HttpServer)
@@ -216,23 +211,18 @@ end = struct
     include H2_eio.Server
     module Reqd = Reqd
 
-    let create_connection_handler
-        :  config:Server_config.t
-        -> request_handler:Request_info.t Server_intf.Handler.t
-        -> error_handler:Server_intf.error_handler
-        -> Server_intf.connection_handler
+    let create_connection_handler ~config ~request_handler ~error_handler
+        : Server_intf.connection_handler
       =
-     fun ~config ~request_handler ~error_handler ->
-      ();
-      fun ~sw fd sockaddr ->
-        let request_handler = make_request_handler ~sw ~fd request_handler in
-        let error_handler = make_error_handler ~fd error_handler in
-        H2_eio.Server.create_connection_handler
-          ~config:(Server_config.to_http2_config config)
-          ~request_handler
-          ~error_handler
-          sockaddr
-          fd
+     fun ~sw fd sockaddr ->
+      let request_handler = make_request_handler ~sw ~fd request_handler in
+      let error_handler = make_error_handler ~fd error_handler in
+      H2_eio.Server.create_connection_handler
+        ~config:(Server_config.to_http2_config config)
+        ~request_handler
+        ~error_handler
+        sockaddr
+        fd
   end
 end
 
