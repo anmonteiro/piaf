@@ -41,8 +41,7 @@ module Log = (val Logs.src_log src : Logs.LOG)
 type t =
   { mutable conn : Connection.t
   ; config : Config.t
-  ; clock : Eio.Time.clock
-  ; network : Eio.Net.t
+  ; env : Eio.Stdenv.t
   ; sw : Switch.t
   }
 
@@ -140,8 +139,10 @@ let create_https_connection
     ~fd
     (ssl_client :> Eio.Flow.two_way)
 
-let open_connection ~sw ~config ~clock ~network ~uri conn_info =
-  let*! socket = Connection.connect ~sw ~config ~clock ~network conn_info in
+let open_connection ~sw ~config ~uri env conn_info =
+  let clock = Eio.Stdenv.clock env in
+  let network = Eio.Stdenv.net env in
+  let*! socket = Connection.connect ~sw ~clock ~network ~config conn_info in
   if config.Config.tcp_nodelay
   then (
     Unix.setsockopt (Eio_unix.FD.peek_opt socket |> Option.get) TCP_NODELAY true;
@@ -168,16 +169,10 @@ let shutdown_conn (Connection.Conn { impl; connection; info; fd; _ }) =
   Http_impl.shutdown (module (val impl)) ~fd connection
 
 let change_connection t (conn_info : Connection_info.t) =
-  let { sw; conn; _ } = t in
+  let { sw; conn; env; _ } = t in
   Fiber.fork ~sw (fun () -> shutdown_conn conn);
   let+! conn' =
-    open_connection
-      ~sw
-      ~config:t.config
-      ~clock:t.clock
-      ~network:t.network
-      ~uri:conn_info.uri
-      conn_info
+    open_connection ~sw ~config:t.config ~uri:conn_info.uri env conn_info
   in
   t.conn <- conn'
 
@@ -441,12 +436,8 @@ let rec send_request_and_handle_response
 
 let create ?(config = Config.default) ~sw env uri =
   let*! conn_info = Connection_info.of_uri uri in
-  let clock = Eio.Stdenv.clock env in
-  let network = Eio.Stdenv.net env in
-  match
-    open_connection ~config ~sw ~clock ~network ~uri:conn_info.uri conn_info
-  with
-  | Ok conn -> Ok { conn; config; clock; network; sw }
+  match open_connection ~config ~sw ~uri:conn_info.uri env conn_info with
+  | Ok conn -> Ok { conn; config; env; sw }
   | Error (#Error.client as err) -> Error err
 
 let call t ~meth ?(headers = []) ?(body = Body.empty) target =
