@@ -10,8 +10,9 @@ val listen
   -> ?certkey:string
   -> ?bind_to_address:Eio.Net.Ipaddr.v4v6
   -> ?backlog:int
+  -> ?domains:int
   -> sw:Eio.Switch.t
-  -> network:Eio.Net.t
+  -> env:Eio.Stdenv.t
   -> unit
   -> t
 
@@ -22,10 +23,11 @@ module H2c : sig
 
   val listen
     :  sw:Eio.Switch.t
-    -> network:Eio.Net.t
+    -> env:Eio.Stdenv.t
     -> bind_to_address:Eio.Net.Ipaddr.v4v6
     -> port:int
     -> backlog:int
+    -> domains:int
     -> t
 
   val teardown : t -> unit
