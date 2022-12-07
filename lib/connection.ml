@@ -129,7 +129,7 @@ module Info = struct
     | _, (Error _ as error) -> error
 end
 
-let connect ~sw ~clock ~config ~network conn_info =
+let connect ~sw ~clock ~network ~config conn_info =
   let { Info.addresses; _ } = conn_info in
   (* TODO: try addresses in e.g. a round robin fashion? *)
   let address = List.hd addresses in
