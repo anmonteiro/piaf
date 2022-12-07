@@ -180,16 +180,14 @@ module Command = struct
   type connection_handler = Server_intf.connection_handler
 
   type nonrec t =
-    { socket : Eio.Net.listening_socket
-    ; ssl_socket : Eio.Net.listening_socket option
-    ; shutdown_resolvers : (unit -> unit) list ref
+    { sockets : Eio.Net.listening_socket list
+    ; shutdown_resolvers : (unit -> unit) list
     }
 
-  let shutdown { socket; ssl_socket; shutdown_resolvers } =
+  let shutdown { sockets; shutdown_resolvers } =
     Log.info (fun m -> m "Starting server teardown...");
-    List.iter (fun resolver -> resolver ()) !shutdown_resolvers;
-    Eio.Net.close socket;
-    Option.iter Eio.Net.close ssl_socket;
+    List.iter (fun resolver -> resolver ()) shutdown_resolvers;
+    List.iter Eio.Net.close sockets;
     Log.info (fun m -> m "Server teardown finished")
 
   let accept_loop ~sw ~socket connection_handler =
@@ -243,7 +241,7 @@ module Command = struct
     done;
     Promise.await all_started;
     Log.info (fun m -> m "Server listening on port %d" port);
-    { socket; ssl_socket = None; shutdown_resolvers = resolvers }
+    { sockets = [ socket ]; shutdown_resolvers = !resolvers }
 
   let start ~sw env server =
     let { config; _ } = server in
@@ -263,12 +261,7 @@ module Command = struct
     match config.https with
     | None -> command
     | Some https ->
-      let connection_handler =
-        https_connection_handler
-          ~clock
-          ~https
-          { server with config = { server.config with https = Some https } }
-      in
+      let connection_handler = https_connection_handler ~clock ~https server in
       let https_command =
         listen
           ~bind_to_address:config.address
@@ -279,10 +272,8 @@ module Command = struct
           env
           connection_handler
       in
-      { command with
-        ssl_socket = Some https_command.socket
+      { sockets = https_command.sockets @ command.sockets
       ; shutdown_resolvers =
-          ref
-            (!(command.shutdown_resolvers) @ !(https_command.shutdown_resolvers))
+          command.shutdown_resolvers @ https_command.shutdown_resolvers
       }
 end

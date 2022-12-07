@@ -30,8 +30,5 @@ let () =
   setup_log (Some Info);
   Eio_main.run (fun env ->
       Switch.run (fun sw ->
-          let command = start ~sw env in
-          Fiber.fork ~sw (fun () ->
-              let clock = Eio.Stdenv.clock env in
-              Eio.Time.sleep clock 3.;
-              Server.Command.shutdown command)))
+          let _command = start ~sw env in
+          ()))
