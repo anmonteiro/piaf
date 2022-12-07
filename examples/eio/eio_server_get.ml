@@ -1,5 +1,5 @@
 open Piaf
-open Eio
+open Eio.Std
 
 let connection_handler (params : Request_info.t Server.ctx) =
   match params.request with
@@ -8,16 +8,17 @@ let connection_handler (params : Request_info.t Server.ctx) =
     let headers = Headers.of_list [ "connection", "close" ] in
     Response.of_string ~headers `Method_not_allowed ~body:""
 
-let run ~host ~port env handler =
-  Switch.run @@ fun sw ->
-  let config = Server.Config.create ~address:host ~buffer_size:0x1000 port in
+let run ~sw ~host ~port env handler =
+  let config =
+    Server.Config.create ~address:host ~buffer_size:0x1000 ~domains:1 port
+  in
   let server = Server.create ~config handler in
-  let _command = Server.Command.start ~sw env server in
-  Logs.info (fun m -> m "Server listening on port %d" port)
+  let command = Server.Command.start ~sw env server in
+  command
 
-let start env =
-  let host = Net.Ipaddr.V4.loopback in
-  run ~host ~port:8080 env connection_handler
+let start ~sw env =
+  let host = Eio.Net.Ipaddr.V4.loopback in
+  run ~sw ~host ~port:8080 env connection_handler
 
 let setup_log ?style_renderer level =
   Logs_threaded.enable ();
@@ -26,5 +27,11 @@ let setup_log ?style_renderer level =
   Logs.set_reporter (Logs_fmt.reporter ())
 
 let () =
-  setup_log (Some Debug);
-  Eio_main.run start
+  setup_log (Some Info);
+  Eio_main.run (fun env ->
+      Switch.run (fun sw ->
+          let command = start ~sw env in
+          Fiber.fork ~sw (fun () ->
+              let clock = Eio.Stdenv.clock env in
+              Eio.Time.sleep clock 3.;
+              Server.Command.shutdown command)))
