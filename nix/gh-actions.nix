@@ -22,7 +22,7 @@ let
   job =
     { steps
     , ocamlVersions ? [
-        "5_00"
+        "5_0"
       ]
     , ...
     }@attrs: (builtins.removeAttrs attrs [ "ocamlVersions" ]) // {
@@ -65,11 +65,11 @@ gh-actions.cachedBuild {
   os = {
     macos-latest = {
       name = "Run nix-build";
-      ocamlVersions = [ "5_00" ];
+      ocamlVersions = [ "5_0" ];
       run = "nix-build ./nix/ci/test.nix -A native --argstr ocamlVersion \${{ matrix.ocamlVersion }}";
     };
     ubuntu-latest = {
-      ocamlVersions = [ "5_00" ];
+      ocamlVersions = [ "5_0" ];
       name = "Run nix-build";
       run = "nix-build ./nix/ci/test.nix -A native -A musl64 --argstr ocamlVersion \${{ matrix.ocamlVersion }}";
     };
