@@ -181,7 +181,7 @@ let change_connection t (conn_info : Connection_info.t) =
   in
   t.conn <- conn'
 
-let shutdown { conn; _ } = shutdown_conn conn
+let shutdown t = shutdown_conn t.conn
 
 (* returns true if it succeeding in reusing the connection, false otherwise. *)
 let reuse_or_set_up_new_connection
@@ -532,12 +532,12 @@ module Oneshot = struct
       send_request_and_handle_response t ~body request_info
     in
     Fiber.fork ~sw (fun () ->
-        let response = response_result in
-        match response with
+        (match response_result with
         | Ok { Response.body; _ } ->
-          let _body_closed : _ result = Body.closed body in
-          shutdown t
+          ignore (Body.closed body : (unit, Error.t) result)
         | Error _ -> ());
+
+        shutdown t);
     response_result
 
   let request ?config ?headers ?body ~sw env ~meth uri =
