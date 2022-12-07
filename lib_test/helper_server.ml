@@ -39,9 +39,9 @@ module HTTP = struct
       ~sw
       ~bind_to_address
       ~port
-      ~env
       ~backlog
       ~domains
+      env
       (Server.http_connection_handler
          (Server.create ~config:(Server.Config.create port) request_handler))
 end
@@ -125,10 +125,10 @@ module ALPN = struct
     Server.Command.listen
       ~bind_to_address
       ~sw
-      ~env
       ~port
       ~backlog
       ~domains
+      env
       (fun ~sw:_ fd client_addr ->
         let server_ctx = Ssl.create_context Ssl.TLSv1_3 Ssl.Server_context in
         Ssl.disable_protocols server_ctx [ Ssl.SSLv23; Ssl.TLSv1_1 ];
@@ -239,11 +239,11 @@ module H2c = struct
   let listen ~sw ~env ~bind_to_address ~port ~backlog ~domains =
     Server.Command.listen
       ~sw
-      ~env
       ~bind_to_address
       ~port
       ~backlog
       ~domains
+      env
       (Server.http_connection_handler
          (Server.create ~config:(Server.Config.create port) connection_handler))
 

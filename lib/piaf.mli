@@ -868,11 +868,11 @@ module Server : sig
 
     val listen
       :  sw:Eio.Switch.t
-      -> env:Eio.Stdenv.t
       -> bind_to_address:Eio.Net.Ipaddr.v4v6
       -> port:int
       -> backlog:int
       -> domains:int
+      -> Eio.Stdenv.t
       -> connection_handler
       -> t
     (** [listen ~sw ?bind_to_address ~network ~port connection_handler] starts a

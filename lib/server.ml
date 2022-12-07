@@ -177,70 +177,37 @@ module Command = struct
   exception Server_shutdown
 
   type connection_handler = Server_intf.connection_handler
+  type nonrec t = (unit -> unit) list ref
 
-  type nonrec t =
-    { network : Eio.Net.t
-    ; http_address : Eio.Net.Sockaddr.stream
-    ; resolver : unit -> unit
-    ; https_address : Eio.Net.Sockaddr.stream option
-    }
+  let shutdown resolvers =
+    Log.info (fun m -> m "Starting server teardown...");
+    List.iter (fun resolver -> resolver ()) !resolvers;
+    Log.info (fun m -> m "Server teardown finished")
 
-  let create ~network ~address ~resolver =
-    { network; http_address = address; resolver; https_address = None }
-
-  let shutdown t = t.resolver ()
-
-  let run ~sw ~network ~port ~address ~socket connection_handler =
-    let command_p, command_u = Promise.create () in
+  let accept_loop ~sw ~socket connection_handler =
     let released_p, released_u = Promise.create () in
+    let await_release () = Promise.await released_p in
     Fiber.fork ~sw (fun () ->
-        Fiber.fork_sub
-          ~sw
-          ~on_error:(function
-            | Server_shutdown ->
-              Eio.Net.close socket;
-              Log.debug (fun m -> m "Server teardown finished")
-            | exn -> raise exn)
-          (fun sw ->
-            Switch.on_release sw (fun () -> Promise.resolve released_u ());
-            let resolver () =
-              Log.debug (fun m ->
-                  m "Starting server teardown on port %d..." port);
-              Switch.fail sw Server_shutdown;
-              Promise.await released_p
-            in
+        while not (Promise.is_resolved released_p) do
+          Fiber.first await_release (fun () ->
+              Eio.Net.accept_fork
+                socket
+                ~sw
+                ~on_error:(fun exn ->
+                  Log.err (fun m ->
+                      m
+                        "Error in connection handler: %s"
+                        (Printexc.to_string exn)))
+                (fun socket addr ->
+                  Switch.run (fun sw -> connection_handler ~sw socket addr)))
+        done);
+    fun () -> Promise.resolve released_u ()
 
-            let command = create ~network ~address ~resolver in
-            Fiber.fork ~sw (fun () ->
-                Log.info (fun m -> m "Server listening on port %d" port);
-                while true do
-                  Eio.Net.accept_fork
-                    socket
-                    ~sw
-                    ~on_error:(fun exn ->
-                      Log.err (fun m ->
-                          m
-                            "Error in connection handler: %s"
-                            (Printexc.to_string exn)))
-                    (fun socket addr ->
-                      Switch.run (fun sw -> connection_handler ~sw socket addr))
-                done);
-            Promise.resolve command_u command));
-    Promise.await command_p
-
-  let listen
-      ~sw
-      ~env
-      ~bind_to_address
-      ~port
-      ~backlog
-      ~domains
-      connection_handler
+  let listen ~sw ~bind_to_address ~port ~backlog ~domains env connection_handler
     =
     let domain_mgr = Eio.Stdenv.domain_mgr env in
     let network = Eio.Stdenv.net env in
     let address = `Tcp (bind_to_address, port) in
-    Logs.err (fun m -> m "Listening on %d" port);
     let socket =
       Eio.Net.listen
         ~reuse_addr:true
@@ -250,34 +217,43 @@ module Command = struct
         network
         address
     in
-    for _ = 2 to domains do
+    let resolvers = ref [] in
+    let all_started, resolve_all_started = Promise.create () in
+    for idx = 0 to domains - 1 do
       Eio.Fiber.fork ~sw (fun () ->
-          Eio.Domain_manager.run domain_mgr (fun () ->
-              Switch.run @@ fun sw ->
-              let _ =
-                run ~sw ~network ~port ~address ~socket connection_handler
-              in
-              ()))
+          let is_last_domain = idx = domains - 1 in
+          let run_accept_loop () =
+            Switch.run (fun sw ->
+                let resolver = accept_loop ~sw ~socket connection_handler in
+                resolvers := resolver :: !resolvers;
+                if is_last_domain then Promise.resolve resolve_all_started ())
+          in
+          (* Last domain starts on the main thread. *)
+          if is_last_domain
+          then run_accept_loop ()
+          else Eio.Domain_manager.run domain_mgr run_accept_loop)
     done;
-    run ~sw ~network ~port ~address ~socket connection_handler
+    Promise.await all_started;
+    Log.info (fun m -> m "Server listening on port %d" port);
+    resolvers
 
   let start ~sw env server =
     let { config; _ } = server in
     let clock = Eio.Stdenv.clock env in
     (* TODO(anmonteiro): config option to listen only in HTTPS? *)
     let connection_handler = http_connection_handler server in
-    let ({ resolver = http_resolver; _ } as command) =
+    let http_resolvers =
       listen
         ~bind_to_address:config.address
         ~sw
-        ~env
         ~port:config.port
         ~backlog:config.backlog
         ~domains:config.domains
+        env
         connection_handler
     in
     match config.https with
-    | None -> command
+    | None -> http_resolvers
     | Some https ->
       let connection_handler =
         https_connection_handler
@@ -285,20 +261,15 @@ module Command = struct
           ~https
           { server with config = { server.config with https = Some https } }
       in
-      let { resolver = https_resolver; _ } =
+      let https_resolvers =
         listen
           ~bind_to_address:config.address
           ~sw
-          ~env
           ~port:https.port
           ~backlog:config.backlog
           ~domains:config.domains
+          env
           connection_handler
       in
-      { command with
-        resolver =
-          (fun () ->
-            http_resolver ();
-            https_resolver ())
-      }
+      ref (!http_resolvers @ !https_resolvers)
 end
