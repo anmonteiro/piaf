@@ -1,31 +1,24 @@
 open Piaf
-open Eio
+open Eio.Std
 
 let recommended_domain_count = Domain.recommended_domain_count ()
 
-let connection_handler (params : Request_info.t Server.ctx) =
-  match params.request with
-  | { Request.meth = `GET; _ } -> Response.of_string ~body:"Hello World" `OK
-  | _ ->
-    let headers = Headers.of_list [ "connection", "close" ] in
-    Response.of_string ~headers `Method_not_allowed ~body:""
-
-let run ~host ~port env handler =
-  Switch.run @@ fun sw ->
-  let config =
-    Server.Config.create
-      ~address:host
-      ~buffer_size:0x1000
-      ~domains:recommended_domain_count
-      port
-  in
-  let server = Server.create ~config handler in
-  let _command = Server.Command.start ~sw env server in
-  Logs.info (fun m -> m "Server listening on port %d" port)
+let connection_handler (_ : Request_info.t Server.ctx) =
+  Response.of_string ~body:"Hello World" `OK
 
 let start env =
-  let host = Net.Ipaddr.V4.loopback in
-  run ~host ~port:8080 env connection_handler
+  let host = Eio.Net.Ipaddr.V4.loopback
+  and port = 8080 in
+  Switch.run (fun sw ->
+      let config =
+        Server.Config.create
+          ~address:host
+          ~buffer_size:0x1000
+          ~domains:recommended_domain_count
+          port
+      in
+      let server = Server.create ~config connection_handler in
+      ignore (Server.Command.start ~sw env server : Server.Command.t))
 
 let setup_log ?style_renderer level =
   Logs_threaded.enable ();
@@ -35,4 +28,4 @@ let setup_log ?style_renderer level =
 
 let () =
   setup_log (Some Info);
-  Eio_main.run (fun env -> start env)
+  Eio_main.run start
