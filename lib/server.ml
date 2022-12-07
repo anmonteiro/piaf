@@ -153,7 +153,8 @@ let https_connection_handler ~https ~clock t : connection_handler =
         ~timeout:config.accept_timeout
         socket
     with
-    | Error (`Exn exn) -> Format.eprintf "EXN: %s@." (Printexc.to_string exn)
+    | Error (`Exn exn) ->
+      Format.eprintf "Accept EXN: %s@." (Printexc.to_string exn)
     | Error (`Connect_error string) ->
       Format.eprintf "CONNECT ERROR: %s@." string
     | Ok { Openssl.socket = ssl_server; alpn_version } ->
@@ -177,11 +178,18 @@ module Command = struct
   exception Server_shutdown
 
   type connection_handler = Server_intf.connection_handler
-  type nonrec t = (unit -> unit) list ref
 
-  let shutdown resolvers =
+  type nonrec t =
+    { socket : Eio.Net.listening_socket
+    ; ssl_socket : Eio.Net.listening_socket option
+    ; shutdown_resolvers : (unit -> unit) list ref
+    }
+
+  let shutdown { socket; ssl_socket; shutdown_resolvers } =
     Log.info (fun m -> m "Starting server teardown...");
-    List.iter (fun resolver -> resolver ()) !resolvers;
+    List.iter (fun resolver -> resolver ()) !shutdown_resolvers;
+    Eio.Net.close socket;
+    Option.iter Eio.Net.close ssl_socket;
     Log.info (fun m -> m "Server teardown finished")
 
   let accept_loop ~sw ~socket connection_handler =
@@ -235,14 +243,14 @@ module Command = struct
     done;
     Promise.await all_started;
     Log.info (fun m -> m "Server listening on port %d" port);
-    resolvers
+    { socket; ssl_socket = None; shutdown_resolvers = resolvers }
 
   let start ~sw env server =
     let { config; _ } = server in
     let clock = Eio.Stdenv.clock env in
     (* TODO(anmonteiro): config option to listen only in HTTPS? *)
     let connection_handler = http_connection_handler server in
-    let http_resolvers =
+    let command =
       listen
         ~bind_to_address:config.address
         ~sw
@@ -253,7 +261,7 @@ module Command = struct
         connection_handler
     in
     match config.https with
-    | None -> http_resolvers
+    | None -> command
     | Some https ->
       let connection_handler =
         https_connection_handler
@@ -261,7 +269,7 @@ module Command = struct
           ~https
           { server with config = { server.config with https = Some https } }
       in
-      let https_resolvers =
+      let https_command =
         listen
           ~bind_to_address:config.address
           ~sw
@@ -271,5 +279,10 @@ module Command = struct
           env
           connection_handler
       in
-      ref (!http_resolvers @ !https_resolvers)
+      { command with
+        ssl_socket = Some https_command.socket
+      ; shutdown_resolvers =
+          ref
+            (!(command.shutdown_resolvers) @ !(https_command.shutdown_resolvers))
+      }
 end

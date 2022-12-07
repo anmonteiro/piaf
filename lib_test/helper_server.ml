@@ -154,9 +154,8 @@ module ALPN = struct
              * protocol that we didn't specify. *)
             assert false
         with
-        (* | Eio.Cancel.Cancelled _ -> () *)
         | exn ->
-          Format.eprintf "EXN: %s@." (Printexc.to_string exn);
+          Format.eprintf "Accept EXN: %s@." (Printexc.to_string exn);
           raise exn)
 end
 
