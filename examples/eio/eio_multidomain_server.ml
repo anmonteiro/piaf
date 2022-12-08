@@ -12,10 +12,9 @@ let start env =
   Switch.run (fun sw ->
       let config =
         Server.Config.create
-          ~address:host
           ~buffer_size:0x1000
           ~domains:recommended_domain_count
-          port
+          (`Tcp (host, port))
       in
       let server = Server.create ~config connection_handler in
       ignore (Server.Command.start ~sw env server : Server.Command.t))

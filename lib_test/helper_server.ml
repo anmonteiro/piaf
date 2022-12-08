@@ -34,16 +34,15 @@ let request_handler { Server.request; _ } =
   | _ -> assert false
 
 module HTTP = struct
-  let listen ~sw ~env ~bind_to_address ~backlog ~domains port =
+  let listen ~sw ~env ~backlog ~domains address =
     Server.Command.listen
       ~sw
-      ~bind_to_address
-      ~port
       ~backlog
       ~domains
+      ~address
       env
       (Server.http_connection_handler
-         (Server.create ~config:(Server.Config.create port) request_handler))
+         (Server.create ~config:(Server.Config.create address) request_handler))
 end
 
 module ALPN = struct
@@ -111,21 +110,19 @@ module ALPN = struct
       ?(check_client_cert = false)
       ?(certfile = "server.pem")
       ?(certkey = "server.key")
-      ~bind_to_address
       ~sw
       ~env
       ~backlog
       ~domains
-      port
+      address
     =
     let ca = cert_path // "ca.pem" in
     let cert = cert_path // certfile in
     let priv_key = cert_path // certkey in
 
     Server.Command.listen
-      ~bind_to_address
       ~sw
-      ~port
+      ~address
       ~backlog
       ~domains
       env
@@ -162,21 +159,18 @@ end
 type t = Server.Command.t * Server.Command.t
 
 let listen
-    ?(http_port = 8080)
-    ?(https_port = 9443)
+    ?(http_address = `Tcp (Eio.Net.Ipaddr.V4.loopback, 8080))
+    ?(https_address = `Tcp (Eio.Net.Ipaddr.V4.loopback, 9443))
     ?(check_client_cert = false)
     ?(certfile = "server.pem")
     ?(certkey = "server.key")
-    ?(bind_to_address = Eio.Net.Ipaddr.V4.loopback)
     ?(backlog = 128)
     ?(domains = 1)
     ~sw
     ~env
     ()
   =
-  let http_server () =
-    HTTP.listen ~sw ~env ~bind_to_address ~backlog ~domains http_port
-  in
+  let http_server () = HTTP.listen ~sw ~env ~backlog ~domains http_address in
   let https_server () =
     ALPN.https_server
       ~sw
@@ -184,10 +178,9 @@ let listen
       ~check_client_cert
       ~certfile
       ~certkey
-      ~bind_to_address
       ~backlog
       ~domains
-      https_port
+      https_address
   in
   let server, https_server = Fiber.pair http_server https_server in
   server, https_server
@@ -235,16 +228,17 @@ module H2c = struct
       in
       Response.Upgrade.generic ~headers (upgrade_handler client_address request)
 
-  let listen ~sw ~env ~bind_to_address ~port ~backlog ~domains =
+  let listen ~sw ~env ~backlog ~domains address =
     Server.Command.listen
       ~sw
-      ~bind_to_address
-      ~port
       ~backlog
       ~domains
+      ~address
       env
       (Server.http_connection_handler
-         (Server.create ~config:(Server.Config.create port) connection_handler))
+         (Server.create
+            ~config:(Server.Config.create address)
+            connection_handler))
 
   let teardown = Server.Command.shutdown
 end

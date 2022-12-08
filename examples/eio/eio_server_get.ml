@@ -10,7 +10,7 @@ let connection_handler (params : Request_info.t Server.ctx) =
 
 let run ~sw ~host ~port env handler =
   let config =
-    Server.Config.create ~address:host ~buffer_size:0x1000 ~domains:1 port
+    Server.Config.create ~buffer_size:0x1000 ~domains:1 (`Tcp (host, port))
   in
   let server = Server.create ~config handler in
   let command = Server.Command.start ~sw env server in

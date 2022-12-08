@@ -734,7 +734,7 @@ module Server : sig
   module Config : sig
     module HTTPS : sig
       type t =
-        { port : int
+        { address : Eio.Net.Sockaddr.stream
         ; certificate : Cert.t * Cert.t (* Server certificate and private key *)
         ; cacert : Cert.t option
               (** Either the certificates string or path to a file with
@@ -756,14 +756,13 @@ module Server : sig
         -> ?max_tls_version:Versions.TLS.t
         -> ?allow_insecure:bool
         -> ?enforce_client_cert:bool
-        -> port:int
+        -> address:Eio.Net.Sockaddr.stream
         -> Cert.t * Cert.t
         -> t
     end
 
     type t =
-      { port : int
-      ; max_http_version : Versions.HTTP.t
+      { max_http_version : Versions.HTTP.t
             (** Use this as the highest HTTP version when sending requests *)
       ; https : HTTPS.t option
       ; h2c_upgrade : bool
@@ -787,7 +786,7 @@ module Server : sig
                 be written. Defaults to [false]. *)
       ; backlog : int
             (** The maximum length of the queue of pending connections. *)
-      ; address : Eio.Net.Ipaddr.v4v6  (** The address to listen on. *)
+      ; address : Eio.Net.Sockaddr.stream  (** The address to listen on. *)
       ; domains : int  (** The number of domains to use. *)
       }
 
@@ -801,9 +800,8 @@ module Server : sig
       -> ?body_buffer_size:int
       -> ?flush_headers_immediately:bool
       -> ?backlog:int
-      -> ?address:Eio.Net.Ipaddr.v4v6
       -> ?domains:int
-      -> int
+      -> Eio.Net.Sockaddr.stream
       -> t
   end
 
@@ -868,8 +866,7 @@ module Server : sig
 
     val listen
       :  sw:Eio.Switch.t
-      -> bind_to_address:Eio.Net.Ipaddr.v4v6
-      -> port:int
+      -> address:Eio.Net.Sockaddr.stream
       -> backlog:int
       -> domains:int
       -> Eio.Stdenv.t

@@ -35,9 +35,9 @@ let main port =
              ~cacert:(Filepath ca)
                (* ~allow_insecure:true *)
                (* ~enforce_client_cert:true *)
-             ~port:9443
+             ~address:(`Tcp (Eio.Net.Ipaddr.V4.loopback, 9443))
              (Filepath cert, Filepath priv_key))
-        port)
+        (`Tcp (Eio.Net.Ipaddr.V4.loopback, port)))
   in
   Eio_main.run (fun env ->
       Switch.run (fun sw ->
