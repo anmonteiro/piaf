@@ -24,7 +24,9 @@ let () =
     "Echoes websocket messages. Runs forever.";
   Eio_main.run (fun env ->
       Switch.run (fun sw ->
-          let config = Server.Config.create !port in
+          let config =
+            Server.Config.create (`Tcp (Eio.Net.Ipaddr.V4.loopback, !port))
+          in
           let server = Server.create ~config connection_handler in
           let _command = Server.Command.start ~sw env server in
           ()

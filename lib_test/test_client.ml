@@ -19,7 +19,7 @@ let response_testable =
 let error_testable = Alcotest.of_pp Error.pp_hum
 
 let test_simple_get ~sw env () =
-  let server = Helper_server.listen ~sw ~env ~http_port:8080 () in
+  let server = Helper_server.listen ~sw ~env () in
   Switch.run (fun sw ->
       let response =
         Client.Oneshot.get env ~sw (Uri.of_string "http://localhost:8080")
@@ -40,7 +40,7 @@ let test_simple_get ~sw env () =
   Helper_server.teardown server
 
 let test_redirection ~sw env () =
-  let server = Helper_server.listen ~sw ~env ~http_port:8080 () in
+  let server = Helper_server.listen ~sw ~env () in
   let response =
     Client.Oneshot.get
       ~sw
@@ -94,7 +94,7 @@ let test_redirection ~sw env () =
   Helper_server.teardown server
 
 let test_redirection_post ~sw env () =
-  let server = Helper_server.listen ~sw ~env ~http_port:8080 () in
+  let server = Helper_server.listen ~sw ~env () in
   (* Request issues `GET` to the actual redirect target *)
   let response =
     Client.Oneshot.post
@@ -119,7 +119,7 @@ let test_redirection_post ~sw env () =
   Helper_server.teardown server
 
 let test_https ~sw env () =
-  let server = Helper_server.listen ~sw ~env ~http_port:8080 () in
+  let server = Helper_server.listen ~sw ~env () in
   (* HTTP/1.1 *)
   let response =
     Client.Oneshot.get
@@ -192,7 +192,13 @@ let test_https ~sw env () =
   Helper_server.teardown server
 
 let test_https_server_certs ~sw env () =
-  let server = Helper_server.listen ~sw ~env ~http_port:8080 () in
+  let server =
+    Helper_server.listen
+      ~sw
+      ~env
+      ~http_address:(`Tcp (Eio.Net.Ipaddr.V4.loopback, 8080))
+      ()
+  in
   (* Verify server cert from file *)
   let response =
     Client.Oneshot.get
@@ -255,7 +261,6 @@ let test_https_server_certs ~sw env () =
     Helper_server.listen
       ~sw
       ~env
-      ~http_port:8080
       ~certfile:"server_rsa_san.pem"
       ~certkey:"server_rsa_san.key"
       ()
@@ -295,7 +300,6 @@ let test_https_server_certs ~sw env () =
     Helper_server.listen
       ~sw
       ~env
-      ~http_port:8080
       ~certfile:"server_san_ip.pem"
       ~certkey:"server_san_ip.key"
       ()
@@ -328,9 +332,7 @@ let test_https_server_certs ~sw env () =
 
 let test_https_client_certs ~sw env () =
   (* Client certificate *)
-  let server =
-    Helper_server.listen ~sw ~env ~http_port:8080 ~check_client_cert:true ()
-  in
+  let server = Helper_server.listen ~sw ~env ~check_client_cert:true () in
   let inchannel = open_in (Helper_server.cert_path // "client.pem") in
   let clientcert =
     really_input_string inchannel (in_channel_length inchannel)
@@ -433,10 +435,9 @@ let test_h2c ~sw env () =
     Helper_server.H2c.listen
       ~sw
       ~env
-      ~bind_to_address:Eio.Net.Ipaddr.V4.loopback
-      ~port:9000
       ~backlog:128
       ~domains:1
+      (`Tcp (Eio.Net.Ipaddr.V4.loopback, 9000))
   in
   (* Not configured to follow the h2c upgrade *)
   let response =
@@ -509,7 +510,7 @@ let test_h2c ~sw env () =
   Helper_server.H2c.teardown server
 
 let test_default_headers ~sw env () =
-  let server = Helper_server.listen ~sw ~env ~http_port:8080 () in
+  let server = Helper_server.listen ~sw ~env () in
   let default_headers = Headers.[ Well_known.authorization, "Bearer token" ] in
   let expected_response =
     Response.create

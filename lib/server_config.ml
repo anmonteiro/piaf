@@ -4,7 +4,7 @@ module Log = (val Logs.src_log src : Logs.LOG)
 
 module HTTPS = struct
   type t =
-    { port : int
+    { address : Eio.Net.Sockaddr.stream
     ; certificate : Cert.t * Cert.t (* Server certificate and private key *)
     ; cacert : Cert.t option
           (** Either the certificates string or path to a file with certificates
@@ -25,10 +25,10 @@ module HTTPS = struct
       ?(max_tls_version = Versions.TLS.TLSv1_3)
       ?(allow_insecure = false)
       ?(enforce_client_cert = false)
-      ~port
+      ~address
       certificate
     =
-    { port
+    { address
     ; allow_insecure
     ; enforce_client_cert
     ; certificate
@@ -40,8 +40,7 @@ module HTTPS = struct
 end
 
 type t =
-  { port : int
-  ; max_http_version : Versions.HTTP.t
+  { max_http_version : Versions.HTTP.t
         (** Use this as the highest HTTP version when sending requests *)
   ; https : HTTPS.t option
   ; h2c_upgrade : bool
@@ -64,7 +63,7 @@ type t =
             written. Defaults to [false]. *)
   ; backlog : int
         (** The maximum length of the queue of pending connections. *)
-  ; address : Eio.Net.Ipaddr.v4v6  (** The address to listen on. *)
+  ; address : Eio.Net.Sockaddr.stream  (** The address to listen on. *)
   ; domains : int  (** The number of domains to use. *)
   }
 
@@ -78,12 +77,10 @@ let create
     ?(body_buffer_size = 0x1000)
     ?(flush_headers_immediately = false)
     ?(backlog = 128)
-    ?(address = Eio.Net.Ipaddr.V4.loopback)
     ?(domains = 1)
-    port
+    address
   =
-  { port
-  ; max_http_version
+  { max_http_version
   ; https
   ; h2c_upgrade
   ; tcp_nodelay

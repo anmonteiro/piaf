@@ -209,11 +209,9 @@ module Command = struct
         done);
     fun () -> Promise.resolve released_u ()
 
-  let listen ~sw ~bind_to_address ~port ~backlog ~domains env connection_handler
-    =
+  let listen ~sw ~address ~backlog ~domains env connection_handler =
     let domain_mgr = Eio.Stdenv.domain_mgr env in
     let network = Eio.Stdenv.net env in
-    let address = `Tcp (bind_to_address, port) in
     let socket =
       Eio.Net.listen
         ~reuse_addr:true
@@ -240,7 +238,7 @@ module Command = struct
           else Eio.Domain_manager.run domain_mgr run_accept_loop)
     done;
     Promise.await all_started;
-    Log.info (fun m -> m "Server listening on port %d" port);
+    Log.info (fun m -> m "Server listening on %a" Eio.Net.Sockaddr.pp address);
     { sockets = [ socket ]; shutdown_resolvers = !resolvers }
 
   let start ~sw env server =
@@ -250,9 +248,8 @@ module Command = struct
     let connection_handler = http_connection_handler server in
     let command =
       listen
-        ~bind_to_address:config.address
         ~sw
-        ~port:config.port
+        ~address:config.address
         ~backlog:config.backlog
         ~domains:config.domains
         env
@@ -264,9 +261,8 @@ module Command = struct
       let connection_handler = https_connection_handler ~clock ~https server in
       let https_command =
         listen
-          ~bind_to_address:config.address
           ~sw
-          ~port:https.port
+          ~address:https.address
           ~backlog:config.backlog
           ~domains:config.domains
           env

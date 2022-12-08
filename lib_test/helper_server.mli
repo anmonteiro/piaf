@@ -3,12 +3,11 @@ type t
 val cert_path : string
 
 val listen
-  :  ?http_port:int
-  -> ?https_port:int
+  :  ?http_address:Eio.Net.Sockaddr.stream
+  -> ?https_address:Eio.Net.Sockaddr.stream
   -> ?check_client_cert:bool
   -> ?certfile:string
   -> ?certkey:string
-  -> ?bind_to_address:Eio.Net.Ipaddr.v4v6
   -> ?backlog:int
   -> ?domains:int
   -> sw:Eio.Switch.t
@@ -24,10 +23,9 @@ module H2c : sig
   val listen
     :  sw:Eio.Switch.t
     -> env:Eio.Stdenv.t
-    -> bind_to_address:Eio.Net.Ipaddr.v4v6
-    -> port:int
     -> backlog:int
     -> domains:int
+    -> Eio.Net.Sockaddr.stream
     -> t
 
   val teardown : t -> unit
