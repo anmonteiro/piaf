@@ -141,7 +141,8 @@ let connect ~sw ~clock ~network ~config conn_info =
   | Ok sock -> Ok sock
   | Error `Timeout
   | (exception
-      (Eio.Net.Connection_failure _ | Unix.Unix_error (ECONNREFUSED, _, _))) ->
+      ( Eio.Io (Eio.Net.E (Connection_failure _), _)
+      | Unix.Unix_error (ECONNREFUSED, _, _) )) ->
     Result.error
       (`Connect_error
         (Format.asprintf
