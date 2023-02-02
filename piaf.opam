@@ -27,6 +27,8 @@ depends: [
   "rresult"
   "uri"
   "magic-mime"
+  "eio"
+  "multipart_form"
   "gluten-lwt-unix"
   "alcotest" {with-test}
   "alcotest-lwt" {with-test}
