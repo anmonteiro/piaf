@@ -1,9 +1,7 @@
 { stdenv, darwin, lib, ocamlPackages, static ? false, doCheck, nix-filter }:
 
-with ocamlPackages;
-
 rec {
-  piaf = buildDunePackage {
+  piaf = ocamlPackages.buildDunePackage {
     pname = "piaf";
     version = "0.0.1-dev";
 
@@ -25,8 +23,8 @@ rec {
 
     useDune2 = true;
 
-    nativeBuildInputs = [ ocaml dune findlib ];
-    propagatedBuildInputs = [
+    nativeBuildInputs = with ocamlPackages; [ ocaml dune findlib ];
+    propagatedBuildInputs = with ocamlPackages; [
       logs
       eio-ssl
       magic-mime
@@ -70,7 +68,7 @@ rec {
       ];
     };
 
-    nativeBuildInputs = [ dune ocaml findlib ];
+    nativeBuildInputs = with ocamlPackages; [ dune ocaml findlib ];
 
     buildPhase = ''
       echo "running ${if static then "static" else "release"} build"
@@ -81,13 +79,12 @@ rec {
       mv _build/default/bin/carl.exe $out/bin/carl
     '';
 
-    buildInputs = [
-      piaf
+    buildInputs = with ocamlPackages; [
       cmdliner
       fmt
       camlzip
       ezgzip
-    ];
+    ] ++ [ piaf ];
 
     meta = {
       description = "`curl` clone implemented using Piaf.";

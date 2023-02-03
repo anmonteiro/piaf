@@ -38,22 +38,54 @@ let src = Logs.Src.create "piaf.connection" ~doc:"Piaf Connection module"
 
 module Log = (val Logs.src_log src : Logs.LOG)
 
-let resolve_host ~port hostname : (_, [> Error.client ]) result =
-  let addresses =
-    Eio_unix.run_in_systhread (fun () ->
-        Unix.getaddrinfo
-          hostname
-          (string_of_int port)
-          (* https://www.iana.org/assignments/protocol-numbers/protocol-numbers.xhtml *)
-          Unix.[ AI_CANONNAME; AI_PROTOCOL 6; AI_FAMILY PF_INET ])
-  in
-  match addresses with
+let resolve_host env ~config ~port hostname : (_, [> Error.client ]) result =
+  let clock = Eio.Stdenv.clock env in
+  let network = Eio.Stdenv.net env in
+  match
+    Eio.Time.with_timeout_exn clock config.Config.connect_timeout (fun () ->
+        Eio.Net.getaddrinfo_stream
+          ~service:(string_of_int port)
+          network
+          hostname)
+  with
   | [] ->
-    let msg = Format.asprintf "Can't resolve hostname: %s" hostname in
-    Error (`Connect_error msg)
+    Error
+      (`Connect_error (Format.asprintf "Can't resolve hostname: %s" hostname))
   | xs ->
-    (* TODO: add resolved canonical hostname *)
-    Ok (List.map (fun { Unix.ai_addr; _ } -> ai_addr) xs)
+    (match config.Config.prefer_ip_version with
+    | `Both ->
+      let order_v4v6 = Eio.Net.Ipaddr.fold ~v4:(fun _ -> -1) ~v6:(fun _ -> 1) in
+      Ok
+        (* Sort IPv4 ahead of IPv6 for compatibility. *)
+        (List.sort
+           (fun a1 a2 ->
+             match a1, a2 with
+             | `Unix s1, `Unix s2 -> String.compare s1 s2
+             | `Tcp (ip1, _), `Tcp (ip2, _) ->
+               compare (order_v4v6 ip1) (order_v4v6 ip2)
+             | `Unix _, `Tcp _ -> 1
+             | `Tcp _, `Unix _ -> -1)
+           xs)
+    | `V4 ->
+      Ok
+        (List.filter
+           (function
+             | `Tcp (ip, _) ->
+               Eio.Net.Ipaddr.fold ~v4:(fun _ -> true) ~v6:(fun _ -> false) ip
+             | `Unix _ -> true)
+           xs)
+    | `V6 ->
+      Ok
+        (List.filter
+           (function
+             | `Tcp (ip, _) ->
+               Eio.Net.Ipaddr.fold ~v4:(fun _ -> false) ~v6:(fun _ -> true) ip
+             | `Unix _ -> true)
+           xs))
+  | exception Eio.Time.Timeout ->
+    Error
+      (`Connect_error
+        (Format.asprintf "Timed out resolving hostname: %s" hostname))
 
 module Info = struct
   (* This represents information that changes from connection to connection,
@@ -62,7 +94,7 @@ module Info = struct
   type t =
     { port : int
     ; scheme : Scheme.t
-    ; addresses : Unix.sockaddr list
+    ; addresses : Eio.Net.Sockaddr.stream list
     ; uri : Uri.t
     ; host : string
     }
@@ -76,15 +108,10 @@ module Info = struct
       (fun a1 ->
         List.exists
           (fun a2 ->
-            (* Note: this is slightly wrong if we allow both UNIX and Internet
-             * domain sockets but for now we filter by TCP sockets that we can
-             * connect to. *)
             match a1, a2 with
-            | Unix.ADDR_INET (addr1, _), Unix.ADDR_INET (addr2, _) ->
-              String.equal
-                (Unix.string_of_inet_addr addr1)
-                (Unix.string_of_inet_addr addr2)
-            | ADDR_UNIX addr1, ADDR_UNIX addr2 -> String.equal addr1 addr2
+            | `Tcp (addr1, _), `Tcp (addr2, _) ->
+              String.equal (Obj.magic addr1 : string) (Obj.magic addr2 : string)
+            | `Unix addr1, `Unix addr2 -> String.equal addr1 addr2
             | _ -> false)
           c2.addresses)
       c1.addresses
@@ -96,14 +123,10 @@ module Info = struct
     && c1.scheme = c2.scheme
     && Uri.host_exn c1.uri = Uri.host_exn c2.uri
 
-  let address_to_eio = function
-    | Unix.ADDR_UNIX s -> `Unix s
-    | ADDR_INET (addr, port) -> `Tcp (Eio_unix.Ipaddr.of_unix addr, port)
-
   let pp_address fmt = function
-    | Unix.ADDR_INET (addr, port) ->
-      Format.fprintf fmt "%s:%d" (Unix.string_of_inet_addr addr) port
-    | ADDR_UNIX addr -> Format.fprintf fmt "%s" addr
+    | `Tcp (addr, port) ->
+      Format.fprintf fmt "%a:%d" Eio.Net.Ipaddr.pp addr port
+    | `Unix addr -> Format.fprintf fmt "%s" addr
 
   let pp_hum fmt { addresses; host; _ } =
     let address = List.hd addresses in
@@ -116,16 +139,15 @@ module Info = struct
     (* Otherwise, infer from the scheme. *)
     | None -> Scheme.to_port scheme
 
-  let of_uri uri =
+  let of_uri env ~config uri =
     let uri = Uri.canonicalize uri in
     match Uri.host uri, Scheme.of_uri uri with
     | Some host, Ok scheme ->
       let port = infer_port ~scheme uri in
-      let+! addresses = resolve_host ~port host in
+      let+! addresses = resolve_host env ~config ~port host in
       { scheme; uri; host; port; addresses }
     | None, _ ->
-      Result.error
-        (`Msg (Format.asprintf "Missing host part for: %a" Uri.pp_hum uri))
+      Error (`Msg (Format.asprintf "Missing host part for: %a" Uri.pp_hum uri))
     | _, (Error _ as error) -> error
 end
 
@@ -135,26 +157,47 @@ let connect ~sw ~clock ~network ~config conn_info =
   let address = List.hd addresses in
   Log.debug (fun m -> m "Trying connection to %a" Info.pp_hum conn_info);
   match
-    Eio.Time.with_timeout clock config.Config.connect_timeout (fun () ->
-        Ok (Eio.Net.connect ~sw network (Info.address_to_eio address)))
+    Eio.Time.with_timeout_exn clock config.Config.connect_timeout (fun () ->
+        Eio.Net.connect ~sw network address)
   with
-  | Ok sock -> Ok sock
-  | Error `Timeout
-  | (exception
-      ( Eio.Io (Eio.Net.E (Connection_failure _), _)
-      | Unix.Unix_error (ECONNREFUSED, _, _) )) ->
-    Result.error
-      (`Connect_error
-        (Format.asprintf
-           "Failed connecting to %a: connection refused"
-           Info.pp_hum
-           conn_info))
+  | sock -> Ok sock
   | exception exn ->
-    Result.error
-      (`Connect_error
-        (Format.asprintf
-           "FIXME: unhandled connection error (%s)"
-           (Printexc.to_string exn)))
+    (match exn with
+    | Eio.Io (Eio.Net.E (Connection_failure code), _) ->
+      let status =
+        match code with
+        | Eio.Net.Refused _ -> "connection refused"
+        | No_matching_addresses -> "no matching addresses"
+        | Timeout -> "timeout"
+      in
+      Error
+        (`Connect_error
+          (Format.asprintf
+             "Failed connecting to %a: %s"
+             Info.pp_hum
+             conn_info
+             status))
+    | Eio.Io (Eio.Exn.X (Eio_unix.Unix_error (code, _, _)), _) ->
+      Error
+        (`Connect_error
+          (Format.asprintf
+             "Failed connecting to %a: %s"
+             Info.pp_hum
+             conn_info
+             (Unix.error_message code)))
+    | Eio.Time.Timeout ->
+      Error
+        (`Connect_error
+          (Format.asprintf
+             "Failed connecting to %a: connection timeout"
+             Info.pp_hum
+             conn_info))
+    | exn ->
+      Error
+        (`Connect_error
+          (Format.asprintf
+             "FIXME: unhandled connection error (%s)"
+             (Printexc.to_string exn))))
 
 type t =
   | Conn :

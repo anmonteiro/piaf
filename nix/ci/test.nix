@@ -39,12 +39,16 @@ let
 
   test = pkg:
     let
-      piafDrvs = lib.filterAttrs
+      piafDrvsSet = lib.mapAttrs
         (_: value:
           if lib.isDerivation value
-          then true
-          else false)
+          then
+            (if value ? "propagatedBuildInputs"
+            then (lib.filter (p: (p.pname or "") != "piaf") value.propagatedBuildInputs)
+            else [ ])
+          else [ ])
         pkg;
+      piafDrvs = lib.flatten (lib.attrValues piafDrvsSet);
     in
     stdenv.mkDerivation {
       name = "piaf-tests";
@@ -65,6 +69,7 @@ let
           "examples"
         ];
       };
+      dontDetectOcamlConflicts = true;
 
       buildPhase = ''
         dune runtest -p piaf
@@ -73,7 +78,7 @@ let
       installPhase = ''
         touch $out
       '';
-      buildInputs = (lib.attrValues piafDrvs) ++ (with ocamlPackages; [
+      buildInputs = piafDrvs ++ (with ocamlPackages; [
         ocaml
         dune
         findlib
