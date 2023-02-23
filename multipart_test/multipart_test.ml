@@ -34,7 +34,7 @@ let test_simple_boundary ~sw _env () =
   let chunks =
     multipart_request_body_chunks (multipart_request_body payload_size)
   in
-  let stream, push = Stream.create 1024 in
+  let stream, push = Piaf_stream.create 1024 in
   List.iter
     (fun x ->
       push
@@ -66,7 +66,7 @@ let test_simple_boundary ~sw _env () =
      resolves)"
     false
     ((Promise.is_resolved multipart_result));
-  let chunks = Stream.to_list stream in
+  let chunks = Piaf_stream.to_list stream in
   Alcotest.(check int)
     "Correct number of chunks emitted"
     (payload_size / max_chunk_size)
@@ -95,7 +95,7 @@ let test_unaligned_boundary ~sw _env () =
   let chunks =
     multipart_request_body_chunks (multipart_request_body payload_size)
   in
-  let stream, push = Stream.create 1024 in
+  let stream, push = Piaf_stream.create 1024 in
   List.iter
     (fun x ->
       push
@@ -119,7 +119,7 @@ let test_unaligned_boundary ~sw _env () =
     "filename extracted"
     (Some "picture.png")
     name;
-  let chunks = Stream.to_list stream in
+  let chunks = Piaf_stream.to_list stream in
   Alcotest.(check int)
     "Correct number of chunks emitted"
     ((payload_size / max_chunk_size) + 1)
@@ -131,7 +131,7 @@ let test_no_boundary ~sw:_ _env () =
   let payload_size = 0x1000 in
   let max_chunk_size = 0x400 in
   let chunks = multipart_request_body_chunks (request_body payload_size) in
-  let stream, push = Stream.create 1024 in
+  let stream, push = Piaf_stream.create 1024 in
   List.iter
     (fun x ->
       push
@@ -155,7 +155,7 @@ let test_no_boundary ~sw:_ _env () =
   ignore @@ Result.get_ok multipart_result;
   let name, stream = Promise.await waiter in
   Alcotest.(check (option string)) "filename extracted" None name;
-  let chunks = Stream.to_list stream in
+  let chunks = Piaf_stream.to_list stream in
   Alcotest.(check int)
     "Correct number of chunks emitted"
     (payload_size / max_chunk_size)
@@ -167,7 +167,7 @@ let test_no_boundary_unaligned ~sw:_ _env () =
   let payload_size = 0x1100 in
   let max_chunk_size = 0x400 in
   let chunks = multipart_request_body_chunks (request_body payload_size) in
-  let stream, push = Stream.create 1024  in
+  let stream, push = Piaf_stream.create 1024  in
   List.iter
     (fun x ->
       push
@@ -191,7 +191,7 @@ let test_no_boundary_unaligned ~sw:_ _env () =
   ignore @@ Result.get_ok multipart_result;
   let name, stream = Promise.await waiter in
   Alcotest.(check (option string)) "filename extracted" None name;
-  let chunks = Stream.to_list stream in
+  let chunks = Piaf_stream.to_list stream in
   Alcotest.(check int)
     "Correct number of chunks emitted"
     ((payload_size / max_chunk_size) + 1)
@@ -203,7 +203,7 @@ let test_no_boundary_but_boundary_expected ~sw:_ _env () =
   let payload_size = 0x1100 in
   let max_chunk_size = 0x400 in
   let chunks = multipart_request_body_chunks (request_body payload_size) in
-  let stream, push = Stream.create 1024  in
+  let stream, push = Piaf_stream.create 1024  in
   List.iter
     (fun x ->
       push

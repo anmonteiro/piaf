@@ -33,6 +33,7 @@
  * and their respective insecure / secure versions. *)
 
 open Eio.Std
+module Stream = Piaf_stream
 
 let src = Logs.Src.create "piaf.http" ~doc:"Piaf HTTP module"
 

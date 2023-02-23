@@ -271,7 +271,7 @@ let extract_parts ~emit ~finish ~max_chunk_size ~content_type stream =
   (* min chunk size is 1KB. *)
   let max_chunk_size = max max_chunk_size 0x400 in
   let emitters header =
-    let stream, push = Stream.create 128 in
+    let stream, push = Piaf_stream.create 128 in
     let key = name_of_header header in
     emit key stream;
     push, key
@@ -308,7 +308,7 @@ let extract_parts ~emit ~finish ~max_chunk_size ~content_type stream =
       Ok v
   in
   let rec parse state =
-    match Stream.take stream with
+    match Piaf_stream.take stream with
     | None ->
       (* Stream ended. Still need to check `error`. *)
       on_eof state
