@@ -30,6 +30,7 @@
  *---------------------------------------------------------------------------*)
 
 open Eio.Std
+module Stream = Piaf_stream
 module Wsd = Websocketaf.Wsd
 module Websocket = Websocketaf.Websocket
 

@@ -1,4 +1,4 @@
 (library
+ (name piaf_stream)
  (public_name piaf.stream)
- (name stream)
  (libraries eio))

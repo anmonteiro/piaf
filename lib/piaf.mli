@@ -345,7 +345,7 @@ module Error : sig
   val pp_hum : Format.formatter -> t -> unit [@@ocaml.toplevel_printer]
 end
 
-module Stream = Stream
+module Stream = Piaf_stream
 
 module Body : sig
   type t

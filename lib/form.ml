@@ -30,6 +30,7 @@
  *---------------------------------------------------------------------------*)
 
 open Monads.Bindings
+module Stream = Piaf_stream
 
 module Multipart = struct
   type t =

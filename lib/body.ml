@@ -31,6 +31,7 @@
 
 open Eio.Std
 open Monads.Bindings
+module Stream = Piaf_stream
 
 let src = Logs.Src.create "piaf.body" ~doc:"Piaf Body module"
 
