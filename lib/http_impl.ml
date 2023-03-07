@@ -310,7 +310,7 @@ let shutdown
       -> unit
   =
  fun (module Http) ~fd conn ->
-  Http.Client.shutdown conn;
+  Promise.await (Http.Client.shutdown conn);
   Eio.Flow.close fd
 
 let is_closed

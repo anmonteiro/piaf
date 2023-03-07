@@ -51,7 +51,7 @@ module type Client = sig
     -> Request.t
     -> write_body
 
-  val shutdown : t -> unit
+  val shutdown : t -> unit Eio.Promise.t
   val is_closed : t -> bool
 end
 

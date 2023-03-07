@@ -259,7 +259,7 @@ let handle_response
   in
   if head || include_
   then (
-    Format.fprintf formatter "%a" pp_response_headers response;
+    Format.fprintf formatter "%a@." pp_response_headers response;
     Format.pp_print_flush formatter ());
   let result =
     if head
