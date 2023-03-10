@@ -555,8 +555,9 @@ let test_default_headers ~sw env () =
     response;
   Helper_server.teardown server
 
-let test_case
-    :  string -> Alcotest.speed_level
+let test_case :
+     string
+    -> Alcotest.speed_level
     -> (sw:Switch.t -> Eio.Stdenv.t -> unit -> unit)
     -> string * Alcotest.speed_level * (unit -> unit)
   =

@@ -36,15 +36,15 @@ module type Client = sig
   type t
   type write_body
 
-  val create_connection
-    :  config:Config.t
+  val create_connection :
+     config:Config.t
     -> error_handler:error_handler
     -> sw:Eio.Switch.t
     -> Eio.Flow.two_way
     -> t * Gluten_eio.Client.t
 
-  val request
-    :  t
+  val request :
+     t
     -> flush_headers_immediately:bool
     -> error_handler:error_handler
     -> response_handler:response_handler
@@ -62,16 +62,16 @@ module type Reqd = sig
   val respond_with_string : t -> Response.t -> string -> unit
   val respond_with_bigstring : t -> Response.t -> Bigstringaf.t -> unit
 
-  val respond_with_streaming
-    :  t
+  val respond_with_streaming :
+     t
     -> ?flush_headers_immediately:bool
     -> Response.t
     -> write_body
 
   val respond_with_upgrade : t -> Headers.t -> (unit -> unit) -> unit
 
-  val error_code
-    :  t
+  val error_code :
+     t
     -> [ `Bad_request | `Bad_gateway | `Internal_server_error | `Exn of exn ]
        option
 
@@ -84,8 +84,8 @@ module type Server = sig
 
   module Reqd : Reqd with type write_body := write_body
 
-  val create_connection_handler
-    :  config:Server_config.t
+  val create_connection_handler :
+     config:Server_config.t
     -> request_handler:Request_info.t Server_intf.Handler.t
     -> error_handler:Server_intf.error_handler
     -> Server_intf.connection_handler
@@ -133,8 +133,8 @@ module type HTTP2 = sig
   module Client : sig
     include Client with type write_body := Body.Writer.t
 
-    val create_h2c
-      :  config:Config.t
+    val create_h2c :
+       config:Config.t
       -> ?push_handler:(Request.t -> (response_handler, unit) result)
       -> http_request:Httpaf.Request.t
       -> error_handler:error_handler
@@ -146,8 +146,8 @@ module type HTTP2 = sig
   module Server : sig
     include Server with type write_body := Body.Writer.t
 
-    val create_h2c_connection_handler
-      :  config:Server_config.t
+    val create_h2c_connection_handler :
+       config:Server_config.t
       -> sw:Eio.Switch.t
       -> fd:Eio.Flow.two_way
       -> error_handler:Server_intf.error_handler

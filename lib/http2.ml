@@ -60,14 +60,14 @@ module MakeHTTP2 (Runtime_scheme : Scheme.Runtime.SCHEME) : sig
        and type Body.Writer.t = H2.Body.Writer.t
        and type scheme = Runtime_scheme.t
 
-  val make_error_handler
-    :  fd:Eio.Flow.two_way
+  val make_error_handler :
+     fd:Eio.Flow.two_way
     -> Server_intf.error_handler
     -> Eio.Net.Sockaddr.stream
     -> H2.Server_connection.error_handler
 
-  val make_request_handler
-    :  sw:Switch.t
+  val make_request_handler :
+     sw:Switch.t
     -> fd:Eio.Flow.two_way
     -> Request_info.t Server_intf.Handler.t
     -> Eio.Net.Sockaddr.stream
@@ -161,8 +161,8 @@ end = struct
     module Body = Body
   end
 
-  let make_error_handler ~fd error_handler
-      : Eio.Net.Sockaddr.stream -> H2.Server_connection.error_handler
+  let make_error_handler ~fd error_handler :
+      Eio.Net.Sockaddr.stream -> H2.Server_connection.error_handler
     =
    fun client_addr ?request error start_response ->
     let start_response headers = start_response headers in
@@ -176,8 +176,8 @@ end = struct
       client_addr
       (error :> Error.server)
 
-  let make_request_handler ~sw ~fd handler
-      : Eio.Net.Sockaddr.stream -> H2.Reqd.t -> unit
+  let make_request_handler ~sw ~fd handler :
+      Eio.Net.Sockaddr.stream -> H2.Reqd.t -> unit
     =
    fun client_addr reqd ->
     let request = H2.Reqd.request reqd in
@@ -211,8 +211,8 @@ end = struct
     include H2_eio.Server
     module Reqd = Reqd
 
-    let create_connection_handler ~config ~request_handler ~error_handler
-        : Server_intf.connection_handler
+    let create_connection_handler ~config ~request_handler ~error_handler :
+        Server_intf.connection_handler
       =
      fun ~sw fd sockaddr ->
       let request_handler = make_request_handler ~sw ~fd request_handler in
@@ -288,8 +288,10 @@ module HTTP : Http_intf.HTTP2 with type scheme = Scheme.http = struct
   module Server = struct
     include HTTP_2.Server
 
-    let create_h2c_connection_handler
-        :  config:Server_config.t -> sw:Eio.Switch.t -> fd:Eio.Flow.two_way
+    let create_h2c_connection_handler :
+         config:Server_config.t
+        -> sw:Eio.Switch.t
+        -> fd:Eio.Flow.two_way
         -> error_handler:Server_intf.error_handler
         -> http_request:Httpaf.Request.t
         -> request_body:Bigstringaf.t IOVec.t list

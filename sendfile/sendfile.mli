@@ -1,5 +1,5 @@
-val sendfile_once_exn
-  :  ?off:int (** Defaults to 0. *)
+val sendfile_once_exn :
+   ?off:int (** Defaults to 0. *)
   -> ?len:int
        (** Defaults to length of data (file) associated with descriptor [fd]. *)
   -> src:Unix.file_descr
@@ -9,8 +9,8 @@ val sendfile_once_exn
 
     @raise Sys_error if `sendfile` is not supported by the platform. *)
 
-val sendfile_once
-  :  ?off:int (** Defaults to 0. *)
+val sendfile_once :
+   ?off:int (** Defaults to 0. *)
   -> ?len:int
        (** Defaults to length of data (file) associated with descriptor [fd]. *)
   -> src:Unix.file_descr
@@ -20,8 +20,8 @@ val sendfile_once
 
     @raise Sys_error if `sendfile` is not supported by the platform. *)
 
-val sendfile_exn
-  :  ?off:int (** Defaults to 0. *)
+val sendfile_exn :
+   ?off:int (** Defaults to 0. *)
   -> ?len:int
        (** Defaults to length of data (file) associated with descriptor [fd]. *)
   -> src:Unix.file_descr
@@ -32,8 +32,8 @@ val sendfile_exn
 
     @raise Sys_error if `sendfile` is not supported by the platform. *)
 
-val sendfile
-  :  ?off:int (** Defaults to 0. *)
+val sendfile :
+   ?off:int (** Defaults to 0. *)
   -> ?len:int
        (** Defaults to length of data (file) associated with descriptor [fd]. *)
   -> src:Unix.file_descr

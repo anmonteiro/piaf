@@ -63,9 +63,12 @@ module ALPN = struct
       in
       Reqd.respond_with_string reqd response request.target
 
-    let error_handler
-        :  Eio.Net.Sockaddr.stream -> ?request:Request.t -> _
-        -> (Headers.t -> Body.Writer.t) -> unit
+    let error_handler :
+         Eio.Net.Sockaddr.stream
+        -> ?request:Request.t
+        -> _
+        -> (Headers.t -> Body.Writer.t)
+        -> unit
       =
      fun _client_address ?request:_ _error start_response ->
       let response_body = start_response Headers.empty in
@@ -81,9 +84,12 @@ module ALPN = struct
       let response = Response.create `OK in
       Reqd.respond_with_string request_descriptor response request.target
 
-    let error_handler
-        :  Eio.Net.Sockaddr.stream -> ?request:H2.Request.t -> _
-        -> (Headers.t -> Body.Writer.t) -> unit
+    let error_handler :
+         Eio.Net.Sockaddr.stream
+        -> ?request:H2.Request.t
+        -> _
+        -> (Headers.t -> Body.Writer.t)
+        -> unit
       =
      fun _client_address ?request:_ _error start_response ->
       let response_body = start_response Headers.empty in
@@ -193,8 +199,9 @@ let teardown (http, https) =
 module H2c = struct
   type t = Server.Command.t
 
-  let h2c_connection_handler
-      :  Eio.Net.Sockaddr.stream -> Httpaf.Request.t
+  let h2c_connection_handler :
+       Eio.Net.Sockaddr.stream
+      -> Httpaf.Request.t
       -> Bigstringaf.t H2.IOVec.t list
       -> (H2.Server_connection.t, string) result
     =
