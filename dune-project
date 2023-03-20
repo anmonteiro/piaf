@@ -29,7 +29,6 @@
    (>= "5.0"))
   logs
   eio-ssl
-  eio_main
   magic-mime
   ssl
   uri
@@ -39,5 +38,6 @@
   (h2-eio :dev)
   (websocketaf :dev)
   (multipart_form :dev)
+  (eio_main :with-test)
   (dune-site :with-test)
   (alcotest :with-test)))
