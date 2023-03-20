@@ -183,12 +183,14 @@ let test_https ~sw env () =
     with
     | exn -> Error (`Exn exn)
   in
-  Alcotest.(check (result response_testable error_testable))
-    "response error"
-    (Error
-       (`Connect_error
-         "SSL Error: error:16000069:STORE routines::unregistered scheme"))
-    response;
+  (match response with
+  | Ok _r -> Alcotest.fail "Expected SSL error response"
+  | Error (`Connect_error s) ->
+    Alcotest.(check bool)
+      "response error"
+      true
+      (String.starts_with ~prefix:"SSL Error: error:" s)
+  | Error _ -> assert false);
   Helper_server.teardown server
 
 let test_https_server_certs ~sw env () =

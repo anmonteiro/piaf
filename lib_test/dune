@@ -11,7 +11,7 @@
 (test
  (name test_client)
  (package piaf)
- (libraries alcotest piaf logs.fmt dune-site)
+ (libraries alcotest piaf logs.fmt dune-site eio_main)
  (modules helper_server test_client cert_sites)
  (deps
   (source_tree "./certificates")))
@@ -19,5 +19,5 @@
 (test
  (name test_response)
  (package piaf)
- (libraries alcotest piaf logs.fmt)
+ (libraries alcotest piaf logs.fmt eio_main)
  (modules test_response))
