@@ -189,7 +189,7 @@ let test_https ~sw env () =
     Alcotest.(check bool)
       "response error"
       true
-      (String.starts_with ~prefix:"Error: SSL Error: error:" s)
+      (String.starts_with ~prefix:"SSL Error: error:" s)
   | Error _ -> assert false);
   Helper_server.teardown server
 
