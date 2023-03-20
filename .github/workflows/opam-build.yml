@@ -37,5 +37,5 @@ jobs:
       - name: Install locally
         run: |
           # https://github.com/ocaml/opam-repository/pull/23539
-          opam pin add eio-ssl --dev-repo
+          opam pin add eio-ssl git+https://github.com/anmonteiro/eio-ssl.git
           opam install . --with-test
