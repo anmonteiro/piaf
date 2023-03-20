@@ -1,4 +1,4 @@
 (executable
  (name carl)
  (modules carl util)
- (libraries piaf cmdliner logs fmt logs.fmt fmt.tty camlzip ezgzip))
+ (libraries piaf cmdliner logs fmt logs.fmt fmt.tty camlzip ezgzip eio_main))
