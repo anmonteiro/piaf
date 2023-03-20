@@ -4,7 +4,6 @@ on:
   pull_request:
   push:
     branches:
-      - opam-ci
       - master
 
 concurrency:
@@ -36,4 +35,10 @@ jobs:
           ocaml-compiler: ${{ matrix.ocaml-compiler }}
 
       - name: Install locally
-        run: opam install . --with-test
+        run:
+          # https://github.com/ocaml/opam-repository/pull/23539
+          opem add eio-ssl --dev-repo
+          # https://github.com/ocaml/opam-repository/pull/23533
+          opam pin add h2 --dev-repo
+          opam pin add h2-eio --dev-repo
+          opam install . --with-test
