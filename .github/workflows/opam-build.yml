@@ -35,7 +35,4 @@ jobs:
           ocaml-compiler: ${{ matrix.ocaml-compiler }}
 
       - name: Install locally
-        run: |
-          # https://github.com/ocaml/opam-repository/pull/23539
-          opam pin add eio-ssl git+https://github.com/anmonteiro/eio-ssl.git
-          opam install . --with-test
+        run: opam install . --with-test

@@ -45,9 +45,6 @@ dev-repo: "git+https://github.com/anmonteiro/piaf.git"
 pin-depends: [
   [ "httpaf.dev" "git+https://github.com/anmonteiro/httpaf.git" ]
   [ "httpaf-eio.dev" "git+https://github.com/anmonteiro/httpaf.git" ]
-  # https://github.com/ocaml/opam-repository/pull/23533
-  [ "h2.dev" "git+https://github.com/anmonteiro/ocaml-h2.git" ]
-  [ "h2-eio.dev" "git+https://github.com/anmonteiro/ocaml-h2.git" ]
   [ "websocketaf.dev" "git+https://github.com/anmonteiro/websocketaf.git" ]
   [ "multipart_form.dev" "git+https://github.com/anmonteiro/multipart_form.git" ]
 ]
