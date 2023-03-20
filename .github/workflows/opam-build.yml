@@ -40,5 +40,4 @@ jobs:
           opem add eio-ssl --dev-repo
           # https://github.com/ocaml/opam-repository/pull/23533
           opam pin add h2 --dev-repo
-          opam pin add h2-eio --dev-repo
           opam install . --with-test
