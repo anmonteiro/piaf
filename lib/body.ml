@@ -308,8 +308,8 @@ module Raw = struct
 
     val close : t -> unit
 
-    val schedule_read
-      :  t
+    val schedule_read :
+       t
       -> on_eof:(unit -> unit)
       -> on_read:(Bigstringaf.t -> off:int -> len:int -> unit)
       -> unit
@@ -334,14 +334,14 @@ module Raw = struct
     module Writer : Writer
   end
 
-  let to_stream
-      : type a.
-        (module Reader with type t = a)
-        -> ?on_eof:(body_stream -> unit)
-        -> body_length:length
-        -> body_error:Error.t
-        -> a
-        -> body_stream
+  let to_stream :
+      type a.
+      (module Reader with type t = a)
+      -> ?on_eof:(body_stream -> unit)
+      -> body_length:length
+      -> body_error:Error.t
+      -> a
+      -> body_stream
     =
    fun (module Reader) ?on_eof ~body_length ~body_error body ->
     let total_len = ref 0L in
@@ -361,14 +361,14 @@ module Raw = struct
         Option.iter (fun f -> f t) on_eof;
         Reader.close body;
         (if not (Promise.is_resolved !(t.error_received))
-        then
-          match body_length with
-          | `Error e ->
-            t.error_received := Promise.create_resolved (e :> Error.t)
-          | `Fixed promised_length ->
-            if Int64.compare !total_len promised_length < 0
-            then t.error_received := Promise.create_resolved body_error
-          | `Chunked | `Unknown | `Close_delimited -> ());
+         then
+           match body_length with
+           | `Error e ->
+             t.error_received := Promise.create_resolved (e :> Error.t)
+           | `Fixed promised_length ->
+             if Int64.compare !total_len promised_length < 0
+             then t.error_received := Promise.create_resolved body_error
+           | `Chunked | `Unknown | `Close_delimited -> ());
         Promise.resolve u None
       in
       let on_read =
@@ -397,14 +397,14 @@ module Raw = struct
     in
     Lazy.force t
 
-  let to_t
-      : type a.
-        (module Reader with type t = a)
-        -> ?on_eof:(body_stream -> unit)
-        -> body_length:length
-        -> body_error:Error.t
-        -> a
-        -> t
+  let to_t :
+      type a.
+      (module Reader with type t = a)
+      -> ?on_eof:(body_stream -> unit)
+      -> body_length:length
+      -> body_error:Error.t
+      -> a
+      -> t
     =
    fun (module Reader) ?on_eof ~body_length ~body_error body ->
     match body_length with
@@ -415,13 +415,13 @@ module Raw = struct
         (`Stream
           (to_stream (module Reader) ?on_eof ~body_error ~body_length body))
 
-  let to_request_body
-      : type a.
-        (module Reader with type t = a)
-        -> ?on_eof:(body_stream -> unit)
-        -> body_length:length
-        -> a
-        -> t
+  let to_request_body :
+      type a.
+      (module Reader with type t = a)
+      -> ?on_eof:(body_stream -> unit)
+      -> body_length:length
+      -> a
+      -> t
     =
    fun reader ?on_eof ~body_length body ->
     to_t reader ?on_eof ~body_length ~body_error:`Bad_request body
@@ -429,30 +429,30 @@ module Raw = struct
   let incomplete_body_error =
     `Malformed_response "missing bytes in response body"
 
-  let to_response_body
-      : type a.
-        (module Reader with type t = a)
-        -> ?on_eof:(body_stream -> unit)
-        -> body_length:length
-        -> a
-        -> t
+  let to_response_body :
+      type a.
+      (module Reader with type t = a)
+      -> ?on_eof:(body_stream -> unit)
+      -> body_length:length
+      -> a
+      -> t
     =
    fun reader ?on_eof ~body_length body ->
     to_t reader ?on_eof ~body_length ~body_error:incomplete_body_error body
 
-  let flush_and_close
-      : type a. (module Writer with type t = a) -> a -> (unit -> unit) -> unit
+  let flush_and_close :
+      type a. (module Writer with type t = a) -> a -> (unit -> unit) -> unit
     =
    fun (module Writer) body f ->
     Writer.close body;
     Writer.flush body f
 
-  let stream_write_body
-      : type a.
-        (module Writer with type t = a)
-        -> a
-        -> Bigstringaf.t IOVec.t Stream.t
-        -> unit
+  let stream_write_body :
+      type a.
+      (module Writer with type t = a)
+      -> a
+      -> Bigstringaf.t IOVec.t Stream.t
+      -> unit
     =
    fun (module Writer) body stream ->
     Stream.iter

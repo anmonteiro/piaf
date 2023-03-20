@@ -379,33 +379,33 @@ module Body : sig
 
   (** {3 Traversal} *)
 
-  val fold
-    :  f:('a -> Bigstringaf.t IOVec.t -> 'a)
+  val fold :
+     f:('a -> Bigstringaf.t IOVec.t -> 'a)
     -> init:'a
     -> t
     -> ('a, [> Error.t ]) result
 
-  val fold_string
-    :  f:('a -> string -> 'a)
+  val fold_string :
+     f:('a -> string -> 'a)
     -> init:'a
     -> t
     -> ('a, [> Error.t ]) result
 
-  val iter
-    :  f:(Bigstringaf.t IOVec.t -> unit)
+  val iter :
+     f:(Bigstringaf.t IOVec.t -> unit)
     -> t
     -> (unit, [> Error.t ]) result
 
-  val iter_p
-    :  sw:Eio.Switch.t
+  val iter_p :
+     sw:Eio.Switch.t
     -> f:(Bigstringaf.t IOVec.t -> unit)
     -> t
     -> (unit, [> Error.t ]) result
 
   val iter_string : f:(string -> unit) -> t -> (unit, [> Error.t ]) result
 
-  val iter_string_p
-    :  sw:Eio.Switch.t
+  val iter_string_p :
+     sw:Eio.Switch.t
     -> f:(string -> unit)
     -> t
     -> (unit, [> Error.t ]) result
@@ -460,8 +460,8 @@ module Request : sig
     ; body : Body.t
     }
 
-  val create
-    :  scheme:Scheme.t
+  val create :
+     scheme:Scheme.t
     -> version:Versions.HTTP.t
     -> ?headers:Headers.t
     -> meth:Method.t
@@ -482,62 +482,62 @@ module Response : sig
     ; body : Body.t
     }
 
-  val create
-    :  ?version:Versions.HTTP.t
+  val create :
+     ?version:Versions.HTTP.t
     -> ?headers:Headers.t
     -> ?body:Body.t
     -> Status.t
     -> t
 
-  val of_string
-    :  ?version:Versions.HTTP.t
+  val of_string :
+     ?version:Versions.HTTP.t
     -> ?headers:Headers.t
     -> body:string
     -> Status.t
     -> t
 
-  val of_bigstring
-    :  ?version:Versions.HTTP.t
+  val of_bigstring :
+     ?version:Versions.HTTP.t
     -> ?headers:Headers.t
     -> body:Bigstringaf.t
     -> Status.t
     -> t
 
-  val of_string_stream
-    :  ?version:Versions.HTTP.t
+  val of_string_stream :
+     ?version:Versions.HTTP.t
     -> ?headers:Headers.t
     -> body:string Stream.t
     -> Status.t
     -> t
 
-  val of_stream
-    :  ?version:Versions.HTTP.t
+  val of_stream :
+     ?version:Versions.HTTP.t
     -> ?headers:Headers.t
     -> body:Bigstringaf.t IOVec.t Stream.t
     -> Status.t
     -> t
 
-  val copy_file
-    :  ?version:Versions.HTTP.t
+  val copy_file :
+     ?version:Versions.HTTP.t
     -> ?headers:Headers.t
     -> string
     -> (t, [> Error.common ]) result
 
-  val sendfile
-    :  ?version:Versions.HTTP.t
+  val sendfile :
+     ?version:Versions.HTTP.t
     -> ?headers:Headers.t
     -> string
     -> (t, [> Error.common ]) result
 
   module Upgrade : sig
-    val generic
-      :  ?version:Versions.HTTP.t
+    val generic :
+       ?version:Versions.HTTP.t
       -> ?headers:Headers.t
       -> (sw:Eio.Switch.t -> (Gluten.impl -> unit) -> unit)
       -> t
 
-    val websocket
-      :  f:(Ws.Descriptor.t -> unit)
+    val websocket :
+       f:(Ws.Descriptor.t -> unit)
       -> ?headers:Headers.t
       -> Request.t
       -> (t, [> Error.common ]) result
@@ -557,13 +557,13 @@ module Form : sig
       ; body : Body.t
       }
 
-    val stream
-      :  ?max_chunk_size:int
+    val stream :
+       ?max_chunk_size:int
       -> Request.t
       -> (t Stream.t, [> `Msg of string ]) result
 
-    val assoc
-      :  ?max_chunk_size:int
+    val assoc :
+       ?max_chunk_size:int
       -> Request.t
       -> ((string * t) list, [> `Msg of string ]) result
   end
@@ -582,8 +582,8 @@ end
 module Client : sig
   type t
 
-  val create
-    :  ?config:Config.t
+  val create :
+     ?config:Config.t
     -> sw:Eio.Switch.t
     -> Eio.Stdenv.t
     -> Uri.t
@@ -595,48 +595,48 @@ module Client : sig
       the remaining functions in this module will issue requests to that
       endpoint only. *)
 
-  val head
-    :  t
+  val head :
+     t
     -> ?headers:(string * string) list
     -> string
     -> (Response.t, [> Error.t ]) result
 
-  val get
-    :  t
+  val get :
+     t
     -> ?headers:(string * string) list
     -> string
     -> (Response.t, [> Error.t ]) result
 
-  val post
-    :  t
-    -> ?headers:(string * string) list
-    -> ?body:Body.t
-    -> string
-    -> (Response.t, [> Error.t ]) result
-
-  val put
-    :  t
+  val post :
+     t
     -> ?headers:(string * string) list
     -> ?body:Body.t
     -> string
     -> (Response.t, [> Error.t ]) result
 
-  val patch
-    :  t
+  val put :
+     t
     -> ?headers:(string * string) list
     -> ?body:Body.t
     -> string
     -> (Response.t, [> Error.t ]) result
 
-  val delete
-    :  t
+  val patch :
+     t
     -> ?headers:(string * string) list
     -> ?body:Body.t
     -> string
     -> (Response.t, [> Error.t ]) result
 
-  val request
-    :  t
+  val delete :
+     t
+    -> ?headers:(string * string) list
+    -> ?body:Body.t
+    -> string
+    -> (Response.t, [> Error.t ]) result
+
+  val request :
+     t
     -> ?headers:(string * string) list
     -> ?body:Body.t
     -> meth:Method.t
@@ -645,8 +645,8 @@ module Client : sig
 
   val send : t -> Request.t -> (Response.t, [> Error.t ]) result
 
-  val ws_upgrade
-    :  t
+  val ws_upgrade :
+     t
     -> ?headers:(string * string) list
     -> string
     -> (Ws.Descriptor.t, [> Error.t ]) result
@@ -656,33 +656,24 @@ module Client : sig
       associated with it. *)
 
   module Oneshot : sig
-    val head
-      :  ?config:Config.t
+    val head :
+       ?config:Config.t
       -> ?headers:(string * string) list
       -> sw:Eio.Switch.t
       -> Eio.Stdenv.t
       -> Uri.t
       -> (Response.t, [> Error.t ]) result
 
-    val get
-      :  ?config:Config.t
+    val get :
+       ?config:Config.t
       -> ?headers:(string * string) list
       -> sw:Eio.Switch.t
       -> Eio.Stdenv.t
       -> Uri.t
       -> (Response.t, [> Error.t ]) result
 
-    val post
-      :  ?config:Config.t
-      -> ?headers:(string * string) list
-      -> ?body:Body.t
-      -> sw:Eio.Switch.t
-      -> Eio.Stdenv.t
-      -> Uri.t
-      -> (Response.t, [> Error.t ]) result
-
-    val put
-      :  ?config:Config.t
+    val post :
+       ?config:Config.t
       -> ?headers:(string * string) list
       -> ?body:Body.t
       -> sw:Eio.Switch.t
@@ -690,8 +681,8 @@ module Client : sig
       -> Uri.t
       -> (Response.t, [> Error.t ]) result
 
-    val patch
-      :  ?config:Config.t
+    val put :
+       ?config:Config.t
       -> ?headers:(string * string) list
       -> ?body:Body.t
       -> sw:Eio.Switch.t
@@ -699,8 +690,8 @@ module Client : sig
       -> Uri.t
       -> (Response.t, [> Error.t ]) result
 
-    val delete
-      :  ?config:Config.t
+    val patch :
+       ?config:Config.t
       -> ?headers:(string * string) list
       -> ?body:Body.t
       -> sw:Eio.Switch.t
@@ -708,8 +699,17 @@ module Client : sig
       -> Uri.t
       -> (Response.t, [> Error.t ]) result
 
-    val request
-      :  ?config:Config.t
+    val delete :
+       ?config:Config.t
+      -> ?headers:(string * string) list
+      -> ?body:Body.t
+      -> sw:Eio.Switch.t
+      -> Eio.Stdenv.t
+      -> Uri.t
+      -> (Response.t, [> Error.t ]) result
+
+    val request :
+       ?config:Config.t
       -> ?headers:(string * string) list
       -> ?body:Body.t
       -> sw:Eio.Switch.t
@@ -749,8 +749,8 @@ module Server : sig
         ; enforce_client_cert : bool
         }
 
-      val create
-        :  ?cacert:Cert.t
+      val create :
+         ?cacert:Cert.t
         -> ?capath:string
         -> ?min_tls_version:Versions.TLS.t
         -> ?max_tls_version:Versions.TLS.t
@@ -790,8 +790,8 @@ module Server : sig
       ; domains : int  (** The number of domains to use. *)
       }
 
-    val create
-      :  ?max_http_version:Versions.HTTP.t
+    val create :
+       ?max_http_version:Versions.HTTP.t
       -> ?https:HTTPS.t
       -> ?h2c_upgrade:bool
       -> ?tcp_nodelay:bool
@@ -845,8 +845,8 @@ module Server : sig
 
   type t
 
-  val create
-    :  ?error_handler:error_handler
+  val create :
+     ?error_handler:error_handler
     -> config:Config.t
     -> Request_info.t Handler.t
     -> t
@@ -864,8 +864,8 @@ module Server : sig
     val start : sw:Eio.Switch.t -> Eio.Stdenv.t -> server -> t
     val shutdown : t -> unit
 
-    val listen
-      :  sw:Eio.Switch.t
+    val listen :
+       sw:Eio.Switch.t
       -> address:Eio.Net.Sockaddr.stream
       -> backlog:int
       -> domains:int
@@ -906,8 +906,8 @@ module Cookies : sig
   module Set_cookie : sig
     type t
 
-    val make
-      :  ?expiration:expiration
+    val make :
+       ?expiration:expiration
       -> ?path:string
       -> ?domain:string
       -> ?secure:bool

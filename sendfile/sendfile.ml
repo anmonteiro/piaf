@@ -1,5 +1,5 @@
-external sendfile
-  :  src:Unix.file_descr
+external sendfile :
+   src:Unix.file_descr
   -> dst:Unix.file_descr
   -> off:int
   -> len:int

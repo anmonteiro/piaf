@@ -155,8 +155,8 @@ module MakeHTTP1 (Runtime_scheme : Scheme.Runtime.SCHEME) :
       module Body = Body
     end
 
-    let make_error_handler ~fd error_handler
-        : Eio.Net.Sockaddr.stream -> Httpaf.Server_connection.error_handler
+    let make_error_handler ~fd error_handler :
+        Eio.Net.Sockaddr.stream -> Httpaf.Server_connection.error_handler
       =
      fun client_addr ?request error start_response ->
       let start_response headers = start_response (Headers.to_http1 headers) in
@@ -170,8 +170,8 @@ module MakeHTTP1 (Runtime_scheme : Scheme.Runtime.SCHEME) :
         client_addr
         (error :> Error.server)
 
-    let make_request_handler ~sw ~fd handler
-        : Eio.Net.Sockaddr.stream -> Httpaf.Reqd.t Gluten.reqd -> unit
+    let make_request_handler ~sw ~fd handler :
+        Eio.Net.Sockaddr.stream -> Httpaf.Reqd.t Gluten.reqd -> unit
       =
      fun client_addr reqd ->
       let { Gluten.reqd; upgrade } = reqd in
@@ -203,8 +203,8 @@ module MakeHTTP1 (Runtime_scheme : Scheme.Runtime.SCHEME) :
       in
       Http_server_impl.handle_request ~sw descriptor request
 
-    let create_connection_handler ~config ~request_handler ~error_handler
-        : Server_intf.connection_handler
+    let create_connection_handler ~config ~request_handler ~error_handler :
+        Server_intf.connection_handler
       =
      fun ~sw fd sockaddr ->
       let request_handler = make_request_handler ~sw ~fd request_handler in

@@ -81,17 +81,20 @@ let create_connection
   in
   Fiber.first (Fun.const (Ok conn)) (ptoerr connection_error_received)
 
-let flush_and_close
-    : type a. (module Body.Raw.Writer with type t = a) -> a -> unit
+let flush_and_close :
+    type a. (module Body.Raw.Writer with type t = a) -> a -> unit
   =
  fun b request_body ->
   Body.Raw.flush_and_close b request_body (fun () ->
       Log.info (fun m ->
           m "Request body has been completely and successfully uploaded"))
 
-let handle_response
-    :  sw:Switch.t -> Response.t Promise.t -> Error.client Promise.t
-    -> Error.client Promise.t -> (Response.t, Error.client) result
+let handle_response :
+     sw:Switch.t
+    -> Response.t Promise.t
+    -> Error.client Promise.t
+    -> Error.client Promise.t
+    -> (Response.t, Error.client) result
   =
  fun ~sw response_p response_error_p connection_error_p ->
   let result =
@@ -126,9 +129,13 @@ let handle_response
     (* TODO: Close the connection if we receive a connection error *)
     error
 
-let send_request
-    :  sw:Switch.t -> Connection.t -> config:Config.t -> body:Body.t
-    -> Request.t -> (Response.t, Error.client) result
+let send_request :
+     sw:Switch.t
+    -> Connection.t
+    -> config:Config.t
+    -> body:Body.t
+    -> Request.t
+    -> (Response.t, Error.client) result
   =
  fun ~sw conn ~config ~body request ->
   let (Connection.Conn
@@ -192,8 +199,8 @@ let send_request
           assert false));
   handle_response ~sw response_received error_received connection_error_received
 
-let upgrade_connection
-    : sw:Switch.t -> Connection.t -> (Ws.Descriptor.t, [> Error.client ]) result
+let upgrade_connection :
+    sw:Switch.t -> Connection.t -> (Ws.Descriptor.t, [> Error.client ]) result
   =
  fun ~sw conn ->
   let (Connection.Conn { version; connection_error_received; runtime; _ }) =
@@ -302,18 +309,18 @@ let create_h2c_connection
       "Attempted to start HTTP/2 over cleartext TCP but was already \
        communicating over HTTPS"
 
-let shutdown
-    : type t.
-      (module Http_intf.HTTPCommon with type Client.t = t)
-      -> fd:< Eio.Net.stream_socket ; Eio.Flow.close >
-      -> t
-      -> unit
+let shutdown :
+    type t.
+    (module Http_intf.HTTPCommon with type Client.t = t)
+    -> fd:< Eio.Net.stream_socket ; Eio.Flow.close >
+    -> t
+    -> unit
   =
  fun (module Http) ~fd conn ->
-  Http.Client.shutdown conn;
+  Promise.await (Http.Client.shutdown conn);
   Eio.Flow.close fd
 
-let is_closed
-    : type t. (module Http_intf.HTTPCommon with type Client.t = t) -> t -> bool
+let is_closed :
+    type t. (module Http_intf.HTTPCommon with type Client.t = t) -> t -> bool
   =
  fun (module Http) conn -> Http.Client.is_closed conn

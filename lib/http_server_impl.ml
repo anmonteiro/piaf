@@ -7,12 +7,12 @@ module Log = (val Logs.src_log src : Logs.LOG)
 
 type upgrade = Gluten.impl -> unit
 
-let report_exn
-    : type reqd.
-      (module Http_intf.HTTPServerCommon with type Reqd.t = reqd)
-      -> reqd
-      -> exn
-      -> unit
+let report_exn :
+    type reqd.
+    (module Http_intf.HTTPServerCommon with type Reqd.t = reqd)
+    -> reqd
+    -> exn
+    -> unit
   =
  fun (module Http) reqd exn ->
   Log.err (fun m ->
@@ -39,17 +39,17 @@ type t =
       }
       -> t
 
-let create_descriptor
-    : type reqd.
-      ?upgrade:upgrade
-      -> (module Http_intf.HTTPServerCommon with type Reqd.t = reqd)
-      -> fd:Eio.Flow.two_way
-      -> scheme:Scheme.t
-      -> version:Versions.HTTP.t
-      -> handler:Request_info.t Server_intf.Handler.t
-      -> client_address:Eio.Net.Sockaddr.stream
-      -> reqd
-      -> t
+let create_descriptor :
+    type reqd.
+    ?upgrade:upgrade
+    -> (module Http_intf.HTTPServerCommon with type Reqd.t = reqd)
+    -> fd:Eio.Flow.two_way
+    -> scheme:Scheme.t
+    -> version:Versions.HTTP.t
+    -> handler:Request_info.t Server_intf.Handler.t
+    -> client_address:Eio.Net.Sockaddr.stream
+    -> reqd
+    -> t
   =
  fun ?upgrade (module Http) ~fd ~scheme ~version ~handler ~client_address reqd ->
   Descriptor
@@ -63,14 +63,14 @@ let create_descriptor
     ; client_address
     }
 
-let do_sendfile
-    : type writer.
-      (module Http_intf.HTTPServerCommon with type Body.Writer.t = writer)
-      -> src_fd:Unix.file_descr
-      -> fd:Eio.Flow.two_way
-      -> report_exn:(exn -> unit)
-      -> writer
-      -> unit
+let do_sendfile :
+    type writer.
+    (module Http_intf.HTTPServerCommon with type Body.Writer.t = writer)
+    -> src_fd:Unix.file_descr
+    -> fd:Eio.Flow.two_way
+    -> report_exn:(exn -> unit)
+    -> writer
+    -> unit
   =
  fun (module Http) ~src_fd ~fd ~report_exn response_body ->
   let fd = Option.get (Eio_unix.FD.peek_opt fd) in
@@ -186,19 +186,19 @@ let handle_request : sw:Switch.t -> t -> Request.t -> unit =
       with
       | exn -> report_exn exn)
 
-let handle_error
-    : type writer reqd.
-      ?request:Request.t
-      -> (module Http_intf.HTTPServerCommon
-            with type Reqd.t = reqd
-             and type Body.Writer.t = writer)
-      -> start_response:(Headers.t -> writer)
-      -> error_handler:Server_intf.error_handler
-      -> scheme:Scheme.t
-      -> fd:Eio.Flow.two_way
-      -> Eio.Net.Sockaddr.stream
-      -> Error.server
-      -> unit
+let handle_error :
+    type writer reqd.
+    ?request:Request.t
+    -> (module Http_intf.HTTPServerCommon
+          with type Reqd.t = reqd
+           and type Body.Writer.t = writer)
+    -> start_response:(Headers.t -> writer)
+    -> error_handler:Server_intf.error_handler
+    -> scheme:Scheme.t
+    -> fd:Eio.Flow.two_way
+    -> Eio.Net.Sockaddr.stream
+    -> Error.server
+    -> unit
   =
  fun ?request
      (module Http)

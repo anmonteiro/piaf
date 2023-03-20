@@ -195,8 +195,8 @@ let report_progess ?(first = false) ~cli len total_len =
     Format.eprintf
       "%s Transferred:@;<0 3>@[<v 0>%.2f%s@]@\n%!"
       (if not first
-      then Ansi.clear_line ^ Ansi.line_up ^ Ansi.clear_line ^ Ansi.line_up
-      else Ansi.clear_line)
+       then Ansi.clear_line ^ Ansi.line_up ^ Ansi.clear_line ^ Ansi.line_up
+       else Ansi.clear_line)
       len
       unit
   | _ -> ()
@@ -259,7 +259,7 @@ let handle_response
   in
   if head || include_
   then (
-    Format.fprintf formatter "%a" pp_response_headers response;
+    Format.fprintf formatter "%a@." pp_response_headers response;
     Format.pp_print_flush formatter ());
   let result =
     if head

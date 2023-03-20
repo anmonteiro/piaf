@@ -474,8 +474,10 @@ let patch t ?headers ?body target =
 
 let delete t ?headers ?body target = call t ?headers ?body ~meth:`DELETE target
 
-let ws_upgrade
-    :  t -> ?headers:(string * string) list -> string
+let ws_upgrade :
+     t
+    -> ?headers:(string * string) list
+    -> string
     -> (Ws.Descriptor.t, [> Error.client ]) result
   =
  fun t ?(headers = []) target ->
