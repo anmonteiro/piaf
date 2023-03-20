@@ -36,7 +36,6 @@ jobs:
           ocaml-compiler: ${{ matrix.ocaml-compiler }}
 
       - name: Install dependencies
-        working-directory: melange
         run: |
           opam update
           opam pin add httpaf.dev git+https://github.com/anmonteiro/httpaf.git -y
