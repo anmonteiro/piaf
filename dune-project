@@ -29,6 +29,7 @@
    (>= "5.0"))
   logs
   eio-ssl
+  eio_main
   magic-mime
   ssl
   uri
