@@ -35,10 +35,5 @@ jobs:
         with:
           ocaml-compiler: ${{ matrix.ocaml-compiler }}
 
-      - name: Install dependencies
-        run: |
-          opam update
-          opam pin add httpaf.dev git+https://github.com/anmonteiro/httpaf.git -y
-          opam pin add httpaf-eio.dev git+https://github.com/anmonteiro/httpaf.git -y
-          opam install . --deps-only -y
-
+      - name: Install locally
+      - run: opam install . --deps-only --with-test
