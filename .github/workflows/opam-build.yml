@@ -36,4 +36,4 @@ jobs:
           ocaml-compiler: ${{ matrix.ocaml-compiler }}
 
       - name: Install locally
-      - run: opam install . --deps-only --with-test
+        run: opam install . --deps-only --with-test
