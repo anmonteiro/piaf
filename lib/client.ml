@@ -38,10 +38,12 @@ let src = Logs.Src.create "piaf.client" ~doc:"Piaf Client module"
 
 module Log = (val Logs.src_log src : Logs.LOG)
 
-type t =
+type 'a stdenv = < clock : #Eio.Time.clock ; net : #Eio.Net.t ; .. > as 'a
+
+type 'a t =
   { mutable conn : Connection.t
   ; config : Config.t
-  ; env : < clock : Eio.Time.clock ; net : Eio.Net.t >
+  ; env : 'a stdenv
   ; sw : Switch.t
   }
 
@@ -437,7 +439,6 @@ let rec send_request_and_handle_response
       return_response t request_info response)
 
 let create ?(config = Config.default) ~sw env uri =
-  let env = (env :> < clock : Eio.Time.clock ; net : Eio.Net.t >) in
   let*! conn_info = Connection_info.of_uri uri in
   match open_connection ~config ~sw ~uri:conn_info.uri env conn_info with
   | Ok conn -> Ok { conn; config; env; sw }
@@ -478,7 +479,7 @@ let patch t ?headers ?body target =
 let delete t ?headers ?body target = call t ?headers ?body ~meth:`DELETE target
 
 let ws_upgrade :
-     t
+     _ t
     -> ?headers:(string * string) list
     -> string
     -> (Ws.Descriptor.t, [> Error.client ]) result
