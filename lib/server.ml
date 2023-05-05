@@ -179,14 +179,6 @@ module Command = struct
 
   type connection_handler = Server_intf.connection_handler
 
-  type 'a stdenv =
-    < clock : #Eio.Time.clock
-    ; net : #Eio.Net.t
-    ; domain_mgr : #Eio.Domain_manager.t
-    ; .. >
-    as
-    'a
-
   type nonrec t =
     { sockets : Eio.Net.listening_socket list
     ; shutdown_resolvers : (unit -> unit) list

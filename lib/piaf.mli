@@ -580,15 +580,14 @@ end
       once the request is done. Useful for isolated requests. *)
 
 module Client : sig
-  type 'a stdenv = < clock : #Eio.Time.clock ; net : #Eio.Net.t ; .. > as 'a
-  type 'a t constraint 'a = 'a stdenv
+  type t
 
   val create :
      ?config:Config.t
     -> sw:Eio.Switch.t
-    -> 'a stdenv
+    -> Eio_unix.Stdenv.base
     -> Uri.t
-    -> ('a t, [> Error.client ]) result
+    -> (t, [> Error.client ]) result
   (** [create ?config uri] opens a connection to [uri] (initially) that can be
       used to issue multiple requests to the remote endpoint.
 
@@ -597,62 +596,62 @@ module Client : sig
       endpoint only. *)
 
   val head :
-     _ t
+     t
     -> ?headers:(string * string) list
     -> string
     -> (Response.t, [> Error.t ]) result
 
   val get :
-     _ t
+     t
     -> ?headers:(string * string) list
     -> string
     -> (Response.t, [> Error.t ]) result
 
   val post :
-     _ t
+     t
     -> ?headers:(string * string) list
     -> ?body:Body.t
     -> string
     -> (Response.t, [> Error.t ]) result
 
   val put :
-     _ t
+     t
     -> ?headers:(string * string) list
     -> ?body:Body.t
     -> string
     -> (Response.t, [> Error.t ]) result
 
   val patch :
-     _ t
+     t
     -> ?headers:(string * string) list
     -> ?body:Body.t
     -> string
     -> (Response.t, [> Error.t ]) result
 
   val delete :
-     _ t
+     t
     -> ?headers:(string * string) list
     -> ?body:Body.t
     -> string
     -> (Response.t, [> Error.t ]) result
 
   val request :
-     _ t
+     t
     -> ?headers:(string * string) list
     -> ?body:Body.t
     -> meth:Method.t
     -> string
     -> (Response.t, [> Error.t ]) result
 
-  val send : _ t -> Request.t -> (Response.t, [> Error.t ]) result
+  val send : t -> Request.t -> (Response.t, [> Error.t ]) result
 
   val ws_upgrade :
-     _ t
+     t
     -> ?headers:(string * string) list
     -> string
     -> (Ws.Descriptor.t, [> Error.t ]) result
 
-  val shutdown : _ t -> unit
+  val shutdown : t -> unit
   (** [shutdown t] tears down the connection [t] and frees up all the resources
       associated with it. *)
 
@@ -661,7 +660,7 @@ module Client : sig
        ?config:Config.t
       -> ?headers:(string * string) list
       -> sw:Eio.Switch.t
-      -> _ stdenv
+      -> Eio_unix.Stdenv.base
       -> Uri.t
       -> (Response.t, [> Error.t ]) result
 
@@ -669,7 +668,7 @@ module Client : sig
        ?config:Config.t
       -> ?headers:(string * string) list
       -> sw:Eio.Switch.t
-      -> _ stdenv
+      -> Eio_unix.Stdenv.base
       -> Uri.t
       -> (Response.t, [> Error.t ]) result
 
@@ -678,7 +677,7 @@ module Client : sig
       -> ?headers:(string * string) list
       -> ?body:Body.t
       -> sw:Eio.Switch.t
-      -> _ stdenv
+      -> Eio_unix.Stdenv.base
       -> Uri.t
       -> (Response.t, [> Error.t ]) result
 
@@ -687,7 +686,7 @@ module Client : sig
       -> ?headers:(string * string) list
       -> ?body:Body.t
       -> sw:Eio.Switch.t
-      -> _ stdenv
+      -> Eio_unix.Stdenv.base
       -> Uri.t
       -> (Response.t, [> Error.t ]) result
 
@@ -696,7 +695,7 @@ module Client : sig
       -> ?headers:(string * string) list
       -> ?body:Body.t
       -> sw:Eio.Switch.t
-      -> _ stdenv
+      -> Eio_unix.Stdenv.base
       -> Uri.t
       -> (Response.t, [> Error.t ]) result
 
@@ -705,7 +704,7 @@ module Client : sig
       -> ?headers:(string * string) list
       -> ?body:Body.t
       -> sw:Eio.Switch.t
-      -> _ stdenv
+      -> Eio_unix.Stdenv.base
       -> Uri.t
       -> (Response.t, [> Error.t ]) result
 
@@ -714,7 +713,7 @@ module Client : sig
       -> ?headers:(string * string) list
       -> ?body:Body.t
       -> sw:Eio.Switch.t
-      -> _ stdenv
+      -> Eio_unix.Stdenv.base
       -> meth:Method.t
       -> Uri.t
       -> (Response.t, [> Error.t ]) result
@@ -860,18 +859,9 @@ module Server : sig
       -> unit
 
     type server := t
-
-    type 'a stdenv =
-      < clock : #Eio.Time.clock
-      ; net : #Eio.Net.t
-      ; domain_mgr : #Eio.Domain_manager.t
-      ; .. >
-      as
-      'a
-
     type t
 
-    val start : sw:Eio.Switch.t -> _ stdenv -> server -> t
+    val start : sw:Eio.Switch.t -> Eio_unix.Stdenv.base -> server -> t
     val shutdown : t -> unit
 
     val listen :
@@ -879,7 +869,7 @@ module Server : sig
       -> address:Eio.Net.Sockaddr.stream
       -> backlog:int
       -> domains:int
-      -> _ stdenv
+      -> Eio_unix.Stdenv.base
       -> connection_handler
       -> t
     (** [listen ~sw ?bind_to_address ~network ~port connection_handler] starts a

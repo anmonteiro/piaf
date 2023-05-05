@@ -38,12 +38,10 @@ let src = Logs.Src.create "piaf.client" ~doc:"Piaf Client module"
 
 module Log = (val Logs.src_log src : Logs.LOG)
 
-type 'a stdenv = < clock : #Eio.Time.clock ; net : #Eio.Net.t ; .. > as 'a
-
-type 'a t =
+type t =
   { mutable conn : Connection.t
   ; config : Config.t
-  ; env : 'a stdenv
+  ; env : Eio_unix.Stdenv.base
   ; sw : Switch.t
   }
 
@@ -479,7 +477,7 @@ let patch t ?headers ?body target =
 let delete t ?headers ?body target = call t ?headers ?body ~meth:`DELETE target
 
 let ws_upgrade :
-     _ t
+     t
     -> ?headers:(string * string) list
     -> string
     -> (Ws.Descriptor.t, [> Error.client ]) result
