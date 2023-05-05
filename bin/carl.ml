@@ -240,7 +240,8 @@ let handle_response
   let { head; compressed; include_; _ } = cli in
   let* channel, formatter =
     match cli.output with
-    | Stdout | Channel "-" -> Ok (stdout, Format.std_formatter)
+    | Stdout | Channel "-" ->
+      Ok (Eio_unix.Resource.fd_opt stdout |> Option.get, Format.std_formatter)
     | Channel filename ->
       (try
          Eio_unix.run_in_systhread (fun () ->
@@ -250,10 +251,12 @@ let handle_response
                  Unix.[ O_NONBLOCK; O_WRONLY; O_TRUNC; O_CREAT ]
                  0o600
              in
+             let fd = Eio_unix.Fd.of_unix ~sw ~close_unix:true fd in
              Ok
-               ( (Eio_unix.FD.as_socket ~sw ~close_unix:true fd :> Eio.Flow.sink)
-               , Format.formatter_of_out_channel (Unix.out_channel_of_descr fd)
-               ))
+               ( fd
+               , Format.formatter_of_out_channel
+                   (Unix.out_channel_of_descr
+                      (Eio_unix.Fd.use_exn "handle_response" fd Fun.id)) ))
        with
       | exn -> Error (`Exn exn))
   in
@@ -314,7 +317,7 @@ let handle_response
   | Stdout | Channel "-" -> Format.pp_print_newline formatter ()
   | Channel _ ->
     Eio_unix.run_in_systhread (fun () ->
-        Unix.close (Option.get (Eio_unix.FD.peek_opt channel))));
+        Unix.close (Eio_unix.Fd.use_exn "close" channel Fun.id)));
   result
 
 let build_headers
@@ -364,7 +367,7 @@ let request env ~sw ~cli ~config uri =
         Eio_unix.run_in_systhread (fun () -> Unix.fstat fd)
       in
       let remaining = ref length in
-      let flow = Eio_unix.FD.as_socket ~sw ~close_unix:true fd in
+      let flow = Eio_unix.import_socket_stream ~sw ~close_unix:true fd in
       let stream =
         Stream.from ~f:(fun () ->
             if !remaining = 0

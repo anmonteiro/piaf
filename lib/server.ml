@@ -210,6 +210,12 @@ module Command = struct
     fun () -> Promise.resolve released_u ()
 
   let listen ~sw ~address ~backlog ~domains env connection_handler =
+    let env =
+      (env
+        :> < clock : Eio.Time.clock
+           ; net : Eio.Net.t
+           ; domain_mgr : Eio.Domain_manager.t >)
+    in
     let domain_mgr = Eio.Stdenv.domain_mgr env in
     let network = Eio.Stdenv.net env in
     let socket =

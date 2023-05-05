@@ -73,19 +73,20 @@ let do_sendfile :
     -> unit
   =
  fun (module Http) ~src_fd ~fd ~report_exn response_body ->
-  let fd = Option.get (Eio_unix.FD.peek_opt fd) in
-  Http.Body.Writer.flush response_body (fun () ->
-      match
-        Posix.sendfile
-          (module Http.Body.Writer)
-          ~src_fd
-          ~dst_fd:fd
-          response_body
-      with
-      | Ok () -> Http.Body.Writer.close response_body
-      | Error exn ->
-        Http.Body.Writer.close response_body;
-        report_exn exn)
+  let fd = Option.get (Eio_unix.Resource.fd_opt fd) in
+  Eio_unix.Fd.use_exn "sendfile" fd (fun fd ->
+      Http.Body.Writer.flush response_body (fun () ->
+          match
+            Posix.sendfile
+              (module Http.Body.Writer)
+              ~src_fd
+              ~dst_fd:fd
+              response_body
+          with
+          | Ok () -> Http.Body.Writer.close response_body
+          | Error exn ->
+            Http.Body.Writer.close response_body;
+            report_exn exn))
 
 let handle_request : sw:Switch.t -> t -> Request.t -> unit =
  fun ~sw

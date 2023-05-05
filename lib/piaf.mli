@@ -585,7 +585,7 @@ module Client : sig
   val create :
      ?config:Config.t
     -> sw:Eio.Switch.t
-    -> Eio.Stdenv.t
+    -> < clock : #Eio.Time.clock ; net : #Eio.Net.t ; .. >
     -> Uri.t
     -> (t, [> Error.client ]) result
   (** [create ?config uri] opens a connection to [uri] (initially) that can be
@@ -660,7 +660,7 @@ module Client : sig
        ?config:Config.t
       -> ?headers:(string * string) list
       -> sw:Eio.Switch.t
-      -> Eio.Stdenv.t
+      -> < clock : #Eio.Time.clock ; net : #Eio.Net.t ; .. >
       -> Uri.t
       -> (Response.t, [> Error.t ]) result
 
@@ -668,7 +668,7 @@ module Client : sig
        ?config:Config.t
       -> ?headers:(string * string) list
       -> sw:Eio.Switch.t
-      -> Eio.Stdenv.t
+      -> < clock : #Eio.Time.clock ; net : #Eio.Net.t ; .. >
       -> Uri.t
       -> (Response.t, [> Error.t ]) result
 
@@ -677,7 +677,7 @@ module Client : sig
       -> ?headers:(string * string) list
       -> ?body:Body.t
       -> sw:Eio.Switch.t
-      -> Eio.Stdenv.t
+      -> < clock : #Eio.Time.clock ; net : #Eio.Net.t ; .. >
       -> Uri.t
       -> (Response.t, [> Error.t ]) result
 
@@ -686,7 +686,7 @@ module Client : sig
       -> ?headers:(string * string) list
       -> ?body:Body.t
       -> sw:Eio.Switch.t
-      -> Eio.Stdenv.t
+      -> < clock : #Eio.Time.clock ; net : #Eio.Net.t ; .. >
       -> Uri.t
       -> (Response.t, [> Error.t ]) result
 
@@ -695,7 +695,7 @@ module Client : sig
       -> ?headers:(string * string) list
       -> ?body:Body.t
       -> sw:Eio.Switch.t
-      -> Eio.Stdenv.t
+      -> < clock : #Eio.Time.clock ; net : #Eio.Net.t ; .. >
       -> Uri.t
       -> (Response.t, [> Error.t ]) result
 
@@ -704,7 +704,7 @@ module Client : sig
       -> ?headers:(string * string) list
       -> ?body:Body.t
       -> sw:Eio.Switch.t
-      -> Eio.Stdenv.t
+      -> < clock : #Eio.Time.clock ; net : #Eio.Net.t ; .. >
       -> Uri.t
       -> (Response.t, [> Error.t ]) result
 
@@ -713,7 +713,7 @@ module Client : sig
       -> ?headers:(string * string) list
       -> ?body:Body.t
       -> sw:Eio.Switch.t
-      -> Eio.Stdenv.t
+      -> < clock : #Eio.Time.clock ; net : #Eio.Net.t ; .. >
       -> meth:Method.t
       -> Uri.t
       -> (Response.t, [> Error.t ]) result
@@ -861,7 +861,15 @@ module Server : sig
     type server := t
     type t
 
-    val start : sw:Eio.Switch.t -> Eio.Stdenv.t -> server -> t
+    val start :
+       sw:Eio.Switch.t
+      -> < clock : #Eio.Time.clock
+         ; net : #Eio.Net.t
+         ; domain_mgr : #Eio.Domain_manager.t
+         ; .. >
+      -> server
+      -> t
+
     val shutdown : t -> unit
 
     val listen :
@@ -869,7 +877,10 @@ module Server : sig
       -> address:Eio.Net.Sockaddr.stream
       -> backlog:int
       -> domains:int
-      -> Eio.Stdenv.t
+      -> < clock : #Eio.Time.clock
+         ; net : #Eio.Net.t
+         ; domain_mgr : #Eio.Domain_manager.t
+         ; .. >
       -> connection_handler
       -> t
     (** [listen ~sw ?bind_to_address ~network ~port connection_handler] starts a
