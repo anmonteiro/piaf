@@ -45,7 +45,10 @@ rec {
 
       # Not in checkInputs because we also run tests in the musl64 build
       alcotest
-    ];
+    ] ++ lib.optionals (stdenv.isDarwin && !stdenv.isAarch64)
+      (with darwin.apple_sdk_11_0; [
+        Libsystem
+      ]);
     inherit doCheck;
 
     meta = {
