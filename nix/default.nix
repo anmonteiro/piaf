@@ -1,4 +1,4 @@
-{ stdenv, lib, ocamlPackages, static ? false, doCheck, nix-filter }:
+{ stdenv, darwin, lib, ocamlPackages, static ? false, doCheck, nix-filter }:
 
 with ocamlPackages;
 
