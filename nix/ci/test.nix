@@ -93,5 +93,5 @@ let
 in
 {
   native = test native;
-  musl64 = (test musl).overrideAttrs (_: { dontDetectOcamlConflicts = true; });
+  musl64 = test musl;
 }
