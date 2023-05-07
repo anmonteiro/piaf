@@ -35,4 +35,8 @@ jobs:
           ocaml-compiler: ${{ matrix.ocaml-compiler }}
 
       - name: Install locally
-        run: opam install . --with-test
+        run: |
+          opam pin add eio --dev-repo -y
+          opam pin add eio_linux --dev-repo -y
+          opam pin add eio_main --dev-repo -y
+          opam install . --with-test
