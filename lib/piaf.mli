@@ -307,6 +307,8 @@ module Config : sig
           (** Specifies whether to flush message headers to the transport
               immediately, or if Piaf should wait for the first body bytes to be
               written. Defaults to [false]. *)
+    ; prefer_ip_version : [ `V4 | `V6 | `Both ]
+          (** Specify IP version preference *)
     }
 
   val default : t

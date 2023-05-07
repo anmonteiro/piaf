@@ -184,6 +184,8 @@ let shutdown t = shutdown_conn t.conn
 let reuse_or_set_up_new_connection
     ({ conn =
          Connection.Conn ({ impl = (module Http); connection; info; _ } as conn)
+     ; config
+     ; env
      ; _
      } as t)
     new_uri
@@ -204,7 +206,11 @@ let reuse_or_set_up_new_connection
       (* No way to avoid establishing a new connection if the previous one
        * wasn't persistent or the connection is closed. *)
       let*! new_addresses =
-        Connection.resolve_host ~port:new_conn_info.port new_conn_info.host
+        Connection.resolve_host
+          env
+          ~config
+          ~port:new_conn_info.port
+          new_conn_info.host
       in
       let new_conn_info = { new_conn_info with addresses = new_addresses } in
       let+! () = change_connection t new_conn_info in
@@ -220,7 +226,11 @@ let reuse_or_set_up_new_connection
       Ok true)
     else
       let*! new_addresses =
-        Connection.resolve_host ~port:new_conn_info.port new_conn_info.host
+        Connection.resolve_host
+          env
+          ~config
+          ~port:new_conn_info.port
+          new_conn_info.host
       in
       (* Now we know the new address *)
       let new_conn_info = { new_conn_info with addresses = new_addresses } in
@@ -437,7 +447,7 @@ let rec send_request_and_handle_response
       return_response t request_info response)
 
 let create ?(config = Config.default) ~sw env uri =
-  let*! conn_info = Connection_info.of_uri uri in
+  let*! conn_info = Connection_info.of_uri env ~config uri in
   match open_connection ~config ~sw ~uri:conn_info.uri env conn_info with
   | Ok conn -> Ok { conn; config; env; sw }
   | Error (#Error.client as err) -> Error err
