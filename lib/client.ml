@@ -41,7 +41,7 @@ module Log = (val Logs.src_log src : Logs.LOG)
 type t =
   { mutable conn : Connection.t
   ; config : Config.t
-  ; env : Eio.Stdenv.t
+  ; env : Eio_unix.Stdenv.base
   ; sw : Switch.t
   }
 
@@ -143,10 +143,12 @@ let open_connection ~sw ~config ~uri env conn_info =
   let clock = Eio.Stdenv.clock env in
   let network = Eio.Stdenv.net env in
   let*! socket = Connection.connect ~sw ~clock ~network ~config conn_info in
-  if config.Config.tcp_nodelay
-  then (
-    Unix.setsockopt (Eio_unix.FD.peek_opt socket |> Option.get) TCP_NODELAY true;
-    Log.debug (fun m -> m "TCP_NODELAY set"));
+  (if config.Config.tcp_nodelay
+   then
+     let fd = Eio_unix.Resource.fd_opt socket |> Option.get in
+     Eio_unix.Fd.use_exn "Client.open_connection" fd (fun fd ->
+         Unix.setsockopt fd TCP_NODELAY true;
+         Log.debug (fun m -> m "TCP_NODELAY set")));
 
   Log.info (fun m -> m "Connected to %a" Connection_info.pp_hum conn_info);
   match conn_info.scheme with

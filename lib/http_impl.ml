@@ -184,15 +184,17 @@ let send_request :
         (match Http.scheme with
         | `HTTP ->
           Bodyw.close request_body;
-          (match
-             Posix.sendfile
-               (module Http.Body.Writer)
-               ~src_fd
-               ~dst_fd:(Option.get (Eio_unix.FD.peek_opt fd))
-               request_body
-           with
-          | Ok () -> ()
-          | Error exn -> Promise.resolve notify_error (`Exn exn))
+          let dst_fd = Option.get (Eio_unix.Resource.fd_opt fd) in
+          Eio_unix.Fd.use_exn "sendfile" dst_fd (fun dst_fd ->
+              match
+                Posix.sendfile
+                  (module Http.Body.Writer)
+                  ~src_fd
+                  ~dst_fd
+                  request_body
+              with
+              | Ok () -> ()
+              | Error exn -> Promise.resolve notify_error (`Exn exn))
         | `HTTPS ->
           (* can't `sendfile` on an encrypted connection.
            * TODO(anmonteiro): Return error message saying that. *)

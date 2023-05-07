@@ -11,7 +11,7 @@ val listen :
   -> ?backlog:int
   -> ?domains:int
   -> sw:Eio.Switch.t
-  -> env:Eio.Stdenv.t
+  -> env:Eio_unix.Stdenv.base
   -> unit
   -> t
 
@@ -22,7 +22,7 @@ module H2c : sig
 
   val listen :
      sw:Eio.Switch.t
-    -> env:Eio.Stdenv.t
+    -> env:Eio_unix.Stdenv.base
     -> backlog:int
     -> domains:int
     -> Eio.Net.Sockaddr.stream
