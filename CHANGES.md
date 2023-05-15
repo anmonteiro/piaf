@@ -1,5 +1,5 @@
-Unreleased
----------------
+## Unreleased
+
 - Improve certificate checking and authentication
   ([#93](https://github.com/anmonteiro/piaf/pull/93)) -
   [@Firgeis](https://github.com/Firgeis)
@@ -26,8 +26,9 @@ Unreleased
   ([#124](https://github.com/anmonteiro/piaf/pull/123))
 - Piaf.Config: Add `config.flush_headers_immediately`
   ([#125](https://github.com/anmonteiro/piaf/pull/125))
+- Piaf.Server: Add `config.shutdown_timeout` to wait before shutting down the
+  Piaf server ([#174](https://github.com/anmonteiro/piaf/pull/174))
 
-0.1.0 2021-02-03
---------------
+## 0.1.0 2021-02-03
 
 - Initial public release

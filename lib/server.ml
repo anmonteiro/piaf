@@ -179,9 +179,7 @@ module Command = struct
   type nonrec t =
     { sockets : Eio.Net.listening_socket list
     ; shutdown_resolvers : (unit -> unit) list
-    ; client_sockets :
-        (* TODO: pool of ids as old ones free up *)
-        (int, Eio.Net.stream_socket) Hashtbl.t list
+    ; client_sockets : (int, Eio.Net.stream_socket) Hashtbl.t list
     ; clock : Eio.Time.clock
     ; shutdown_timeout : float
     }
@@ -200,9 +198,9 @@ module Command = struct
       Fiber.first
         (fun () ->
           (* We can exit earlier, without waiting for the full timeout. Check
-             every 50 ms. *)
+             every 100 ms. *)
           while length client_sockets > 0 do
-            Eio.Time.sleep clock 0.050
+            Eio.Time.sleep clock 0.1
           done)
         (* TODO(anmonteiro): we can be a whole lot smarter, and start sending
            `connection: close` in headers as soon as we detect we're shutting
