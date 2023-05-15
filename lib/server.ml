@@ -179,16 +179,49 @@ module Command = struct
   type nonrec t =
     { sockets : Eio.Net.listening_socket list
     ; shutdown_resolvers : (unit -> unit) list
+    ; client_sockets :
+        (* TODO: pool of ids as old ones free up *)
+        (string, Eio.Net.stream_socket) Hashtbl.t list
+    ; clock : Eio.Time.clock
+    ; shutdown_timeout : float
     }
 
-  let shutdown { sockets; shutdown_resolvers } =
-    Logs.info (fun m -> m "Starting server teardown...");
-    List.iter (fun resolver -> resolver ()) shutdown_resolvers;
-    List.iter Eio.Net.close sockets;
-    Logs.info (fun m -> m "Server teardown finished")
+  let shutdown =
+    let length sockets =
+      List.fold_left (fun acc item -> Hashtbl.length item + acc) 0 sockets
+    in
+    fun { sockets; shutdown_resolvers; client_sockets; clock; shutdown_timeout } ->
+      Logs.info (fun m -> m "Starting server teardown...");
+      List.iter (fun resolver -> resolver ()) shutdown_resolvers;
+      (* Close the server sockets to stop accepting new connections *)
+      List.iter Eio.Net.close sockets;
+      (* Wait for [shutdown_timeout] seconds before shutting down client
+         sockets *)
+      Fiber.first
+        (fun () ->
+          (* We can exit earlier, without waiting for the full timeout. Check
+             every 50 ms. *)
+          while length client_sockets > 0 do
+            Eio.Time.sleep clock 0.050
+          done)
+        (* TODO(anmonteiro): we can be a whole lot smarter, and start sending
+           `connection: close` in headers as soon as we detect we're shutting
+           down. *)
+          (fun () ->
+          Eio.Time.sleep clock shutdown_timeout;
+          (* Shut down all client sockets after the shutdown timeout has
+             elapsed. *)
+          List.iter
+            (fun client_sockets ->
+              Hashtbl.iter
+                (fun _ sw -> Eio.Flow.shutdown sw `All)
+                client_sockets)
+            client_sockets);
+      Logs.info (fun m -> m "Server teardown finished")
 
-  let accept_loop ~sw ~socket connection_handler =
+  let accept_loop ~sw ~socket ~client_sockets connection_handler =
     let released_p, released_u = Promise.create () in
+    (* TODO: this can probably be a condition variable instead. *)
     let await_release () = Promise.await released_p in
     Fiber.fork ~sw (fun () ->
         while not (Promise.is_resolved released_p) do
@@ -202,11 +235,23 @@ module Command = struct
                         "Error in connection handler: %s"
                         (Printexc.to_string exn)))
                 (fun socket addr ->
-                  Switch.run (fun sw -> connection_handler ~sw socket addr)))
+                  Switch.run (fun sw ->
+                      let id = Openssl.random_string 20 in
+                      Hashtbl.replace client_sockets id socket;
+                      connection_handler ~sw socket addr;
+                      Hashtbl.remove client_sockets id)))
         done);
     fun () -> Promise.resolve released_u ()
 
-  let listen ~sw ~address ~backlog ~domains env connection_handler =
+  let listen
+      ~sw
+      ~address
+      ~backlog
+      ~domains
+      ~shutdown_timeout
+      env
+      connection_handler
+    =
     let domain_mgr = Eio.Stdenv.domain_mgr env in
     let network = Eio.Stdenv.net env in
     let socket =
@@ -218,6 +263,7 @@ module Command = struct
         network
         address
     in
+    let client_sockets = Hashtbl.create 256 in
     let resolvers = ref [] in
     let all_started, resolve_all_started = Promise.create () in
     for idx = 0 to domains - 1 do
@@ -225,7 +271,9 @@ module Command = struct
           let is_last_domain = idx = domains - 1 in
           let run_accept_loop () =
             Switch.run (fun sw ->
-                let resolver = accept_loop ~sw ~socket connection_handler in
+                let resolver =
+                  accept_loop ~sw ~client_sockets ~socket connection_handler
+                in
                 resolvers := resolver :: !resolvers;
                 if is_last_domain then Promise.resolve resolve_all_started ())
           in
@@ -236,7 +284,12 @@ module Command = struct
     done;
     Promise.await all_started;
     Logs.info (fun m -> m "Server listening on %a" Eio.Net.Sockaddr.pp address);
-    { sockets = [ socket ]; shutdown_resolvers = !resolvers }
+    { sockets = [ socket ]
+    ; shutdown_resolvers = !resolvers
+    ; client_sockets = [ client_sockets ]
+    ; clock = Eio.Stdenv.clock env
+    ; shutdown_timeout
+    }
 
   let start ~sw env server =
     let { config; _ } = server in
@@ -249,6 +302,7 @@ module Command = struct
         ~address:config.address
         ~backlog:config.backlog
         ~domains:config.domains
+        ~shutdown_timeout:config.shutdown_timeout
         env
         connection_handler
     in
@@ -262,11 +316,15 @@ module Command = struct
           ~address:https.address
           ~backlog:config.backlog
           ~domains:config.domains
+          ~shutdown_timeout:config.shutdown_timeout
           env
           connection_handler
       in
       { sockets = https_command.sockets @ command.sockets
       ; shutdown_resolvers =
           command.shutdown_resolvers @ https_command.shutdown_resolvers
+      ; client_sockets = command.client_sockets @ https_command.client_sockets
+      ; clock
+      ; shutdown_timeout = config.shutdown_timeout
       }
 end
