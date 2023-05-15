@@ -48,6 +48,9 @@ type t =
             `http2_prior_knowledge` below ignores this option. *)
   ; tcp_nodelay : bool
   ; accept_timeout : float (* seconds *)
+  ; shutdown_timeout : float
+        (* seconds. How long to wait until connections terminate before shutting
+           down the server. *)
   ; (* Buffer sizes *)
     buffer_size : int
         (** Buffer size used for requests and responses. Defaults to 16384 bytes *)
@@ -73,6 +76,7 @@ let create
     ?(h2c_upgrade = false)
     ?(tcp_nodelay = true)
     ?(accept_timeout = 30.)
+    ?(shutdown_timeout = 0.)
     ?(buffer_size = 0x4000)
     ?(body_buffer_size = 0x1000)
     ?(flush_headers_immediately = false)
@@ -85,6 +89,7 @@ let create
   ; h2c_upgrade
   ; tcp_nodelay
   ; accept_timeout
+  ; shutdown_timeout
   ; buffer_size
   ; body_buffer_size
   ; (* TODO: we don't really support push yet. *)

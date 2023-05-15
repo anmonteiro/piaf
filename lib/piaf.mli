@@ -772,6 +772,9 @@ module Server : sig
                 server. `http2_prior_knowledge` below ignores this option. *)
       ; tcp_nodelay : bool
       ; accept_timeout : float (* seconds *)
+      ; shutdown_timeout : float
+            (* seconds. How long to wait until connections terminate before
+               shutting down the server. *)
       ; (* Buffer sizes *)
         buffer_size : int
             (** Buffer size used for requests and responses. Defaults to 16384
@@ -798,6 +801,7 @@ module Server : sig
       -> ?h2c_upgrade:bool
       -> ?tcp_nodelay:bool
       -> ?accept_timeout:float
+      -> ?shutdown_timeout:float
       -> ?buffer_size:int
       -> ?body_buffer_size:int
       -> ?flush_headers_immediately:bool
@@ -871,6 +875,7 @@ module Server : sig
       -> address:Eio.Net.Sockaddr.stream
       -> backlog:int
       -> domains:int
+      -> shutdown_timeout:float
       -> Eio_unix.Stdenv.base
       -> connection_handler
       -> t
