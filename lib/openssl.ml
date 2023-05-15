@@ -29,11 +29,8 @@
  * POSSIBILITY OF SUCH DAMAGE.
  *---------------------------------------------------------------------------*)
 
-open Monads.Bindings
-
-let src = Logs.Src.create "piaf.openssl" ~doc:"Piaf Client module"
-
-module Log = (val Logs.src_log src : Logs.LOG)
+open Import
+module Logs = (val Logging.setup ~src:"piaf.openssl" ~doc:"Piaf Client module")
 
 module Time = struct
   let months =
@@ -89,7 +86,7 @@ let log_cert_info ~allow_insecure ssl_sock =
   let start_date = Ssl.get_start_date cert in
   let expiration_date = Ssl.get_expiration_date cert in
   let verify_result = Ssl.get_verify_result ssl_sock in
-  Log.info (fun m ->
+  Logs.info (fun m ->
       m
         "@[<v 0>Server certificate:@]@]@;\
          <0 2>@[<v 0>@[<h 0>Subject:@ %s@]@;\
@@ -118,7 +115,7 @@ let load_cert ~certificate ~private_key ctx =
         "Incorrect parameters provided for clientcert, both should be a \
          filepath or pem string"
     in
-    Log.err (fun m -> m "%s" msg);
+    Logs.err (fun m -> m "%s" msg);
     Error (`Connect_error msg)
 
 let load_peer_ca_cert ~certificate ctx = Ssl.add_cert_to_store ctx certificate
@@ -127,7 +124,7 @@ let load_verify_locations ?(cacert = "") ?(capath = "") ctx =
   match Ssl.load_verify_locations ctx cacert capath with
   | () -> Ok ()
   | exception (Invalid_argument _ as exn) ->
-    Log.err (fun m ->
+    Logs.err (fun m ->
         m
           "@[<v 0>Error setting certificate verify locations:@]@]@;\
            <0 2>@[<h 0>CAfile:@ %s@]@;\
@@ -195,7 +192,7 @@ module Error = struct
       | ( Ssl.Error_none | Error_want_read | Error_want_write
         | Error_want_connect | Error_want_accept | Error_want_x509_lookup ) as e
         ->
-        Log.err (fun m ->
+        Logs.err (fun m ->
             m
               "`%s` should never be raised. Please report an issue."
               (ssl_error_to_string e));
@@ -276,7 +273,7 @@ let setup_client_ctx
     in
     Ssl.disable_protocols ctx disabled_protocols;
     List.iter
-      (fun proto -> Log.info (fun m -> m "ALPN: offering %s" proto))
+      (fun proto -> Logs.info (fun m -> m "ALPN: offering %s" proto))
       alpn_protocols;
     Ssl.set_context_alpn_protos ctx alpn_protocols;
     (* Use the server's preferences rather than the client's *)
@@ -321,7 +318,7 @@ let connect ~hostname ~config fd =
         Versions.TLS.pp_hum
         max_tls_version
     in
-    Log.err (fun m -> m "%s" msg);
+    Logs.err (fun m -> m "%s" msg);
     Error (`Connect_error msg))
   else
     let*! ssl_ctx = setup_client_ctx ~config:client_conf ~hostname fd in
@@ -330,7 +327,7 @@ let connect ~hostname ~config fd =
       | socket -> Ok socket
       | exception Eio_ssl.Exn.Ssl_exception { message; _ } ->
         let msg = Format.asprintf "SSL Error: %s" message in
-        Log.err (fun m -> m "%s" msg);
+        Logs.err (fun m -> m "%s" msg);
         Error (`Connect_error msg)
     in
     let ssl_sock = Eio_ssl.Context.ssl_socket ssl_ctx in
@@ -338,7 +335,7 @@ let connect ~hostname ~config fd =
     | Ok ssl ->
       let ssl_version = version_of_ssl (Ssl.version ssl_sock) in
       let ssl_cipher = Ssl.get_cipher ssl_sock in
-      Log.info (fun m ->
+      Logs.info (fun m ->
           m
             "SSL connection using %a / %s"
             Versions.TLS.pp_hum
@@ -355,7 +352,7 @@ let connect ~hostname ~config fd =
          * forgot to handle some failure mode. The assert below will make us
          * remember. *)
         assert (not allow_insecure);
-        Log.err (fun m ->
+        Logs.err (fun m ->
             m "%a" (pp_cert_verify_result ~allow_insecure) verify_result));
       Error e
 
@@ -408,7 +405,7 @@ let setup_server_ctx
     in
     Ssl.disable_protocols ctx disabled_protocols;
     List.iter
-      (fun proto -> Log.info (fun m -> m "ALPN: offering %s" proto))
+      (fun proto -> Logs.info (fun m -> m "ALPN: offering %s" proto))
       alpn_protocols;
     Ssl.set_context_alpn_protos ctx alpn_protocols;
     (* Use the server's preferences rather than the client's *)

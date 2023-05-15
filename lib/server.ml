@@ -29,12 +29,9 @@
  * POSSIBILITY OF SUCH DAMAGE.
  *---------------------------------------------------------------------------*)
 
-open Eio.Std
+open Import
 include Server_intf
-
-let src = Logs.Src.create "piaf.server" ~doc:"Piaf Server module"
-
-module Log = (val Logs.src_log src : Logs.LOG)
+module Logs = (val Logging.setup ~src:"piaf.server" ~doc:"Piaf Server module")
 module Reqd = Httpaf.Reqd
 module Server_connection = Httpaf.Server_connection
 module Config = Server_config
@@ -185,10 +182,10 @@ module Command = struct
     }
 
   let shutdown { sockets; shutdown_resolvers } =
-    Log.info (fun m -> m "Starting server teardown...");
+    Logs.info (fun m -> m "Starting server teardown...");
     List.iter (fun resolver -> resolver ()) shutdown_resolvers;
     List.iter Eio.Net.close sockets;
-    Log.info (fun m -> m "Server teardown finished")
+    Logs.info (fun m -> m "Server teardown finished")
 
   let accept_loop ~sw ~socket connection_handler =
     let released_p, released_u = Promise.create () in
@@ -200,7 +197,7 @@ module Command = struct
                 socket
                 ~sw
                 ~on_error:(fun exn ->
-                  Log.err (fun m ->
+                  Logs.err (fun m ->
                       m
                         "Error in connection handler: %s"
                         (Printexc.to_string exn)))
@@ -238,7 +235,7 @@ module Command = struct
           else Eio.Domain_manager.run domain_mgr run_accept_loop)
     done;
     Promise.await all_started;
-    Log.info (fun m -> m "Server listening on %a" Eio.Net.Sockaddr.pp address);
+    Logs.info (fun m -> m "Server listening on %a" Eio.Net.Sockaddr.pp address);
     { sockets = [ socket ]; shutdown_resolvers = !resolvers }
 
   let start ~sw env server =

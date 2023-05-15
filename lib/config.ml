@@ -29,9 +29,8 @@
  * POSSIBILITY OF SUCH DAMAGE.
  *---------------------------------------------------------------------------*)
 
-let src = Logs.Src.create "piaf.config" ~doc:"Piaf Config module"
-
-module Log = (val Logs.src_log src : Logs.LOG)
+open Import
+module Logs = (val Logging.setup ~src:"piaf.config" ~doc:"Piaf Config module")
 
 (* TODO:
  * - Authentication
@@ -122,7 +121,7 @@ let to_http2_config
   let buffer_size =
     if buffer_size < h2_default_buffer_size
     then (
-      Log.warn (fun m ->
+      Logs.warn (fun m ->
           m
             "Configured buffer size (%d) is smaller than the allowed by the \
              HTTP/2 specification. Defaulting to %d bytes."

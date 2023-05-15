@@ -29,9 +29,8 @@
  * POSSIBILITY OF SUCH DAMAGE.
  *---------------------------------------------------------------------------*)
 
-let src = Logs.Src.create "piaf.posix" ~doc:"Piaf POSIX module"
-
-module Log = (val Logs.src_log src : Logs.LOG)
+open Import
+module Logs = (val Logging.setup ~src:"piaf.posix" ~doc:"Piaf POSIX module")
 
 let sendfile
     (type a)
@@ -50,7 +49,7 @@ let sendfile
      * `Gluten.Server.report_write_result` here given that we put
      * bytes in the file descriptor off-band. `report_write_result`
      * just tracks the internal Faraday buffers. *)
-    Log.debug (fun m -> m "`sendfile` wrote %d bytes successfully" sent);
+    Logs.debug (fun m -> m "`sendfile` wrote %d bytes successfully" sent);
     Ok ()
   | Error e ->
     Writer.close raw_write_body;

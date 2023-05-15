@@ -29,7 +29,7 @@
  * POSSIBILITY OF SUCH DAMAGE.
  *---------------------------------------------------------------------------*)
 
-open Eio.Std
+open Import
 module Piaf_body = Body
 
 module type BODY = Body.Raw.BODY

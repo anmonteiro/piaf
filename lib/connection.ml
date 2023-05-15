@@ -29,14 +29,11 @@
  * POSSIBILITY OF SUCH DAMAGE.
  *---------------------------------------------------------------------------*)
 
-open Eio.Std
-open Monads.Bindings
-open Util
+open Import
 module Version = Httpaf.Version
 
-let src = Logs.Src.create "piaf.connection" ~doc:"Piaf Connection module"
-
-module Log = (val Logs.src_log src : Logs.LOG)
+module Logs =
+  (val Logging.setup ~src:"piaf.connection" ~doc:"Piaf Connection module")
 
 let resolve_host env ~config ~port hostname : (_, [> Error.client ]) result =
   let clock = Eio.Stdenv.clock env in
@@ -155,7 +152,7 @@ let connect ~sw ~clock ~network ~config conn_info =
   let { Info.addresses; _ } = conn_info in
   (* TODO: try addresses in e.g. a round robin fashion? *)
   let address = List.hd addresses in
-  Log.debug (fun m -> m "Trying connection to %a" Info.pp_hum conn_info);
+  Logs.debug (fun m -> m "Trying connection to %a" Info.pp_hum conn_info);
   match
     Eio.Time.with_timeout_exn clock config.Config.connect_timeout (fun () ->
         Eio.Net.connect ~sw network address)

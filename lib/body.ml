@@ -29,13 +29,8 @@
  * POSSIBILITY OF SUCH DAMAGE.
  *---------------------------------------------------------------------------*)
 
-open Eio.Std
-open Monads.Bindings
-module Stream = Piaf_stream
-
-let src = Logs.Src.create "piaf.body" ~doc:"Piaf Body module"
-
-module Log = (val Logs.src_log src : Logs.LOG)
+open Import
+module Logs = (val Logging.setup ~src:"piaf.body" ~doc:"Piaf Body module")
 
 module Optional_upgrade_handler : sig
   type t
@@ -466,7 +461,7 @@ module Raw = struct
           let p, u = Promise.create () in
           Writer.flush body (fun () ->
               Promise.resolve u ();
-              Log.debug (fun m -> m "Flushed output chunk of length %d" len));
+              Logs.debug (fun m -> m "Flushed output chunk of length %d" len));
           Promise.await p)
         else ())
       stream;
