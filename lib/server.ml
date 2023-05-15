@@ -181,7 +181,7 @@ module Command = struct
     ; shutdown_resolvers : (unit -> unit) list
     ; client_sockets :
         (* TODO: pool of ids as old ones free up *)
-        (string, Eio.Net.stream_socket) Hashtbl.t list
+        (int, Eio.Net.stream_socket) Hashtbl.t list
     ; clock : Eio.Time.clock
     ; shutdown_timeout : float
     }
@@ -221,9 +221,9 @@ module Command = struct
 
   let accept_loop ~sw ~socket ~client_sockets connection_handler =
     let released_p, released_u = Promise.create () in
-    (* TODO: this can probably be a condition variable instead. *)
     let await_release () = Promise.await released_p in
     Fiber.fork ~sw (fun () ->
+        let id = ref 0 in
         while not (Promise.is_resolved released_p) do
           Fiber.first await_release (fun () ->
               Eio.Net.accept_fork
@@ -236,10 +236,14 @@ module Command = struct
                         (Printexc.to_string exn)))
                 (fun socket addr ->
                   Switch.run (fun sw ->
-                      let id = Openssl.random_string 20 in
-                      Hashtbl.replace client_sockets id socket;
+                      let connection_id =
+                        let cid = !id in
+                        incr id;
+                        cid
+                      in
+                      Hashtbl.replace client_sockets connection_id socket;
                       connection_handler ~sw socket addr;
-                      Hashtbl.remove client_sockets id)))
+                      Hashtbl.remove client_sockets connection_id)))
         done);
     fun () -> Promise.resolve released_u ()
 
@@ -263,18 +267,21 @@ module Command = struct
         network
         address
     in
-    let client_sockets = Hashtbl.create 256 in
     let resolvers = ref [] in
+    let resolver_mutex = Eio.Mutex.create () in
     let all_started, resolve_all_started = Promise.create () in
     for idx = 0 to domains - 1 do
       Eio.Fiber.fork ~sw (fun () ->
           let is_last_domain = idx = domains - 1 in
           let run_accept_loop () =
             Switch.run (fun sw ->
+                let client_sockets = Hashtbl.create 256 in
                 let resolver =
                   accept_loop ~sw ~client_sockets ~socket connection_handler
                 in
-                resolvers := resolver :: !resolvers;
+                Eio.Mutex.lock resolver_mutex;
+                resolvers := (resolver, client_sockets) :: !resolvers;
+                Eio.Mutex.unlock resolver_mutex;
                 if is_last_domain then Promise.resolve resolve_all_started ())
           in
           (* Last domain starts on the main thread. *)
@@ -285,8 +292,8 @@ module Command = struct
     Promise.await all_started;
     Logs.info (fun m -> m "Server listening on %a" Eio.Net.Sockaddr.pp address);
     { sockets = [ socket ]
-    ; shutdown_resolvers = !resolvers
-    ; client_sockets = [ client_sockets ]
+    ; shutdown_resolvers = List.map fst !resolvers
+    ; client_sockets = List.map snd !resolvers
     ; clock = Eio.Stdenv.clock env
     ; shutdown_timeout
     }

@@ -40,6 +40,7 @@ module HTTP = struct
       ~backlog
       ~domains
       ~address
+      ~shutdown_timeout:0.
       env
       (Server.http_connection_handler
          (Server.create ~config:(Server.Config.create address) request_handler))
@@ -131,6 +132,7 @@ module ALPN = struct
       ~address
       ~backlog
       ~domains
+      ~shutdown_timeout:0.
       env
       (fun ~sw:_ fd client_addr ->
         let server_ctx = Ssl.create_context Ssl.TLSv1_3 Ssl.Server_context in
@@ -241,6 +243,7 @@ module H2c = struct
       ~backlog
       ~domains
       ~address
+      ~shutdown_timeout:0.
       env
       (Server.http_connection_handler
          (Server.create
