@@ -218,7 +218,7 @@ module Command = struct
                   try Eio.Flow.shutdown client_socket `All with
                   | Eio.Io (Eio.Exn.X (Eio_unix.Unix_error (ENOTCONN, _, _)), _)
                     ->
-                    Log.debug (fun m -> m "Socket already disconnected"))
+                    Logs.debug (fun m -> m "Socket already disconnected"))
                 client_sockets)
             client_sockets);
       Logs.info (fun m -> m "Server teardown finished")
