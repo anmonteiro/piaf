@@ -214,7 +214,11 @@ module Command = struct
           List.iter
             (fun client_sockets ->
               Hashtbl.iter
-                (fun _ sw -> Eio.Flow.shutdown sw `All)
+                (fun _ client_socket ->
+                  try Eio.Flow.shutdown client_socket `All with
+                  | Eio.Io (Eio.Exn.X (Eio_unix.Unix_error (ENOTCONN, _, _)), _)
+                    ->
+                    Log.debug (fun m -> m "Socket already disconnected"))
                 client_sockets)
             client_sockets);
       Logs.info (fun m -> m "Server teardown finished")

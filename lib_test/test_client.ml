@@ -22,6 +22,36 @@ let test_simple_get ~sw env () =
   let server = Helper_server.listen ~sw ~env () in
   Switch.run (fun sw ->
       let response =
+        Client.Oneshot.get
+          env
+          ~sw
+          (Uri.of_string "http://localhost:8080")
+          ~headers:[ Headers.Well_known.connection, "close" ]
+      in
+      let response = Result.get_ok response in
+      Alcotest.check
+        response_testable
+        "expected response"
+        (Response.create
+           ~headers:
+             Headers.(
+               of_list
+                 [ Well_known.connection, "close"
+                 ; Well_known.content_length, "5"
+                 ])
+           `OK)
+        response;
+      let body = Body.to_string response.body in
+      Alcotest.(check (result string error_testable))
+        "expected body"
+        (Ok "GET /")
+        body);
+  Helper_server.teardown server
+
+let test_simple_get_oneshot_keepalive ~sw env () =
+  let server = Helper_server.listen ~sw ~env () in
+  Switch.run (fun sw ->
+      let response =
         Client.Oneshot.get env ~sw (Uri.of_string "http://localhost:8080")
       in
       let response = Result.get_ok response in
@@ -36,8 +66,10 @@ let test_simple_get ~sw env () =
       Alcotest.(check (result string error_testable))
         "expected body"
         (Ok "GET /")
-        body);
-  Helper_server.teardown server
+        body;
+      Switch.on_release sw (fun () ->
+          Format.eprintf "release me@.";
+          Helper_server.teardown server))
 
 let test_redirection ~sw env () =
   let server = Helper_server.listen ~sw ~env () in
@@ -576,6 +608,9 @@ let suite =
     , List.map
         (fun (desc, ty, f) -> test_case desc ty f)
         [ "simple get request", `Quick, test_simple_get
+        ; ( "simple get request, no connection close"
+          , `Quick
+          , test_simple_get_oneshot_keepalive )
         ; "redirections", `Quick, test_redirection
         ; ( "redirect POST, request target with GET"
           , `Quick
