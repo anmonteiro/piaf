@@ -242,8 +242,9 @@ module Command = struct
                         cid
                       in
                       Hashtbl.replace client_sockets connection_id socket;
-                      connection_handler ~sw socket addr;
-                      Hashtbl.remove client_sockets connection_id)))
+                      Switch.on_release sw (fun () ->
+                          Hashtbl.remove client_sockets connection_id);
+                      connection_handler ~sw socket addr)))
         done);
     fun () -> Promise.resolve released_u ()
 
