@@ -29,8 +29,7 @@
  * POSSIBILITY OF SUCH DAMAGE.
  *---------------------------------------------------------------------------*)
 
-open Monads.Bindings
-module Stream = Piaf_stream
+open Import
 
 module Multipart = struct
   type t =

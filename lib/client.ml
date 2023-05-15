@@ -29,14 +29,9 @@
  * POSSIBILITY OF SUCH DAMAGE.
  *---------------------------------------------------------------------------*)
 
-open Eio.Std
-open Monads.Bindings
-open Util
+open Import
+module Logs = (val Logging.setup ~src:"piaf.client" ~doc:"Piaf Client module")
 module Connection_info = Connection.Info
-
-let src = Logs.Src.create "piaf.client" ~doc:"Piaf Client module"
-
-module Log = (val Logs.src_log src : Logs.LOG)
 
 type t =
   { mutable conn : Connection.t
@@ -88,7 +83,7 @@ let create_https_connection
   let (module Https), version =
     match Ssl.get_negotiated_alpn_protocol ssl_socket with
     | None ->
-      Log.warn (fun m ->
+      Logs.warn (fun m ->
           let alpn_protocols =
             Versions.ALPN.protocols_of_version config.Config.max_http_version
           in
@@ -114,10 +109,10 @@ let create_https_connection
             then HTTP_1_1
             else config.max_http_version )
       in
-      Log.info (fun m -> m "Defaulting to %a" Versions.HTTP.pp version);
+      Logs.info (fun m -> m "Defaulting to %a" Versions.HTTP.pp version);
       impl, version
     | Some negotiated_proto ->
-      Log.info (fun m -> m "ALPN: server agreed to use %s" negotiated_proto);
+      Logs.info (fun m -> m "ALPN: server agreed to use %s" negotiated_proto);
       (match Versions.ALPN.of_string negotiated_proto with
       | Some version ->
         ( (match version with
@@ -148,9 +143,9 @@ let open_connection ~sw ~config ~uri env conn_info =
      let fd = Eio_unix.Resource.fd_opt socket |> Option.get in
      Eio_unix.Fd.use_exn "Client.open_connection" fd (fun fd ->
          Unix.setsockopt fd TCP_NODELAY true;
-         Log.debug (fun m -> m "TCP_NODELAY set")));
+         Logs.debug (fun m -> m "TCP_NODELAY set")));
 
-  Log.info (fun m -> m "Connected to %a" Connection_info.pp_hum conn_info);
+  Logs.info (fun m -> m "Connected to %a" Connection_info.pp_hum conn_info);
   match conn_info.scheme with
   | `HTTP -> create_http_connection ~sw ~config ~conn_info ~uri socket
   | `HTTPS -> create_https_connection ~sw ~config ~conn_info ~uri socket
@@ -162,7 +157,7 @@ let open_connection ~sw ~config ~uri env conn_info =
  * asynchronous edge cases and shut down the connection that's currently in use
  * instead of the old one. *)
 let shutdown_conn (Connection.Conn { impl; connection; info; fd; _ }) =
-  Log.info (fun m ->
+  Logs.info (fun m ->
       m
         "Tearing down %s connection to %a"
         (String.uppercase_ascii (Scheme.to_string info.scheme))
@@ -219,7 +214,7 @@ let reuse_or_set_up_new_connection
     then (
       (* If we're redirecting within the same host / port / scheme, no need
        * to re-establish a new connection. *)
-      Log.debug (fun m ->
+      Logs.debug (fun m ->
           m "Reusing the same connection as the host / port didn't change");
       (* Even if we reused the connection, the URI could've changed. *)
       conn.info <- new_conn_info;
@@ -238,7 +233,7 @@ let reuse_or_set_up_new_connection
        * host resolves to the same address and the port matches *)
       if Connection_info.equal info new_conn_info
       then (
-        Log.debug (fun m ->
+        Logs.debug (fun m ->
             m "Reusing the same connection as the remote address didn't change");
         (* Even if we reused the connection, the URI could've changed. *)
         conn.info <- new_conn_info;
@@ -292,7 +287,7 @@ let rec return_response
          get headers Well_known.connection, get headers Well_known.upgrade)
      with
     | Some ("Upgrade" | "upgrade"), Some "h2c" ->
-      Log.debug (fun m -> m "Received 101, server accepted HTTP/2 upgrade");
+      Logs.debug (fun m -> m "Received 101, server accepted HTTP/2 upgrade");
       let (module Http2) = (module Http2.HTTP : Http_intf.HTTP2) in
       let*! () = Body.drain body in
       (match
@@ -390,7 +385,7 @@ let rec send_request_and_handle_response
       let msg =
         Format.asprintf "Maximum (%d) redirects followed" config.max_redirects
       in
-      Log.err (fun m -> m "%s" msg);
+      Logs.err (fun m -> m "%s" msg);
       Error (`Connect_error msg)
     | true, true, _, Some location ->
       let { Connection_info.scheme; _ } = info in

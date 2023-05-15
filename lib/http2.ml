@@ -29,7 +29,7 @@
  * POSSIBILITY OF SUCH DAMAGE.
  *---------------------------------------------------------------------------*)
 
-open Eio.Std
+open Import
 
 let make_client_error_handler real_handler type_ error =
   let error : Error.client =

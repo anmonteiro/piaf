@@ -32,12 +32,8 @@
 (* This module uses the interfaces in `s.ml` to abstract over HTTP/1 and HTTP/2
  * and their respective insecure / secure versions. *)
 
-open Eio.Std
-module Stream = Piaf_stream
-
-let src = Logs.Src.create "piaf.http" ~doc:"Piaf HTTP module"
-
-module Log = (val Logs.src_log src : Logs.LOG)
+open Import
+module Logs = (val Logging.setup ~src:"piaf.http" ~doc:"Piaf HTTP module")
 
 let ptoerr p () = Error (Promise.await p)
 
@@ -86,7 +82,7 @@ let flush_and_close :
   =
  fun b request_body ->
   Body.Raw.flush_and_close b request_body (fun () ->
-      Log.info (fun m ->
+      Logs.info (fun m ->
           m "Request body has been completely and successfully uploaded"))
 
 let handle_response :
@@ -106,7 +102,7 @@ let handle_response :
   in
   match result with
   | Ok response ->
-    Log.info (fun m ->
+    Logs.info (fun m ->
         m
           "@[<v 0>Received response:@]@]@;<0 2>@[<v 0>%a@]"
           Response.pp_hum
@@ -149,7 +145,7 @@ let send_request :
   let response_handler response = Promise.resolve notify_response response in
   let error_received, notify_error = Promise.create () in
   let error_handler = make_error_handler notify_error in
-  Log.info (fun m ->
+  Logs.info (fun m ->
       m "@[<v 0>Sending request:@]@]@;<0 2>@[<v 0>%a@]@." Request.pp_hum request);
   let flush_headers_immediately =
     match body.contents with
@@ -217,7 +213,7 @@ let upgrade_connection :
     let error_handler _wsd error =
       Promise.resolve notify_error (error :> Error.client)
     in
-    Log.info (fun m -> m "Upgrading connection to the Websocket protocol");
+    Logs.info (fun m -> m "Upgrading connection to the Websocket protocol");
     let ws_conn =
       Websocketaf.Client_connection.create
         ~error_handler
@@ -232,7 +228,7 @@ let upgrade_connection :
     in
     (match result with
     | Ok wsd ->
-      Log.info (fun m -> m "Websocket Upgrade confirmed");
+      Logs.info (fun m -> m "Websocket Upgrade confirmed");
       Gluten_eio.Client.upgrade
         runtime
         (Gluten.make (module Websocketaf.Client_connection) ws_conn);
@@ -278,7 +274,7 @@ let create_h2c_connection
          runtime
      with
     | Ok connection ->
-      Log.info (fun m -> m "Connection state changed (HTTP/2 confirmed)");
+      Logs.info (fun m -> m "Connection state changed (HTTP/2 confirmed)");
       (* Doesn't write the body by design. The server holds on to the HTTP/1.1 body
        * that was sent as part of the upgrade. *)
       let result =

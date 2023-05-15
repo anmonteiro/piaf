@@ -29,14 +29,10 @@
  * POSSIBILITY OF SUCH DAMAGE.
  *---------------------------------------------------------------------------*)
 
-open Eio.Std
-module Stream = Piaf_stream
+open Import
 module Wsd = Websocketaf.Wsd
 module Websocket = Websocketaf.Websocket
-
-let src = Logs.Src.create "piaf.ws" ~doc:"Piaf Websocket module"
-
-module Log = (val Logs.src_log src : Logs.LOG)
+module Logs = (val Logging.setup ~src:"piaf.ws" ~doc:"Piaf Websocket module")
 
 let upgrade_request ~headers ~scheme ~nonce target =
   Request.of_http1
@@ -138,7 +134,7 @@ module Handler = struct
     in
 
     let eof () =
-      Log.info (fun m -> m "Websocket connection EOF");
+      Logs.info (fun m -> m "Websocket connection EOF");
       Websocketaf.Wsd.close wsd;
       push_to_frames None
     in

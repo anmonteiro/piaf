@@ -1,9 +1,39 @@
-open Eio.Std
+(*----------------------------------------------------------------------------
+ * Copyright (c) 2020-2023, António Nuno Monteiro
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ *
+ * 1. Redistributions of source code must retain the above copyright notice,
+ *    this list of conditions and the following disclaimer.
+ *
+ * 2. Redistributions in binary form must reproduce the above copyright notice,
+ *    this list of conditions and the following disclaimer in the documentation
+ *    and/or other materials provided with the distribution.
+ *
+ * 3. Neither the name of the copyright holder nor the names of its
+ *    contributors may be used to endorse or promote products derived from
+ *    this software without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ *---------------------------------------------------------------------------*)
+
+open Import
 module Piaf_body = Body
 
-let src = Logs.Src.create "piaf.server_impl" ~doc:"Piaf Server module"
-
-module Log = (val Logs.src_log src : Logs.LOG)
+module Logs =
+  (val Logging.setup ~src:"piaf.server_impl" ~doc:"Piaf Server module")
 
 type upgrade = Gluten.impl -> unit
 
@@ -15,7 +45,7 @@ let report_exn :
     -> unit
   =
  fun (module Http) reqd exn ->
-  Log.err (fun m ->
+  Logs.err (fun m ->
       let raw_backtrace = Printexc.get_raw_backtrace () in
       m
         "Exception while handling request: %s.@]@;<0 2>@[<v 0>%a@]"
@@ -122,7 +152,7 @@ let handle_request : sw:Switch.t -> t -> Request.t -> unit =
         | Some _ ->
           (* Already handling an error, don't bother sending the response.
            * `error_handler` will be called. *)
-          Log.info (fun m ->
+          Logs.info (fun m ->
               m
                 "Response returned by handler will not be written, currently \
                  handling error")
@@ -244,7 +274,7 @@ let handle_error :
       | `HTTPS -> assert false)
   in
   try
-    Log.warn (fun m ->
+    Logs.warn (fun m ->
         m
           "Error handler called with error: %a%a"
           Error.pp_hum
@@ -255,7 +285,7 @@ let handle_error :
     error_handler client_address ?request ~respond error
   with
   | exn ->
-    Log.err (fun m ->
+    Logs.err (fun m ->
         let raw_backtrace = Printexc.get_raw_backtrace () in
         m
           "Exception in `error_handler`: %s.@]@;<0 2>@[<v 0>%a@]"
