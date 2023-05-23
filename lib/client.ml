@@ -66,7 +66,7 @@ let create_http_connection ~sw ~config ~conn_info ~uri fd =
     ~uri
     ~version
     ~fd
-    (fd :> Eio.Net.stream_socket)
+    (fd :> Eio.Flow.two_way)
 
 let create_https_connection
     ~sw
