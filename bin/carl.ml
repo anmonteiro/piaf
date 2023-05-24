@@ -367,7 +367,7 @@ let request env ~sw ~cli ~config uri =
         Eio_unix.run_in_systhread (fun () -> Unix.fstat fd)
       in
       let remaining = ref length in
-      let flow = Eio_unix.import_socket_stream ~sw ~close_unix:true fd in
+      let flow = Eio_unix.Net.import_socket_stream ~sw ~close_unix:true fd in
       let stream =
         Stream.from ~f:(fun () ->
             if !remaining = 0

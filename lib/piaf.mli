@@ -859,10 +859,7 @@ module Server : sig
 
   module Command : sig
     type connection_handler =
-      sw:Eio.Switch.t
-      -> Eio.Net.stream_socket
-      -> Eio.Net.Sockaddr.stream
-      -> unit
+      sw:Eio.Switch.t -> Eio.Flow.two_way -> Eio.Net.Sockaddr.stream -> unit
 
     type server := t
     type t
