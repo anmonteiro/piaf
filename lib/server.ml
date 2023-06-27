@@ -243,7 +243,10 @@ module Command = struct
                         incr id;
                         cid
                       in
-                      Hashtbl.replace client_sockets connection_id socket;
+                      Hashtbl.replace
+                        client_sockets
+                        connection_id
+                        (socket :> Eio.Flow.two_way);
                       Switch.on_release sw (fun () ->
                           Hashtbl.remove client_sockets connection_id);
                       connection_handler ~sw (socket :> Eio.Flow.two_way) addr)))

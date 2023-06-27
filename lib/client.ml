@@ -73,12 +73,10 @@ let create_https_connection
     ~config
     ~conn_info
     ~uri
-    (fd : < Eio.Net.stream_socket ; Eio.Flow.close >)
+    (fd : < Eio.Net.stream_socket ; .. >)
   =
   let { Connection_info.host; _ } = conn_info in
-  let*! ssl_client =
-    Openssl.connect ~config ~hostname:host (fd :> Eio.Net.stream_socket)
-  in
+  let*! ssl_client = Openssl.connect ~config ~hostname:host fd in
   let ssl_socket = Eio_ssl.ssl_socket ssl_client in
   let (module Https), version =
     match Ssl.get_negotiated_alpn_protocol ssl_socket with
@@ -132,7 +130,7 @@ let create_https_connection
     ~uri
     ~version
     ~fd
-    (ssl_client :> Eio.Flow.two_way)
+    ssl_client
 
 let open_connection ~sw ~config ~uri env conn_info =
   let clock = Eio.Stdenv.clock env in

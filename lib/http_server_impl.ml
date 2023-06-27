@@ -95,7 +95,7 @@ let create_descriptor :
   Descriptor
     { impl = (module Http)
     ; config
-    ; handle = fd
+    ; handle = (fd :> Eio.Flow.two_way)
     ; reqd
     ; scheme
     ; version
@@ -114,7 +114,10 @@ let do_sendfile :
     -> unit
   =
  fun (module Http) ~src_fd ~fd ~report_exn response_body ->
-  let fd = Option.get (Eio_unix.Resource.fd_opt fd) in
+  let fd =
+    let fd = (fd :> Eio.Flow.two_way) in
+    Option.get (Eio_unix.Resource.fd_opt fd)
+  in
   Eio_unix.Fd.use_exn "sendfile" fd (fun fd ->
       Http.Body.Writer.flush response_body (fun () ->
           match
