@@ -66,6 +66,7 @@ type t =
       ; upgrade : upgrade option
       ; handler : Request_info.t Server_intf.Handler.t
       ; client_address : Eio.Net.Sockaddr.stream
+      ; config : Server_config.t
       }
       -> t
 
@@ -73,6 +74,7 @@ let create_descriptor :
     type reqd.
     ?upgrade:upgrade
     -> (module Http_intf.HTTPServerCommon with type Reqd.t = reqd)
+    -> config:Server_config.t
     -> fd:Eio.Flow.two_way
     -> scheme:Scheme.t
     -> version:Versions.HTTP.t
@@ -81,9 +83,18 @@ let create_descriptor :
     -> reqd
     -> t
   =
- fun ?upgrade (module Http) ~fd ~scheme ~version ~handler ~client_address reqd ->
+ fun ?upgrade
+     (module Http)
+     ~config
+     ~fd
+     ~scheme
+     ~version
+     ~handler
+     ~client_address
+     reqd ->
   Descriptor
     { impl = (module Http)
+    ; config
     ; handle = fd
     ; reqd
     ; scheme
@@ -122,6 +133,7 @@ let handle_request : sw:Switch.t -> t -> Request.t -> unit =
  fun ~sw
      (Descriptor
        { impl = (module Http)
+       ; config
        ; reqd
        ; handle
        ; scheme
@@ -190,7 +202,13 @@ let handle_request : sw:Switch.t -> t -> Request.t -> unit =
             Http.Reqd.respond_with_bigstring reqd response bstr
           | `Stream { stream; _ } ->
             let response_body =
-              Http.Reqd.respond_with_streaming reqd response
+              let flush_headers_immediately =
+                config.flush_headers_immediately
+              in
+              Http.Reqd.respond_with_streaming
+                ~flush_headers_immediately
+                reqd
+                response
             in
             Piaf_body.Raw.stream_write_body
               (module Http.Body.Writer)

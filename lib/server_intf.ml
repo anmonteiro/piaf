@@ -50,10 +50,9 @@ module Handler = struct
 
   type 'ctx t = ('ctx ctx, Response.t) Service.t
 
-  let not_found _ =
-    Response.of_string
-      ~body:"<html><body><h1>404 - Not found</h1></body></html>"
-      `Not_found
+  let not_found =
+    let body = "<html><body><h1>404 - Not found</h1></body></html>" in
+    fun _ -> Response.of_string ~body `Not_found
 end
 
 module Error_response = struct
