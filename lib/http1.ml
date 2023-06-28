@@ -170,7 +170,7 @@ module MakeHTTP1 (Runtime_scheme : Scheme.Runtime.SCHEME) :
         client_addr
         (error :> Error.server)
 
-    let make_request_handler ~sw ~fd handler :
+    let make_request_handler ~sw ~config ~fd handler :
         Eio.Net.Sockaddr.stream -> Httpaf.Reqd.t Gluten.reqd -> unit
       =
      fun client_addr reqd ->
@@ -193,6 +193,7 @@ module MakeHTTP1 (Runtime_scheme : Scheme.Runtime.SCHEME) :
       let descriptor =
         Http_server_impl.create_descriptor
           (module HttpServer)
+          ~config
           ~upgrade
           ~fd
           ~scheme:Runtime_scheme.scheme
@@ -207,7 +208,9 @@ module MakeHTTP1 (Runtime_scheme : Scheme.Runtime.SCHEME) :
         Server_intf.connection_handler
       =
      fun ~sw fd sockaddr ->
-      let request_handler = make_request_handler ~sw ~fd request_handler in
+      let request_handler =
+        make_request_handler ~sw ~config ~fd request_handler
+      in
       let error_handler = make_error_handler ~fd error_handler in
       create_connection_handler
         ~config:(Server_config.to_http1_config config)
