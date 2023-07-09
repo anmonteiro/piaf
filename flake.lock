@@ -41,32 +41,33 @@
         "nixpkgs": "nixpkgs_2"
       },
       "locked": {
-        "lastModified": 1688865204,
-        "narHash": "sha256-mFx+ziGET7qIkB1aLEoQ89Ea6aH7o9SrK0WLyVwYlfs=",
-        "owner": "nix-ocaml",
+        "lastModified": 1688877500,
+        "narHash": "sha256-N9A4sSBmCswkim66HnDiCivGV59IcRaN+zuhtmaDlwA=",
+        "owner": "anmonteiro",
         "repo": "nix-overlays",
-        "rev": "0a6c905421b53916f0fe33b241342e7f831bfa44",
+        "rev": "e27946ddc8b723cc41526a36e45615f136d82d50",
         "type": "github"
       },
       "original": {
-        "owner": "nix-ocaml",
+        "owner": "anmonteiro",
+        "ref": "anmonteiro/update-gluten-piaf",
         "repo": "nix-overlays",
         "type": "github"
       }
     },
     "nixpkgs_2": {
       "locked": {
-        "lastModified": 1688838498,
-        "narHash": "sha256-eVUXBuBLbhP5j0Q0Gk0lDTNVvQyFqXJuHVPBFZ/dDBY=",
+        "lastModified": 1688784496,
+        "narHash": "sha256-s/EWMtzAJhS0gicB3epoKpAEooRdcZwsS24yqOQsX4s=",
         "owner": "NixOS",
         "repo": "nixpkgs",
-        "rev": "1cfa64e7bd6f4f6d5dc3b28ec3e88139c45b36f8",
+        "rev": "038752b14eab3aa316537ae67d7c470b37e27fa3",
         "type": "github"
       },
       "original": {
         "owner": "NixOS",
         "repo": "nixpkgs",
-        "rev": "1cfa64e7bd6f4f6d5dc3b28ec3e88139c45b36f8",
+        "rev": "038752b14eab3aa316537ae67d7c470b37e27fa3",
         "type": "github"
       }
     },
