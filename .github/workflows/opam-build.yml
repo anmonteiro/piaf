@@ -40,5 +40,9 @@ jobs:
           opam pin add eio_linux --dev-repo -y
           opam pin add eio_posix --dev-repo -y
           opam pin add eio_main --dev-repo -y
+          opam pin add ssl --dev-repo -y
           opam pin add eio-ssl --dev-repo -y
+          opam pin add gluten --dev-repo -y
+          opam pin add gluten-eio --dev-repo -y
+          opam pin add h2-eio --dev-repo -y
           opam install . --with-test
