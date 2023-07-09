@@ -40,7 +40,7 @@ module type Client = sig
      config:Config.t
     -> error_handler:error_handler
     -> sw:Eio.Switch.t
-    -> Eio.Flow.two_way
+    -> #Eio.Flow.two_way
     -> t * Gluten_eio.Client.t
 
   val request :
@@ -149,7 +149,7 @@ module type HTTP2 = sig
     val create_h2c_connection_handler :
        config:Server_config.t
       -> sw:Eio.Switch.t
-      -> fd:Eio.Flow.two_way
+      -> fd:#Eio.Flow.two_way
       -> error_handler:Server_intf.error_handler
       -> http_request:Httpaf.Request.t
       -> request_body:Bigstringaf.t IOVec.t list

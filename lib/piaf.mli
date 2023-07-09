@@ -318,7 +318,7 @@ module Error : sig
   type common =
     [ `Exn of exn
     | `Protocol_error of H2.Error_code.t * string
-    | `TLS_error of string
+    | `TLS_error of Ssl.Error.t
     | `Upgrade_not_supported
     | `Msg of string
     ]

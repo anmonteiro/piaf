@@ -221,7 +221,7 @@ let test_https ~sw env () =
     Alcotest.(check bool)
       "response error"
       true
-      (String.starts_with ~prefix:"SSL Error: error:" s)
+      (String.starts_with ~prefix:"SSL Error: " s)
   | Error _ -> assert false);
   Helper_server.teardown server
 
@@ -448,7 +448,7 @@ let test_https_client_certs ~sw env () =
   in
   (match response with
   | Ok () -> Alcotest.fail "expected response to be error"
-  | Error (`TLS_error msg) ->
+  | Error (`TLS_error { reason; _ }) ->
     (match run "uname" with
     | "Linux" ->
       (* Differences between eio_linux / eio_luv *)
@@ -456,8 +456,8 @@ let test_https_client_certs ~sw env () =
     | "Darwin" | _ ->
       Alcotest.(check string)
         "response error"
-        "error:0A00045C:SSL routines::tlsv13 alert certificate required"
-        msg)
+        "tlsv13 alert certificate required"
+        (Option.get reason))
   | Error e ->
     Alcotest.fail
       (Format.asprintf "expected response to be error: %a" Error.pp_hum e));
