@@ -428,41 +428,64 @@ let test_https_client_certs ~sw env () =
        `OK)
     response;
   Result.get_ok (Body.drain response.body);
-  Helper_server.teardown server;
-  (* No client certificate provided *)
-  let server = Helper_server.listen ~sw ~env ~check_client_cert:true () in
-  let response =
-    Client.Oneshot.get
-      ~sw
-      ~config:
-        { Config.default with
-          follow_redirects = true
-        ; max_redirects = 1
-        ; allow_insecure = false
-        ; max_http_version = HTTP_1_1
-        ; cacert = Some (Cert.Filepath (Helper_server.cert_path // "ca.pem"))
-        }
-      env
-      (Uri.of_string "https://localhost:9443")
-    |> Result.map (fun res -> Result.get_ok (Body.drain res.Response.body))
-  in
-  (match response with
-  | Ok () -> Alcotest.fail "expected response to be error"
-  | Error (`TLS_error { reason; _ }) ->
-    (match run "uname" with
-    | "Linux" ->
-      (* Differences between eio_linux / eio_luv *)
-      ()
-    | "Darwin" | _ ->
-      Alcotest.(check string)
-        "response error"
-        "tlsv13 alert certificate required"
-        (Option.get reason))
-  | Error e ->
-    Alcotest.fail
-      (Format.asprintf "expected response to be error: %a" Error.pp_hum e));
-
   Helper_server.teardown server
+
+let test_https_no_client_cert () =
+  (* No client certificate provided *)
+  Eio_main.run (fun env ->
+      try
+        Switch.run (fun sw ->
+            let server =
+              Helper_server.listen ~sw ~env ~check_client_cert:true ()
+            in
+            let response =
+              Client.Oneshot.get
+                ~sw
+                ~config:
+                  { Config.default with
+                    follow_redirects = true
+                  ; max_redirects = 1
+                  ; allow_insecure = false
+                  ; max_http_version = HTTP_1_1
+                  ; cacert =
+                      Some (Cert.Filepath (Helper_server.cert_path // "ca.pem"))
+                  }
+                env
+                (Uri.of_string "https://localhost:9443")
+              |> Result.map (fun res ->
+                     Result.get_ok (Body.drain res.Response.body))
+            in
+            (match response with
+            | Ok () -> Alcotest.fail "expected response to be error"
+            | Error (`TLS_error { reason; _ }) ->
+              (match run "uname" with
+              | "Linux" ->
+                (* Differences between eio_linux / eio_luv *)
+                ()
+              | "Darwin" | _ ->
+                Alcotest.(check string)
+                  "response error"
+                  "tlsv13 alert certificate required"
+                  (Option.get reason))
+            | Error e ->
+              Alcotest.fail
+                (Format.asprintf
+                   "expected response to be error: %a"
+                   Error.pp_hum
+                   e));
+
+            Helper_server.teardown server)
+      with
+      | Eio_ssl.Exn.Ssl_exception { reason; _ } ->
+        (match run "uname" with
+        | "Linux" ->
+          (* Differences between eio_linux / eio_luv *)
+          ()
+        | "Darwin" | _ ->
+          Alcotest.(check string)
+            "response error"
+            "tlsv13 alert certificate required"
+            (Option.get reason)))
 
 let test_h2c ~sw env () =
   let server =
@@ -620,7 +643,8 @@ let suite =
         ; "https client certs", `Quick, test_https_client_certs
         ; "h2c", `Quick, test_h2c
         ; "default headers", `Quick, test_default_headers
-        ] )
+        ]
+      @ [ "https no client cert", `Quick, test_https_no_client_cert ] )
   ]
 
 let () =
