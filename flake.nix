@@ -4,7 +4,7 @@
   inputs.nix-filter.url = "github:numtide/nix-filter";
   inputs.flake-utils.url = "github:numtide/flake-utils";
   inputs.nixpkgs = {
-    url = "github:anmonteiro/nix-overlays/anmonteiro/update-gluten-piaf";
+    url = "github:anmonteiro/nix-overlays";
     inputs.flake-utils.follows = "flake-utils";
   };
 
