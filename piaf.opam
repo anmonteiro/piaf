@@ -47,6 +47,7 @@ pin-depends: [
   [ "gluten-eio.dev" "git+https://github.com/anmonteiro/gluten.git" ]
   [ "httpaf.dev" "git+https://github.com/anmonteiro/httpaf.git" ]
   [ "httpaf-eio.dev" "git+https://github.com/anmonteiro/httpaf.git" ]
+  [ "hpack.dev" "git+https://github.com/anmonteiro/ocaml-h2.git" ]
   [ "h2.dev" "git+https://github.com/anmonteiro/ocaml-h2.git" ]
   [ "h2-eio.dev" "git+https://github.com/anmonteiro/ocaml-h2.git" ]
   [ "ssl.dev" "git+https://github.com/savonet/ocaml-ssl.git" ]
