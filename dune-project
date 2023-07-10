@@ -28,13 +28,13 @@
   (ocaml
    (>= "5.0"))
   logs
-  eio-ssl
+  (eio-ssl :dev)
   magic-mime
-  ssl
+  (ssl :dev)
   uri
   ipaddr
   (httpaf-eio :dev)
-  gluten-eio
+  (gluten-eio :dev)
   (h2-eio :dev)
   (websocketaf :dev)
   (multipart_form :dev)

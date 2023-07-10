@@ -12,13 +12,13 @@ depends: [
   "dune" {>= "2.8"}
   "ocaml" {>= "5.0"}
   "logs"
-  "eio-ssl"
+  "eio-ssl" {dev}
   "magic-mime"
-  "ssl"
+  "ssl" {dev}
   "uri"
   "ipaddr"
   "httpaf-eio" {dev}
-  "gluten-eio"
+  "gluten-eio" {dev}
   "h2-eio" {dev}
   "websocketaf" {dev}
   "multipart_form" {dev}
@@ -43,8 +43,14 @@ build: [
 ]
 dev-repo: "git+https://github.com/anmonteiro/piaf.git"
 pin-depends: [
+  [ "gluten.dev" "git+https://github.com/anmonteiro/gluten.git" ]
+  [ "gluten-eio.dev" "git+https://github.com/anmonteiro/gluten.git" ]
   [ "httpaf.dev" "git+https://github.com/anmonteiro/httpaf.git" ]
   [ "httpaf-eio.dev" "git+https://github.com/anmonteiro/httpaf.git" ]
+  [ "h2.dev" "git+https://github.com/anmonteiro/ocaml-h2.git" ]
+  [ "h2-eio.dev" "git+https://github.com/anmonteiro/ocaml-h2.git" ]
+  [ "ssl.dev" "git+https://github.com/savonet/ocaml-ssl.git" ]
+  [ "eio-ssl.dev" "git+https://github.com/anmonteiro/eio-ssl.git" ]
   [ "websocketaf.dev" "git+https://github.com/anmonteiro/websocketaf.git" ]
   [ "multipart_form.dev" "git+https://github.com/anmonteiro/multipart_form.git" ]
 ]
