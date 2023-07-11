@@ -68,13 +68,7 @@ let create_http_connection ~sw ~config ~conn_info ~uri fd =
     ~fd
     fd
 
-let create_https_connection
-    ~sw
-    ~config
-    ~conn_info
-    ~uri
-    (fd : < Eio.Net.stream_socket ; .. >)
-  =
+let create_https_connection ~sw ~config ~conn_info ~uri fd =
   let { Connection_info.host; _ } = conn_info in
   let*! ssl_client = Openssl.connect ~config ~hostname:host fd in
   let ssl_socket = Eio_ssl.ssl_socket ssl_client in
