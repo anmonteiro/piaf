@@ -310,7 +310,7 @@ let create_h2c_connection
 let shutdown :
     type t.
     (module Http_intf.HTTPCommon with type Client.t = t)
-    -> fd:< Eio.Net.stream_socket ; .. >
+    -> fd:#Eio.Net.stream_socket
     -> t
     -> unit
   =
