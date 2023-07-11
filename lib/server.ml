@@ -179,7 +179,7 @@ module Command = struct
   type nonrec t =
     { sockets : Eio.Net.listening_socket list
     ; shutdown_resolvers : (unit -> unit) list
-    ; client_sockets : (int, Eio.Flow.two_way) Hashtbl.t list
+    ; client_sockets : (int, Eio.Net.stream_socket) Hashtbl.t list
     ; clock : Eio.Time.clock
     ; shutdown_timeout : float
     }
@@ -238,7 +238,6 @@ module Command = struct
                         (Printexc.to_string exn)))
                 (fun socket addr ->
                   Switch.run (fun sw ->
-                      let socket = (socket :> Eio.Flow.two_way) in
                       let connection_id =
                         let cid = !id in
                         incr id;
@@ -247,7 +246,7 @@ module Command = struct
                       Hashtbl.replace client_sockets connection_id socket;
                       Switch.on_release sw (fun () ->
                           Hashtbl.remove client_sockets connection_id);
-                      connection_handler ~sw socket addr)))
+                      connection_handler ~sw (socket :> Eio.Flow.two_way) addr)))
         done);
     fun () -> Promise.resolve released_u ()
 

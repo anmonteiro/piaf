@@ -134,9 +134,11 @@ module ALPN = struct
       ~domains
       ~shutdown_timeout:0.
       env
-      (fun ~sw:_ fd client_addr ->
+      (fun ~sw fd client_addr ->
         let server_ctx = Ssl.create_context Ssl.TLSv1_3 Ssl.Server_context in
-        Ssl.disable_protocols server_ctx [ Ssl.SSLv23; Ssl.TLSv1_1 ];
+        Ssl.disable_protocols
+          server_ctx
+          ([ Ssl.SSLv23; Ssl.TLSv1_1 ] [@alert "-deprecated"]);
         Ssl.load_verify_locations server_ctx ca "";
         Ssl.use_certificate server_ctx cert priv_key;
         if check_client_cert
@@ -150,10 +152,8 @@ module ALPN = struct
           let ssl_server = Eio_ssl.accept ssl_ctx in
           let ssl_socket = Eio_ssl.ssl_socket ssl_server in
           match Ssl.get_negotiated_alpn_protocol ssl_socket with
-          | Some "http/1.1" ->
-            http1s_handler client_addr (ssl_server :> Eio.Flow.two_way)
-          | Some "h2" ->
-            h2s_handler client_addr (ssl_server :> Eio.Flow.two_way)
+          | Some "http/1.1" -> http1s_handler ~sw client_addr ssl_server
+          | Some "h2" -> h2s_handler ~sw client_addr ssl_server
           | None (* Unable to negotiate a protocol *) | Some _ ->
             (* Can't really happen - would mean that TLS negotiated a
              * protocol that we didn't specify. *)

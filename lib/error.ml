@@ -37,7 +37,7 @@ type kind =
 type common =
   [ `Exn of exn
   | `Protocol_error of H2.Error_code.t * string
-  | `TLS_error of string
+  | `TLS_error of Ssl.Error.t
   | `Upgrade_not_supported
   | `Msg of string
   ]
@@ -79,7 +79,11 @@ let to_string = function
       code
       (if msg = "" then "" else ": ")
       msg
-  | `TLS_error msg -> Format.asprintf "SSL Error: %s" msg
+  | `TLS_error { Ssl.Error.reason_code; reason; _ } ->
+    Format.asprintf
+      "SSL Error(%d): %s"
+      reason_code
+      (Option.value ~default:"unknown" reason)
   | `Connect_error msg -> Format.asprintf "Connection Error: %s" msg
   | `Bad_gateway -> "Bad Gateway"
   | `Bad_request -> "Bad Request"

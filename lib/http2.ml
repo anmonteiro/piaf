@@ -61,7 +61,7 @@ module MakeHTTP2 (Runtime_scheme : Scheme.Runtime.SCHEME) : sig
        and type scheme = Runtime_scheme.t
 
   val make_error_handler :
-     fd:Eio.Flow.two_way
+     fd:#Eio.Flow.two_way
     -> Server_intf.error_handler
     -> Eio.Net.Sockaddr.stream
     -> H2.Server_connection.error_handler
@@ -69,7 +69,7 @@ module MakeHTTP2 (Runtime_scheme : Scheme.Runtime.SCHEME) : sig
   val make_request_handler :
      sw:Switch.t
     -> config:Server_config.t
-    -> fd:Eio.Flow.two_way
+    -> fd:#Eio.Flow.two_way
     -> Request_info.t Server_intf.Handler.t
     -> Eio.Net.Sockaddr.stream
     -> H2.Reqd.t
@@ -225,6 +225,7 @@ end = struct
         ~config:(Server_config.to_http2_config config)
         ~request_handler
         ~error_handler
+        ~sw
         sockaddr
         fd
   end
@@ -295,7 +296,7 @@ module HTTP : Http_intf.HTTP2 with type scheme = Scheme.http = struct
     let create_h2c_connection_handler :
          config:Server_config.t
         -> sw:Eio.Switch.t
-        -> fd:Eio.Flow.two_way
+        -> fd:#Eio.Flow.two_way
         -> error_handler:Server_intf.error_handler
         -> http_request:Httpaf.Request.t
         -> request_body:Bigstringaf.t IOVec.t list

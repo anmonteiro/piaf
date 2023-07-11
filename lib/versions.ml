@@ -94,10 +94,10 @@ module TLS = struct
     | _ -> compare (index_of ordered v1 0) (index_of ordered v2 0)
 
   let to_max_version = function
-    | Any -> Ssl.SSLv23
-    | SSLv3 -> SSLv3
-    | TLSv1_0 -> TLSv1
-    | TLSv1_1 -> TLSv1_1
+    | Any -> Ssl.SSLv23 [@alert "-deprecated"]
+    | SSLv3 -> SSLv3 [@alert "-deprecated"]
+    | TLSv1_0 -> TLSv1 [@alert "-deprecated"]
+    | TLSv1_1 -> TLSv1_1 [@alert "-deprecated"]
     | TLSv1_2 -> TLSv1_2
     | TLSv1_3 -> TLSv1_3
 

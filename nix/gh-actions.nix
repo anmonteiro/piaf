@@ -9,7 +9,7 @@ let
       };
     }
     {
-      uses = "cachix/install-nix-action@v17";
+      uses = "cachix/install-nix-action@v22";
       "with" = {
         extra_nix_config = ''
           extra-substituters = https://anmonteiro.nix-cache.workers.dev

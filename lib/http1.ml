@@ -216,6 +216,7 @@ module MakeHTTP1 (Runtime_scheme : Scheme.Runtime.SCHEME) :
         ~config:(Server_config.to_http1_config config)
         ~request_handler
         ~error_handler
+        ~sw
         sockaddr
         fd
   end

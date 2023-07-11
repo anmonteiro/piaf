@@ -148,18 +148,18 @@ let configure_verify_locations ?cacert ?capath ctx =
           else Error (`Connect_error "Failed to set default verify paths")))
 
 let version_of_ssl = function
-  | Ssl.SSLv23 -> Versions.TLS.Any
-  | SSLv3 -> SSLv3
-  | TLSv1 -> TLSv1_0
-  | TLSv1_1 -> TLSv1_1
+  | (Ssl.SSLv23 [@alert "-deprecated"]) -> Versions.TLS.Any
+  | (SSLv3 [@alert "-deprecated"]) -> SSLv3
+  | (TLSv1 [@alert "-deprecated"]) -> TLSv1_0
+  | (TLSv1_1 [@alert "-deprecated"]) -> TLSv1_1
   | TLSv1_2 -> TLSv1_2
   | TLSv1_3 -> TLSv1_3
 
 let version_to_ssl = function
-  | Versions.TLS.Any -> Ssl.SSLv23
-  | SSLv3 -> SSLv3
-  | TLSv1_0 -> TLSv1
-  | TLSv1_1 -> TLSv1_1
+  | Versions.TLS.Any -> Ssl.SSLv23 [@alert "-deprecated"]
+  | SSLv3 -> SSLv3 [@alert "-deprecated"]
+  | TLSv1_0 -> TLSv1 [@alert "-deprecated"]
+  | TLSv1_1 -> TLSv1_1 [@alert "-deprecated"]
   | TLSv1_2 -> TLSv1_2
   | TLSv1_3 -> TLSv1_3
 
@@ -185,13 +185,18 @@ module Error = struct
     | Error_zero_return -> "Error_zero_return"
     | Error_want_connect -> "Error_want_connect"
     | Error_want_accept -> "Error_want_accept"
+    | Error_want_async -> "Error_want_async"
+    | Error_want_async_job -> "Error_want_async_job"
+    | Error_want_client_hello_cb -> "Error_want_client_hello_cb"
+    | Error_want_retry_verify -> "Error_want_retry_verify"
 
   let ssl_error_to_string ssl_error =
     let error_string =
       match ssl_error with
       | ( Ssl.Error_none | Error_want_read | Error_want_write
-        | Error_want_connect | Error_want_accept | Error_want_x509_lookup ) as e
-        ->
+        | Error_want_connect | Error_want_accept | Error_want_x509_lookup
+        | Error_want_async | Error_want_async_job | Error_want_client_hello_cb
+        | Error_want_retry_verify ) as e ->
         Logs.err (fun m ->
             m
               "`%s` should never be raised. Please report an issue."
@@ -211,7 +216,14 @@ module Error = struct
            closed. *)
         "SSL Connection closed"
     in
-    Format.asprintf "%s: %s" error_string (Ssl.get_error_string ())
+    let { Ssl.Error.library_number = _; reason_code; lib = _; reason } =
+      Ssl.Error.get_error ()
+    in
+    Format.asprintf
+      "%s(%d): %s"
+      error_string
+      reason_code
+      (Option.value ~default:"unknown" reason)
 
   let fail_with_too_old_ssl max_tls_version =
     let reason =
@@ -266,12 +278,12 @@ let setup_client_ctx
   | exception Ssl.Method_error -> Error.fail_with_too_old_ssl max_tls_version
   | exception Invalid_argument _ -> Error.fail_with_too_old_ssl max_tls_version
   | ctx ->
-    let disabled_protocols =
-      List.map
-        version_to_ssl
-        (protocols_to_disable min_tls_version max_tls_version)
-    in
-    Ssl.disable_protocols ctx disabled_protocols;
+    Ssl.set_min_protocol_version
+      ctx
+      (Versions.TLS.to_max_version min_tls_version);
+    Ssl.set_max_protocol_version
+      ctx
+      (Versions.TLS.to_max_version max_tls_version);
     List.iter
       (fun proto -> Logs.info (fun m -> m "ALPN: offering %s" proto))
       alpn_protocols;
@@ -325,8 +337,12 @@ let connect ~hostname ~config fd =
     let socket_or_error =
       match Eio_ssl.connect ssl_ctx with
       | socket -> Ok socket
-      | exception Eio_ssl.Exn.Ssl_exception { message; _ } ->
-        let msg = Format.asprintf "SSL Error: %s" message in
+      | exception Eio_ssl.Exn.Ssl_exception { reason; _ } ->
+        let msg =
+          Format.asprintf
+            "SSL Error: %s"
+            (Option.value ~default:"unknown" reason)
+        in
         Logs.err (fun m -> m "%s" msg);
         Error (`Connect_error msg)
     in

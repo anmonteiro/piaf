@@ -40,5 +40,4 @@ jobs:
           opam pin add eio_linux --dev-repo -y
           opam pin add eio_posix --dev-repo -y
           opam pin add eio_main --dev-repo -y
-          opam pin add eio-ssl --dev-repo -y
-          opam install . --with-test
+          opam install .

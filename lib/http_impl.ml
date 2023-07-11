@@ -40,7 +40,7 @@ let ptoerr p () = Error (Promise.await p)
 let make_error_handler notify_error ~kind:_ error =
   let error =
     match error with
-    | `Exn (Eio_ssl.Exn.Ssl_exception { message; _ }) -> `TLS_error message
+    | `Exn (Eio_ssl.Exn.Ssl_exception ssl_error) -> `TLS_error ssl_error
     | error -> error
   in
   Promise.resolve notify_error error
@@ -310,7 +310,7 @@ let create_h2c_connection
 let shutdown :
     type t.
     (module Http_intf.HTTPCommon with type Client.t = t)
-    -> fd:< Eio.Net.stream_socket ; Eio.Flow.close >
+    -> fd:#Eio.Net.stream_socket
     -> t
     -> unit
   =
