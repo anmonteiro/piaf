@@ -116,7 +116,7 @@ let http_connection_handler t : connection_handler =
   fun ~sw socket client_address ->
     let request_handler
         ({ request; ctx = { Request_info.client_address = _; scheme; _ } } as
-        ctx)
+         ctx)
       =
       match
         is_requesting_h2c_upgrade

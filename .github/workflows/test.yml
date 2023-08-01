@@ -24,7 +24,8 @@
         "fail-fast": false,
         "matrix": {
           "ocamlVersion": [
-            "5_0"
+            "5_0",
+            "5_1"
           ]
         }
       }
@@ -53,7 +54,8 @@
         "fail-fast": false,
         "matrix": {
           "ocamlVersion": [
-            "5_0"
+            "5_0",
+            "5_1"
           ]
         }
       }

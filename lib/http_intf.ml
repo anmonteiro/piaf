@@ -124,38 +124,38 @@ module Piaf_body = Body
 
 (* Only needed for h2c upgrades (insecure HTTP/2) *)
 module type HTTP2 = sig
-  type scheme
+    type scheme
 
-  val scheme : Scheme.t
+    val scheme : Scheme.t
 
-  module Body : Body.Raw.BODY
+    module Body : Body.Raw.BODY
 
-  module Client : sig
-    include Client with type write_body := Body.Writer.t
+    module Client : sig
+      include Client with type write_body := Body.Writer.t
 
-    val create_h2c :
-       config:Config.t
-      -> ?push_handler:(Request.t -> (response_handler, unit) result)
-      -> http_request:Httpaf.Request.t
-      -> error_handler:error_handler
-      -> response_handler * error_handler
-      -> Gluten_eio.Client.t
-      -> (t, string) result
+      val create_h2c :
+         config:Config.t
+        -> ?push_handler:(Request.t -> (response_handler, unit) result)
+        -> http_request:Httpaf.Request.t
+        -> error_handler:error_handler
+        -> response_handler * error_handler
+        -> Gluten_eio.Client.t
+        -> (t, string) result
+    end
+
+    module Server : sig
+      include Server with type write_body := Body.Writer.t
+
+      val create_h2c_connection_handler :
+         config:Server_config.t
+        -> sw:Eio.Switch.t
+        -> fd:#Eio.Flow.two_way
+        -> error_handler:Server_intf.error_handler
+        -> http_request:Httpaf.Request.t
+        -> request_body:Bigstringaf.t IOVec.t list
+        -> client_address:Eio.Net.Sockaddr.stream
+        -> Request_info.t Server_intf.Handler.t
+        -> (H2.Server_connection.t, string) result
+    end
   end
-
-  module Server : sig
-    include Server with type write_body := Body.Writer.t
-
-    val create_h2c_connection_handler :
-       config:Server_config.t
-      -> sw:Eio.Switch.t
-      -> fd:#Eio.Flow.two_way
-      -> error_handler:Server_intf.error_handler
-      -> http_request:Httpaf.Request.t
-      -> request_body:Bigstringaf.t IOVec.t list
-      -> client_address:Eio.Net.Sockaddr.stream
-      -> Request_info.t Server_intf.Handler.t
-      -> (H2.Server_connection.t, string) result
-  end
-end
-with type Client.t = H2_eio.Client.t
+  with type Client.t = H2_eio.Client.t
