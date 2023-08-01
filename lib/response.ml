@@ -146,7 +146,7 @@ end
 
 let of_http1 ?(body = Body.empty) response =
   let { Httpaf.Response.status; version; headers; _ } = response in
-  { status = (status :> Status.t)
+  { status :> Status.t
   ; headers = H2.Headers.of_rev_list (Httpaf.Headers.to_rev_list headers)
   ; version = Versions.HTTP.Raw.to_version_exn version
   ; body

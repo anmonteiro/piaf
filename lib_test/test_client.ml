@@ -453,7 +453,7 @@ let test_https_no_client_cert () =
                 env
                 (Uri.of_string "https://localhost:9443")
               |> Result.map (fun res ->
-                     Result.get_ok (Body.drain res.Response.body))
+                  Result.get_ok (Body.drain res.Response.body))
             in
             (match response with
             | Ok () -> Alcotest.fail "expected response to be error"

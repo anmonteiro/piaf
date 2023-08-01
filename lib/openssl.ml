@@ -315,7 +315,7 @@ let setup_client_ctx
 (* Assumes that the file descriptor is connected. *)
 let connect ~hostname ~config fd =
   let ({ Config.allow_insecure; min_tls_version; max_tls_version; _ } as
-      client_conf)
+       client_conf)
     =
     config
   in
