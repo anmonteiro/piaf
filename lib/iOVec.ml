@@ -56,5 +56,5 @@ let concat = function
         ~len;
       acc_off + len
     in
-    ignore @@ List.fold_left aux 0 iovecs;
+    let _len : int = List.fold_left aux 0 iovecs in
     { buffer = result_buffer; off = 0; len = length }
