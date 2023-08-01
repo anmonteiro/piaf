@@ -39,19 +39,6 @@ let upgrade_request ~headers ~scheme ~nonce target =
     ~scheme
     (Websocketaf.Handshake.create_request ~nonce ~headers target)
 
-module Opcode = struct
-  type t = Websocket.Opcode.t
-
-  let to_string = function
-    | `Continuation -> "Continuation"
-    | `Text -> "Text"
-    | `Binary -> "Binary"
-    | `Connection_close -> "Connection_close"
-    | `Ping -> "Ping"
-    | `Pong -> "Pong"
-    | `Other code -> Format.asprintf "Custom: %x" code
-end
-
 module Message = struct
   type t = Websocket.Opcode.t * Bigstringaf.t IOVec.t
 end

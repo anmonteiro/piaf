@@ -25,7 +25,7 @@ let rec stdin_loop ~stdin buf wsd =
     Ws.Descriptor.send_ping ~application_data wsd;
     stdin_loop ~stdin buf wsd
   | line ->
-    Ws.Descriptor.send_stringy wsd line;
+    Ws.Descriptor.send_string wsd line;
     stdin_loop ~stdin buf wsd
 
 let request ~env ~sw host =
