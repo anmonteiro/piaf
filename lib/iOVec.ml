@@ -40,3 +40,21 @@ let of_bytes bytes ~off ~len =
   let buffer = Bigstringaf.create len in
   Bigstringaf.blit_from_bytes bytes ~src_off:off buffer ~dst_off:0 ~len;
   { buffer; off; len }
+
+let concat = function
+  | [] -> make Bigstringaf.empty ~off:0 ~len:0
+  | [ iovec ] -> iovec
+  | iovecs ->
+    let length = lengthv iovecs in
+    let result_buffer = Bigstringaf.create length in
+    let aux acc_off { buffer; off; len } =
+      Bigstringaf.unsafe_blit
+        buffer
+        ~src_off:off
+        result_buffer
+        ~dst_off:acc_off
+        ~len;
+      acc_off + len
+    in
+    ignore @@ List.fold_left aux 0 iovecs;
+    { buffer = result_buffer; off = 0; len = length }

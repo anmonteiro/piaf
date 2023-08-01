@@ -434,18 +434,23 @@ module Body : sig
 end
 
 module Ws : sig
+  module Message : sig
+    type t = Websocketaf.Websocket.Opcode.t * Bigstringaf.t IOVec.t
+  end
+
   module Descriptor : sig
     type t
 
-    val frames : t -> (Websocketaf.Websocket.Opcode.t * string) Stream.t
+    val messages : t -> Message.t Stream.t
     (** Stream of incoming websocket messages (frames) *)
 
+    val send_iovec : t -> Bigstringaf.t IOVec.t -> unit
     val send_stream : t -> Bigstringaf.t IOVec.t Stream.t -> unit
     val send_string_stream : t -> string Stream.t -> unit
     val send_string : t -> string -> unit
     val send_bigstring : t -> ?off:int -> ?len:int -> Bigstringaf.t -> unit
-    val send_ping : t -> unit
-    val send_pong : t -> unit
+    val send_ping : ?application_data:Bigstringaf.t IOVec.t -> t -> unit
+    val send_pong : ?application_data:Bigstringaf.t IOVec.t -> t -> unit
     val flushed : t -> unit Eio.Promise.t
     val close : t -> unit
     val is_closed : t -> bool

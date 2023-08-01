@@ -3,9 +3,9 @@ open Piaf
 
 let connection_handler { Server.request; _ } =
   Response.Upgrade.websocket request ~f:(fun wsd ->
-      let frames = Ws.Descriptor.frames wsd in
+      let frames = Ws.Descriptor.messages wsd in
       Stream.iter
-        ~f:(fun (_opcode, frame) -> Ws.Descriptor.send_string wsd frame)
+        ~f:(fun (_opcode, frame) -> Ws.Descriptor.send_iovec wsd frame)
         frames)
   |> Result.get_ok
 
