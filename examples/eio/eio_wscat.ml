@@ -16,11 +16,17 @@ end
 let rec stdin_loop ~stdin buf wsd =
   let line = Eio.Buf_read.line buf in
   traceln "< %s" line;
-  if line = "exit"
-  then Ws.Descriptor.close wsd
-  else (
+  match line with
+  | "exit" -> Ws.Descriptor.close wsd
+  | "ping" ->
+    let application_data =
+      IOVec.make ~off:0 ~len:5 (Bigstringaf.of_string ~off:0 ~len:5 "hello")
+    in
+    Ws.Descriptor.send_ping ~application_data wsd;
+    stdin_loop ~stdin buf wsd
+  | line ->
     Ws.Descriptor.send_string wsd line;
-    stdin_loop ~stdin buf wsd)
+    stdin_loop ~stdin buf wsd
 
 let request ~env ~sw host =
   let open Result in
@@ -34,8 +40,9 @@ let request ~env ~sw host =
       Client.shutdown client)
     (fun () ->
       Stream.iter
-        ~f:(fun (_opcode, frame) -> Format.printf ">> %s@." frame)
-        (Ws.Descriptor.frames wsd))
+        ~f:(fun (_opcode, { IOVec.buffer; off; len }) ->
+          Format.printf ">> %s@." (Bigstringaf.substring ~off ~len buffer))
+        (Ws.Descriptor.messages wsd))
 
 let setup_log ?style_renderer level =
   Fmt_tty.setup_std_outputs ?style_renderer ();
