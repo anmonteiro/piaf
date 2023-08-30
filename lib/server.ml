@@ -168,7 +168,7 @@ let https_connection_handler ~https ~clock t : connection_handler =
         ~error_handler
         ~request_handler:handler
         ~sw
-        (ssl_server :> Eio.Flow.two_way)
+        ssl_server
         client_address
 
 module Command = struct
@@ -177,10 +177,15 @@ module Command = struct
   type connection_handler = Server_intf.connection_handler
 
   type nonrec t =
-    { sockets : Eio.Net.listening_socket list
+    { sockets :
+        Eio_unix.Net.listening_socket_ty Eio_unix.Net.listening_socket list
     ; shutdown_resolvers : (unit -> unit) list
-    ; client_sockets : (int, Eio.Net.stream_socket) Hashtbl.t list
-    ; clock : Eio.Time.clock
+    ; client_sockets :
+        ( int
+        , Eio_unix.Net.stream_socket_ty Eio_unix.Net.stream_socket )
+        Hashtbl.t
+        list
+    ; clock : float Eio.Time.clock_ty r
     ; shutdown_timeout : float
     }
 
@@ -246,7 +251,7 @@ module Command = struct
                       Hashtbl.replace client_sockets connection_id socket;
                       Switch.on_release sw (fun () ->
                           Hashtbl.remove client_sockets connection_id);
-                      connection_handler ~sw (socket :> Eio.Flow.two_way) addr)))
+                      connection_handler ~sw socket addr)))
         done);
     fun () -> Promise.resolve released_u ()
 

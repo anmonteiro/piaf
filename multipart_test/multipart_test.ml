@@ -232,7 +232,7 @@ let test_no_boundary_but_boundary_expected ~sw:_ _env () =
 let test_case
     :  string -> Alcotest.speed_level
     -> (sw:Switch.t
-        -> < clock : #Eio.Time.clock ; net : #Eio.Net.t ; .. >
+        -> Eio_unix.Stdenv.base
         -> unit
         -> unit)
     -> string * Alcotest.speed_level * (unit -> unit)

@@ -615,10 +615,7 @@ let test_default_headers ~sw env () =
 let test_case :
      string
     -> Alcotest.speed_level
-    -> (sw:Switch.t
-        -> < clock : #Eio.Time.clock ; net : #Eio.Net.t ; .. >
-        -> unit
-        -> unit)
+    -> (sw:Switch.t -> Eio_unix.Stdenv.base -> unit -> unit)
     -> string * Alcotest.speed_level * (unit -> unit)
   =
  fun desc ty f ->

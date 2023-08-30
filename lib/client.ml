@@ -70,8 +70,10 @@ let create_http_connection ~sw ~config ~conn_info ~uri fd =
 
 let create_https_connection ~sw ~config ~conn_info ~uri fd =
   let { Connection_info.host; _ } = conn_info in
-  let*! ssl_client = Openssl.connect ~config ~hostname:host fd in
-  let ssl_socket = Eio_ssl.ssl_socket ssl_client in
+  let*! { ssl = ssl_client; ssl_ctx } =
+    Openssl.connect ~config ~hostname:host fd
+  in
+  let ssl_socket = Eio_ssl.Context.ssl_socket ssl_ctx in
   let (module Https), version =
     match Ssl.get_negotiated_alpn_protocol ssl_socket with
     | None ->
@@ -143,7 +145,7 @@ let open_connection ~sw ~config ~uri env conn_info =
   | `HTTPS -> create_https_connection ~sw ~config ~conn_info ~uri socket
 
 (* This function takes a `conn_info` and a `Connection.t` instead of just a `t`
- * too allow reuse when shutting down old connection.
+ * too allow reuse when shutting down an old connection.
  *
  * Due to the fact that `t.conn` is mutable, we could run into weird
  * asynchronous edge cases and shut down the connection that's currently in use

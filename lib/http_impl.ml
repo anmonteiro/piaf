@@ -310,13 +310,13 @@ let create_h2c_connection
 let shutdown :
     type t.
     (module Http_intf.HTTPCommon with type Client.t = t)
-    -> fd:#Eio.Net.stream_socket
+    -> fd:Eio_unix.Net.stream_socket_ty Eio.Net.stream_socket
     -> t
     -> unit
   =
  fun (module Http) ~fd conn ->
   Promise.await (Http.Client.shutdown conn);
-  Eio.Flow.close fd
+  Eio.Net.close fd
 
 let is_closed :
     type t. (module Http_intf.HTTPCommon with type Client.t = t) -> t -> bool
