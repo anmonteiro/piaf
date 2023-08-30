@@ -233,7 +233,7 @@ let inflate response_body =
 let handle_response
     ~cli
     ~sw
-    ~(stdout : Eio_unix.sink)
+    ~(stdout : _ Eio_unix.sink)
     ({ Response.body; _ } as response)
   =
   let open Util.Result.Syntax in

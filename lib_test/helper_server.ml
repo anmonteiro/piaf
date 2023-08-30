@@ -150,7 +150,7 @@ module ALPN = struct
         try
           let ssl_ctx = Eio_ssl.Context.create ~ctx:server_ctx fd in
           let ssl_server = Eio_ssl.accept ssl_ctx in
-          let ssl_socket = Eio_ssl.ssl_socket ssl_server in
+          let ssl_socket = Eio_ssl.Context.ssl_socket ssl_ctx in
           match Ssl.get_negotiated_alpn_protocol ssl_socket with
           | Some "http/1.1" -> http1s_handler ~sw client_addr ssl_server
           | Some "h2" -> h2s_handler ~sw client_addr ssl_server

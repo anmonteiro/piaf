@@ -312,6 +312,11 @@ let setup_client_ctx
       Ssl.set_host ssl_sock hostname);
     Ok ssl_ctx
 
+type t =
+  { ssl : Eio_ssl.t
+  ; ssl_ctx : Eio_ssl.Context.t
+  }
+
 (* Assumes that the file descriptor is connected. *)
 let connect ~hostname ~config fd =
   let ({ Config.allow_insecure; min_tls_version; max_tls_version; _ } as
@@ -359,7 +364,7 @@ let connect ~hostname ~config fd =
             (Ssl.get_cipher_name ssl_cipher));
       (* Verification succeeded, or `allow_insecure` is true *)
       log_cert_info ~allow_insecure ssl_sock;
-      Ok ssl
+      Ok { ssl; ssl_ctx }
     | Error e ->
       let verify_result = Ssl.get_verify_result ssl_sock in
       if verify_result <> 0
@@ -440,8 +445,8 @@ let setup_server_ctx
     ctx
 
 (* assumes an `accept`ed socket *)
-let get_negotiated_alpn_protocol ssl_server =
-  let ssl_socket = Eio_ssl.ssl_socket ssl_server in
+let get_negotiated_alpn_protocol ssl_ctx =
+  let ssl_socket = Eio_ssl.Context.ssl_socket ssl_ctx in
   match Ssl.get_negotiated_alpn_protocol ssl_socket with
   | Some "http/1.1" -> Versions.HTTP.HTTP_1_1
   | Some "h2" -> HTTP_2
@@ -471,7 +476,7 @@ let accept
     Eio.Time.with_timeout clock timeout (fun () -> Ok (Eio_ssl.accept ssl_ctx))
   with
   | Ok ssl_server ->
-    let alpn_version = get_negotiated_alpn_protocol ssl_server in
+    let alpn_version = get_negotiated_alpn_protocol ssl_ctx in
     Ok { socket = ssl_server; alpn_version }
   | Error `Timeout ->
     Result.error

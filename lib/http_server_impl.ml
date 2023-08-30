@@ -58,7 +58,7 @@ type t =
   | Descriptor :
       { impl : (module Http_intf.HTTPServerCommon with type Reqd.t = 'reqd)
       ; reqd : 'reqd
-      ; handle : #Eio.Flow.two_way
+      ; handle : Eio_unix.Net.stream_socket_ty Eio.Net.stream_socket
       ; scheme : Scheme.t
             (* ; connection_error_received : Error.server Promise.t *)
       ; version : Versions.HTTP.t
@@ -75,7 +75,7 @@ let create_descriptor :
     ?upgrade:upgrade
     -> (module Http_intf.HTTPServerCommon with type Reqd.t = reqd)
     -> config:Server_config.t
-    -> fd:#Eio.Flow.two_way
+    -> fd:Eio_unix.Net.stream_socket_ty Eio.Net.stream_socket
     -> scheme:Scheme.t
     -> version:Versions.HTTP.t
     -> handler:Request_info.t Server_intf.Handler.t
@@ -108,7 +108,7 @@ let do_sendfile :
     type writer.
     (module Http_intf.HTTPServerCommon with type Body.Writer.t = writer)
     -> src_fd:Unix.file_descr
-    -> fd:#Eio.Flow.two_way
+    -> fd:Eio_unix.Net.stream_socket_ty Eio.Net.stream_socket
     -> report_exn:(exn -> unit)
     -> writer
     -> unit
@@ -244,7 +244,7 @@ let handle_error :
     -> start_response:(Headers.t -> writer)
     -> error_handler:Server_intf.error_handler
     -> scheme:Scheme.t
-    -> fd:#Eio.Flow.two_way
+    -> fd:Eio_unix.Net.stream_socket_ty Eio.Net.stream_socket
     -> Eio.Net.Sockaddr.stream
     -> Error.server
     -> unit

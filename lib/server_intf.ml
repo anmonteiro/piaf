@@ -60,7 +60,10 @@ module Error_response = struct
 end
 
 type connection_handler =
-  sw:Switch.t -> Eio.Flow.two_way -> Eio.Net.Sockaddr.stream -> unit
+  sw:Switch.t
+  -> Eio_unix.Net.stream_socket_ty Eio.Net.stream_socket
+  -> Eio.Net.Sockaddr.stream
+  -> unit
 
 type error_handler =
   Eio.Net.Sockaddr.stream

@@ -200,7 +200,7 @@ type t =
   | Conn :
       { impl : (module Http_intf.HTTPCommon with type Client.t = 'a)
       ; connection : 'a
-      ; fd : < Eio.Net.stream_socket ; Eio.Flow.close >
+      ; fd : Eio_unix.Net.stream_socket_ty Eio.Net.stream_socket
       ; mutable info : Info.t
       ; mutable uri : Uri.t
             (* The connection URI. Request entrypoints connect here. Mutable so

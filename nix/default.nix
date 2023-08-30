@@ -21,9 +21,6 @@ rec {
       ];
     };
 
-    useDune2 = true;
-
-    nativeBuildInputs = with ocamlPackages; [ ocaml dune findlib ];
     propagatedBuildInputs = with ocamlPackages; [
       logs
       eio-ssl
