@@ -82,8 +82,8 @@ let flush_and_close :
   =
  fun b request_body ->
   Body.Raw.flush_and_close b request_body (fun () ->
-      Logs.info (fun m ->
-          m "Request body has been completely and successfully uploaded"))
+    Logs.info (fun m ->
+      m "Request body has been completely and successfully uploaded"))
 
 let handle_response :
      sw:Switch.t
@@ -103,22 +103,22 @@ let handle_response :
   match result with
   | Ok response ->
     Logs.info (fun m ->
-        m
-          "@[<v 0>Received response:@]@]@;<0 2>@[<v 0>%a@]"
-          Response.pp_hum
-          response);
+      m
+        "@[<v 0>Received response:@]@]@;<0 2>@[<v 0>%a@]"
+        Response.pp_hum
+        response);
 
     let error_p, error_u = Promise.create () in
     Fiber.fork ~sw (fun () ->
-        match
-          Fiber.any
-            [ (fun () -> Error (Promise.await response_error_p :> Error.t))
-            ; (fun () -> Error (Promise.await connection_error_p :> Error.t))
-            ; (fun () -> Body.closed response.body)
-            ]
-        with
-        | Ok () -> ()
-        | Error error -> Promise.resolve error_u error);
+      match
+        Fiber.any
+          [ (fun () -> Error (Promise.await response_error_p :> Error.t))
+          ; (fun () -> Error (Promise.await connection_error_p :> Error.t))
+          ; (fun () -> Body.closed response.body)
+          ]
+      with
+      | Ok () -> ()
+      | Error error -> Promise.resolve error_u error);
     Body.embed_error_received response.body error_p;
     Ok response
   | Error _ as error ->
@@ -146,7 +146,7 @@ let send_request :
   let error_received, notify_error = Promise.create () in
   let error_handler = make_error_handler notify_error in
   Logs.info (fun m ->
-      m "@[<v 0>Sending request:@]@]@;<0 2>@[<v 0>%a@]@." Request.pp_hum request);
+    m "@[<v 0>Sending request:@]@]@;<0 2>@[<v 0>%a@]@." Request.pp_hum request);
   let flush_headers_immediately =
     match body.contents with
     | `Sendfile _ -> true
@@ -161,40 +161,39 @@ let send_request :
       request
   in
   Fiber.fork ~sw (fun () ->
-      match body.contents with
-      | `Empty _ -> Bodyw.close request_body
-      | `String s ->
-        Bodyw.write_string request_body s;
-        flush_and_close (module Http.Body.Writer) request_body
-      | `Bigstring { IOVec.buffer; off; len } ->
-        Bodyw.schedule_bigstring request_body ~off ~len buffer;
-        flush_and_close (module Http.Body.Writer) request_body
-      | `Stream { stream; _ } ->
-        Fiber.fork ~sw (fun () ->
-            Stream.when_closed
-              ~f:(fun () ->
-                flush_and_close (module Http.Body.Writer) request_body)
-              stream);
-        Body.Raw.stream_write_body (module Http.Body.Writer) request_body stream
-      | `Sendfile { fd = src_fd; _ } ->
-        (match Http.scheme with
-        | `HTTP ->
-          Bodyw.close request_body;
-          let dst_fd = Option.get (Eio_unix.Resource.fd_opt fd) in
-          Eio_unix.Fd.use_exn "sendfile" dst_fd (fun dst_fd ->
-              match
-                Posix.sendfile
-                  (module Http.Body.Writer)
-                  ~src_fd
-                  ~dst_fd
-                  request_body
-              with
-              | Ok () -> ()
-              | Error exn -> Promise.resolve notify_error (`Exn exn))
-        | `HTTPS ->
-          (* can't `sendfile` on an encrypted connection.
-           * TODO(anmonteiro): Return error message saying that. *)
-          assert false));
+    match body.contents with
+    | `Empty _ -> Bodyw.close request_body
+    | `String s ->
+      Bodyw.write_string request_body s;
+      flush_and_close (module Http.Body.Writer) request_body
+    | `Bigstring { IOVec.buffer; off; len } ->
+      Bodyw.schedule_bigstring request_body ~off ~len buffer;
+      flush_and_close (module Http.Body.Writer) request_body
+    | `Stream { stream; _ } ->
+      Fiber.fork ~sw (fun () ->
+        Stream.when_closed
+          ~f:(fun () -> flush_and_close (module Http.Body.Writer) request_body)
+          stream);
+      Body.Raw.stream_write_body (module Http.Body.Writer) request_body stream
+    | `Sendfile { fd = src_fd; _ } ->
+      (match Http.scheme with
+      | `HTTP ->
+        Bodyw.close request_body;
+        let dst_fd = Option.get (Eio_unix.Resource.fd_opt fd) in
+        Eio_unix.Fd.use_exn "sendfile" dst_fd (fun dst_fd ->
+          match
+            Posix.sendfile
+              (module Http.Body.Writer)
+              ~src_fd
+              ~dst_fd
+              request_body
+          with
+          | Ok () -> ()
+          | Error exn -> Promise.resolve notify_error (`Exn exn))
+      | `HTTPS ->
+        (* can't `sendfile` on an encrypted connection.
+         * TODO(anmonteiro): Return error message saying that. *)
+        assert false));
   handle_response ~sw response_received error_received connection_error_received
 
 let upgrade_connection :

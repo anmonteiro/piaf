@@ -56,7 +56,7 @@ let () =
     | Some host -> host
   in
   Eio_main.run (fun env ->
-      Eio.Switch.run (fun sw ->
-          match request ~sw ~env host with
-          | Ok () -> ()
-          | Error e -> failwith (Piaf.Error.to_string e)))
+    Eio.Switch.run (fun sw ->
+      match request ~sw ~env host with
+      | Ok () -> ()
+      | Error e -> failwith (Piaf.Error.to_string e)))

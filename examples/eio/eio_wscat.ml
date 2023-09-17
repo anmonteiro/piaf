@@ -34,15 +34,15 @@ let request ~env ~sw host =
   let+ wsd = Client.ws_upgrade client "/" in
   Fiber.both
     (fun () ->
-      let stdin = Eio.Stdenv.stdin env in
-      let buf = Eio.Buf_read.of_flow stdin ~initial_size:100 ~max_size:1_000 in
-      stdin_loop ~stdin buf wsd;
-      Client.shutdown client)
+       let stdin = Eio.Stdenv.stdin env in
+       let buf = Eio.Buf_read.of_flow stdin ~initial_size:100 ~max_size:1_000 in
+       stdin_loop ~stdin buf wsd;
+       Client.shutdown client)
     (fun () ->
-      Stream.iter
-        ~f:(fun (_opcode, { IOVec.buffer; off; len }) ->
-          Format.printf ">> %s@." (Bigstringaf.substring ~off ~len buffer))
-        (Ws.Descriptor.messages wsd))
+       Stream.iter
+         ~f:(fun (_opcode, { IOVec.buffer; off; len }) ->
+           Format.printf ">> %s@." (Bigstringaf.substring ~off ~len buffer))
+         (Ws.Descriptor.messages wsd))
 
 let setup_log ?style_renderer level =
   Fmt_tty.setup_std_outputs ?style_renderer ();
@@ -63,7 +63,7 @@ let () =
     | Some host -> host
   in
   Eio_main.run (fun env ->
-      Eio.Switch.run (fun sw ->
-          match request ~sw ~env host with
-          | Ok () -> ()
-          | Error e -> failwith (Piaf.Error.to_string e)))
+    Eio.Switch.run (fun sw ->
+      match request ~sw ~env host with
+      | Ok () -> ()
+      | Error e -> failwith (Piaf.Error.to_string e)))

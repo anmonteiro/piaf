@@ -77,8 +77,8 @@ let copy_file ?version ?(headers = Headers.empty) path =
   let*! fd =
     try
       Eio_unix.run_in_systhread (fun () ->
-          let fd = Unix.openfile path [ O_RDONLY ] 0 in
-          Ok fd)
+        let fd = Unix.openfile path [ O_RDONLY ] 0 in
+        Ok fd)
     with
     | exn -> Result.error (`Exn exn)
   in

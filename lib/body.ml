@@ -140,8 +140,8 @@ let of_bigstring ?(off = 0) ?len bstr =
 let sendfile ?length path =
   let*! fd =
     Eio_unix.run_in_systhread (fun () ->
-        try Ok (Unix.openfile path [ O_RDONLY ] 0) with
-        | exn -> Result.error (`Exn exn))
+      try Ok (Unix.openfile path [ O_RDONLY ] 0) with
+      | exn -> Result.error (`Exn exn))
   in
   let length =
     match length with
@@ -166,19 +166,19 @@ let stream_of_fd ?on_close fd =
   in
   let remaining = Atomic.make length in
   Stream.from ~f:(fun () ->
-      let current = Atomic.get remaining in
-      if current = 0
-      then (
-        Option.iter (fun f -> f ()) on_close;
-        None)
-      else
-        let bytes_to_read = min 0x4000 (Atomic.get remaining) in
-        (* TODO: read from config buffer size? *)
-        (* (min config.Config.body_buffer_size !remaining) *)
-        let buf = Bigstringaf.create bytes_to_read in
-        let bytes_read = Bigstring.read fd buf ~off:0 ~len:bytes_to_read in
-        assert (Atomic.compare_and_set remaining current (current - bytes_read));
-        Some (IOVec.make buf ~off:0 ~len:bytes_to_read))
+    let current = Atomic.get remaining in
+    if current = 0
+    then (
+      Option.iter (fun f -> f ()) on_close;
+      None)
+    else
+      let bytes_to_read = min 0x4000 (Atomic.get remaining) in
+      (* TODO: read from config buffer size? *)
+      (* (min config.Config.body_buffer_size !remaining) *)
+      let buf = Bigstringaf.create bytes_to_read in
+      let bytes_read = Bigstring.read fd buf ~off:0 ~len:bytes_to_read in
+      assert (Atomic.compare_and_set remaining current (current - bytes_read));
+      Some (IOVec.make buf ~off:0 ~len:bytes_to_read))
 
 let to_stream { contents; _ } =
   match contents with
@@ -377,12 +377,12 @@ module Raw = struct
       Fiber.first
         (fun () -> Promise.await p)
         (fun () ->
-          match Promise.await !(t.error_received) with
-          | (_ : Error.t) ->
-            (* `None` closes the stream. The promise `t.error_received` remains
-             * fulfilled, which signals that the stream hasn't closed cleanly.
-             *)
-            None)
+           match Promise.await !(t.error_received) with
+           | (_ : Error.t) ->
+             (* `None` closes the stream. The promise `t.error_received` remains
+              * fulfilled, which signals that the stream hasn't closed cleanly.
+              *)
+             None)
     and t =
       lazy
         { stream = Stream.from ~f:read_fn
@@ -460,8 +460,8 @@ module Raw = struct
           Writer.schedule_bigstring body ~off ~len buffer;
           let p, u = Promise.create () in
           Writer.flush body (fun () ->
-              Promise.resolve u ();
-              Logs.debug (fun m -> m "Flushed output chunk of length %d" len));
+            Promise.resolve u ();
+            Logs.debug (fun m -> m "Flushed output chunk of length %d" len));
           Promise.await p)
         else ())
       stream;

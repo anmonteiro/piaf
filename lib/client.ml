@@ -78,17 +78,15 @@ let create_https_connection ~sw ~config ~conn_info ~uri fd =
     match Ssl.get_negotiated_alpn_protocol ssl_socket with
     | None ->
       Logs.warn (fun m ->
-          let alpn_protocols =
-            Versions.ALPN.protocols_of_version config.Config.max_http_version
-          in
-          let protos =
-            String.concat
-              ", "
-              (List.map
-                 (fun proto -> Format.asprintf "%S" proto)
-                 alpn_protocols)
-          in
-          m "ALPN: Failed to negotiate requested protocols (%s)" protos);
+        let alpn_protocols =
+          Versions.ALPN.protocols_of_version config.Config.max_http_version
+        in
+        let protos =
+          String.concat
+            ", "
+            (List.map (fun proto -> Format.asprintf "%S" proto) alpn_protocols)
+        in
+        m "ALPN: Failed to negotiate requested protocols (%s)" protos);
       (* Default to HTTP/2.0 if `http2_prior_knowledge` has been configured
        * and the remote doesn't speak ALPN. Otherwise, use the maximal HTTP/1
        * version configured. *)
@@ -136,8 +134,8 @@ let open_connection ~sw ~config ~uri env conn_info =
    then
      let fd = Eio_unix.Resource.fd_opt socket |> Option.get in
      Eio_unix.Fd.use_exn "Client.open_connection" fd (fun fd ->
-         Unix.setsockopt fd TCP_NODELAY true;
-         Logs.debug (fun m -> m "TCP_NODELAY set")));
+       Unix.setsockopt fd TCP_NODELAY true;
+       Logs.debug (fun m -> m "TCP_NODELAY set")));
 
   Logs.info (fun m -> m "Connected to %a" Connection_info.pp_hum conn_info);
   match conn_info.scheme with
@@ -152,11 +150,11 @@ let open_connection ~sw ~config ~uri env conn_info =
  * instead of the old one. *)
 let shutdown_conn (Connection.Conn { impl; connection; info; fd; _ }) =
   Logs.info (fun m ->
-      m
-        "Tearing down %s connection to %a"
-        (String.uppercase_ascii (Scheme.to_string info.scheme))
-        Connection_info.pp_hum
-        info);
+    m
+      "Tearing down %s connection to %a"
+      (String.uppercase_ascii (Scheme.to_string info.scheme))
+      Connection_info.pp_hum
+      info);
   Http_impl.shutdown (module (val impl)) ~fd connection
 
 let change_connection t (conn_info : Connection_info.t) =
@@ -209,7 +207,7 @@ let reuse_or_set_up_new_connection
       (* If we're redirecting within the same host / port / scheme, no need
        * to re-establish a new connection. *)
       Logs.debug (fun m ->
-          m "Reusing the same connection as the host / port didn't change");
+        m "Reusing the same connection as the host / port didn't change");
       (* Even if we reused the connection, the URI could've changed. *)
       conn.info <- new_conn_info;
       Ok true)
@@ -228,7 +226,7 @@ let reuse_or_set_up_new_connection
       if Connection_info.equal info new_conn_info
       then (
         Logs.debug (fun m ->
-            m "Reusing the same connection as the remote address didn't change");
+          m "Reusing the same connection as the remote address didn't change");
         (* Even if we reused the connection, the URI could've changed. *)
         conn.info <- new_conn_info;
         Ok true)
@@ -396,8 +394,8 @@ let rec send_request_and_handle_response
         if did_reuse
         then
           Fiber.fork ~sw:t.sw (fun () ->
-              let (_drained : _ result) = Body.drain response.body in
-              ());
+            let (_drained : _ result) = Body.drain response.body in
+            ());
         if Status.is_permanent_redirection response.status
         then conn.uri <- new_uri;
         let target = Uri.path_and_query new_uri in
@@ -526,12 +524,12 @@ module Oneshot = struct
       send_request_and_handle_response t ~body request_info
     in
     Fiber.fork ~sw (fun () ->
-        (match response_result with
-        | Ok { Response.body; _ } ->
-          ignore (Body.closed body : (unit, Error.t) result)
-        | Error _ -> ());
+      (match response_result with
+      | Ok { Response.body; _ } ->
+        ignore (Body.closed body : (unit, Error.t) result)
+      | Error _ -> ());
 
-        shutdown t);
+      shutdown t);
     response_result
 
   let request ?config ?headers ?body ~sw env ~meth uri =

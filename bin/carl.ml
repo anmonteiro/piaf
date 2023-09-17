@@ -126,7 +126,7 @@ let rec uri_of_string ~scheme s =
     (* If Uri.of_string didn't get a host it must mean that the scheme wasn't
      * even present. *)
     Logs.debug (fun m ->
-        m "Protocol not provided for %s. Using the default scheme: %s" s scheme);
+      m "Protocol not provided for %s. Using the default scheme: %s" s scheme);
     uri_of_string ~scheme ("//" ^ s)
   | Some _, None ->
     (* e.g. `//example.com` *)
@@ -245,18 +245,18 @@ let handle_response
     | Channel filename ->
       (try
          Eio_unix.run_in_systhread (fun () ->
-             let fd =
-               Unix.openfile
-                 filename
-                 Unix.[ O_NONBLOCK; O_WRONLY; O_TRUNC; O_CREAT ]
-                 0o600
-             in
-             let fd = Eio_unix.Fd.of_unix ~sw ~close_unix:true fd in
-             Ok
-               ( fd
-               , Format.formatter_of_out_channel
-                   (Unix.out_channel_of_descr
-                      (Eio_unix.Fd.use_exn "handle_response" fd Fun.id)) ))
+           let fd =
+             Unix.openfile
+               filename
+               Unix.[ O_NONBLOCK; O_WRONLY; O_TRUNC; O_CREAT ]
+               0o600
+           in
+           let fd = Eio_unix.Fd.of_unix ~sw ~close_unix:true fd in
+           Ok
+             ( fd
+             , Format.formatter_of_out_channel
+                 (Unix.out_channel_of_descr
+                    (Eio_unix.Fd.use_exn "handle_response" fd Fun.id)) ))
        with
       | exn -> Error (`Exn exn))
   in
@@ -268,8 +268,8 @@ let handle_response
     if head
     then (
       Fiber.fork ~sw (fun () ->
-          let (_ : (unit, _) result) = Body.drain body in
-          ());
+        let (_ : (unit, _) result) = Body.drain body in
+        ());
       ok)
     else
       match compressed, Headers.get response.headers "content-encoding" with
@@ -317,7 +317,7 @@ let handle_response
   | Stdout | Channel "-" -> Format.pp_print_newline formatter ()
   | Channel _ ->
     Eio_unix.run_in_systhread (fun () ->
-        Unix.close (Eio_unix.Fd.use_exn "close" channel Fun.id)));
+      Unix.close (Eio_unix.Fd.use_exn "close" channel Fun.id)));
   result
 
 let build_headers
@@ -337,8 +337,8 @@ let build_headers
   match oauth2_bearer, user with
   | Some token, _ ->
     Logs.debug (fun m ->
-        let user = match user with Some user -> user | None -> "''" in
-        m "Server authorization using Bearer with user %s" user);
+      let user = match user with Some user -> user | None -> "''" in
+      m "Server authorization using Bearer with user %s" user);
     (* Bearer token overrides `user` *)
     ("Authorization", "Bearer " ^ token) :: headers
   | None, Some user ->
@@ -370,17 +370,17 @@ let request env ~sw ~cli ~config uri =
       let flow = Eio_unix.Net.import_socket_stream ~sw ~close_unix:true fd in
       let stream =
         Stream.from ~f:(fun () ->
-            if !remaining = 0
-            then None
-            else
-              let len = min config.Config.body_buffer_size !remaining in
-              let cs = Cstruct.create len in
-              Eio.Flow.read_exact flow cs;
-              remaining := !remaining - len;
-              Some { Faraday.buffer = cs.buffer; off = cs.off; len = cs.len })
+          if !remaining = 0
+          then None
+          else
+            let len = min config.Config.body_buffer_size !remaining in
+            let cs = Cstruct.create len in
+            Eio.Flow.read_exact flow cs;
+            remaining := !remaining - len;
+            Some { Faraday.buffer = cs.buffer; off = cs.off; len = cs.len })
       in
       Fiber.fork ~sw (fun () ->
-          Stream.when_closed ~f:(fun () -> Eio.Flow.close flow) stream);
+        Stream.when_closed ~f:(fun () -> Eio.Flow.close flow) stream);
       let body_length =
         match
           List.find_opt
@@ -469,7 +469,7 @@ let main ({ log_level; urls; _ } as cli) =
   | Error msg -> `Error (false, msg)
   | Ok config ->
     Eio_main.run (fun env ->
-        Eio.Switch.run (fun sw -> request_many ~sw ~cli ~config env urls))
+      Eio.Switch.run (fun sw -> request_many ~sw ~cli ~config env urls))
 
 (* --resolve <host:port:address[,address]...> Resolve the host+port to this address
  * --retry <num>   Retry request if transient problems occur

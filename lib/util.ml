@@ -54,8 +54,8 @@ module Backtrace = struct
     let backtrace_slots =
       Option.map
         (fun slots ->
-          Array.to_list slots
-          |> List.mapi (fun i slot -> Printexc.Slot.format i slot))
+           Array.to_list slots
+           |> List.mapi (fun i slot -> Printexc.Slot.format i slot))
         (Printexc.backtrace_slots raw_backtrace)
     in
     let format_backtrace_slot formatter slot =

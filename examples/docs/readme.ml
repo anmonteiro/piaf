@@ -13,9 +13,9 @@ let get_sync env ~sw url =
 
 let () =
   Eio_main.run (fun env ->
-      Eio.Switch.run (fun sw ->
-          match get_sync env ~sw "https://example.com" with
-          | Ok body -> print_endline body
-          | Error error ->
-            let message = Error.to_string error in
-            prerr_endline ("Error: " ^ message)))
+    Eio.Switch.run (fun sw ->
+      match get_sync env ~sw "https://example.com" with
+      | Ok body -> print_endline body
+      | Error error ->
+        let message = Error.to_string error in
+        prerr_endline ("Error: " ^ message)))
