@@ -227,9 +227,7 @@ let handle_request : sw:Switch.t -> t -> Request.t -> unit =
               ~fd:handle
               ~report_exn
               response_body
-          | `HTTPS ->
-            (* TODO(anmonteiro): can't sendfile on an encrypted connection *)
-            assert false))
+          | `HTTPS -> failwith "sendfile is not supported in HTTPS connections"))
     with
     | exn -> report_exn exn)
 
@@ -287,7 +285,7 @@ let handle_error :
           ~fd
           ~report_exn:(fun _exn -> ())
           response_body
-      | `HTTPS -> assert false)
+      | `HTTPS -> failwith "sendfile is not supported in HTTPS connections")
   in
   try
     Logs.warn (fun m ->

@@ -190,10 +190,7 @@ let send_request :
           with
           | Ok () -> ()
           | Error exn -> Promise.resolve notify_error (`Exn exn))
-      | `HTTPS ->
-        (* can't `sendfile` on an encrypted connection.
-         * TODO(anmonteiro): Return error message saying that. *)
-        assert false));
+      | `HTTPS -> failwith "sendfile is not supported in HTTPS connections"));
   handle_response ~sw response_received error_received connection_error_received
 
 let upgrade_connection :
