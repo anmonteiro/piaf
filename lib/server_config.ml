@@ -7,11 +7,10 @@ module HTTPS = struct
     { address : Eio.Net.Sockaddr.stream
     ; certificate : Cert.t * Cert.t (* Server certificate and private key *)
     ; cacert : Cert.t option
-          (** Either the certificates string or path to a file with certificates
-              to verify peer. Both should be in PEM format *)
+    (** Either the certificates string or path to a file with certificates to
+        verify peer. Both should be in PEM format *)
     ; capath : string option
-          (** The path to a directory which contains CA certificates in PEM
-              format *)
+    (** The path to a directory which contains CA certificates in PEM format *)
     ; min_tls_version : Versions.TLS.t
     ; max_tls_version : Versions.TLS.t
     ; allow_insecure : bool  (** Wether to allow insecure server connections *)
@@ -41,11 +40,11 @@ end
 
 type t =
   { max_http_version : Versions.HTTP.t
-        (** Use this as the highest HTTP version when sending requests *)
+  (** Use this as the highest HTTP version when sending requests *)
   ; https : HTTPS.t option
   ; h2c_upgrade : bool
-        (** Send an upgrade to `h2c` (HTTP/2 over TCP) request to the server.
-            `http2_prior_knowledge` below ignores this option. *)
+  (** Send an upgrade to `h2c` (HTTP/2 over TCP) request to the server.
+      `http2_prior_knowledge` below ignores this option. *)
   ; tcp_nodelay : bool
   ; accept_timeout : float (* seconds *)
   ; shutdown_timeout : float
@@ -53,19 +52,19 @@ type t =
            down the server. *)
   ; (* Buffer sizes *)
     buffer_size : int
-        (** Buffer size used for requests and responses. Defaults to 16384 bytes *)
+  (** Buffer size used for requests and responses. Defaults to 16384 bytes *)
   ; body_buffer_size : int
-        (** Buffer size used for request and response bodies. *)
+  (** Buffer size used for request and response bodies. *)
   ; enable_http2_server_push : bool
         (* ; max_concurrent_streams : int ; initial_window_size : int *)
-        (** TODO(anmonteiro): these are HTTP/2 specific and we're probably OK
-            with the defaults *)
+  (** TODO(anmonteiro): these are HTTP/2 specific and we're probably OK with the
+      defaults *)
   ; flush_headers_immediately : bool
-        (** Specifies whether to flush message headers to the transport
-            immediately, or if Piaf should wait for the first body bytes to be
-            written. Defaults to [false]. *)
+  (** Specifies whether to flush message headers to the transport immediately,
+      or if Piaf should wait for the first body bytes to be written. Defaults to
+      [false]. *)
   ; backlog : int
-        (** The maximum length of the queue of pending connections. *)
+  (** The maximum length of the queue of pending connections. *)
   ; address : Eio.Net.Sockaddr.stream  (** The address to listen on. *)
   ; domains : int  (** The number of domains to use. *)
   }
@@ -115,11 +114,11 @@ let to_http2_config
     if buffer_size < h2_default_buffer_size
     then (
       Log.warn (fun m ->
-          m
-            "Configured buffer size is smaller than the allowed by the HTTP/2 \
-             specification (%d). Defaulting to %d bytes."
-            buffer_size
-            h2_default_buffer_size);
+        m
+          "Configured buffer size is smaller than the allowed by the HTTP/2 \
+           specification (%d). Defaulting to %d bytes."
+          buffer_size
+          h2_default_buffer_size);
       h2_default_buffer_size)
     else buffer_size
   in

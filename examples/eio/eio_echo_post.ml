@@ -40,12 +40,12 @@ let main port =
         (`Tcp (Eio.Net.Ipaddr.V4.loopback, port)))
   in
   Eio_main.run (fun env ->
-      Switch.run (fun sw ->
-          let server = Server.create ~config request_handler in
-          let _command = Server.Command.start ~sw env server in
-          ()
-          (* Eio.Time.sleep (Eio.Stdenv.clock env) 5.; *)
-          (* Server.Command.shutdown command *)))
+    Switch.run (fun sw ->
+      let server = Server.create ~config request_handler in
+      let _command = Server.Command.start ~sw env server in
+      ()
+      (* Eio.Time.sleep (Eio.Stdenv.clock env) 5.; *)
+      (* Server.Command.shutdown command *)))
 
 let setup_log ?style_renderer level =
   Fmt_tty.setup_std_outputs ?style_renderer ();

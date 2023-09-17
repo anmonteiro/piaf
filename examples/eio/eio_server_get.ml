@@ -29,6 +29,6 @@ let setup_log ?style_renderer level =
 let () =
   setup_log (Some Info);
   Eio_main.run (fun env ->
-      Switch.run (fun sw ->
-          let _command = start ~sw env in
-          ()))
+    Switch.run (fun sw ->
+      let _command = start ~sw env in
+      ()))

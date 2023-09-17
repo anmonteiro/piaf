@@ -141,12 +141,12 @@ module ALPN = struct
     let wanted =
       drop_while
         (fun version ->
-          HTTP.Raw.compare version (HTTP.Raw.of_version max_version) > 0)
+           HTTP.Raw.compare version (HTTP.Raw.of_version max_version) > 0)
         versions_desc
     in
     List.map
       (fun v ->
-        let alpn = HTTP.Raw.to_version_exn v in
-        to_string alpn)
+         let alpn = HTTP.Raw.to_version_exn v in
+         to_string alpn)
       wanted
 end

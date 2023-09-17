@@ -105,9 +105,9 @@ let take t =
     Fiber.first
       (fun () -> Some (Eio.Stream.take stream))
       (fun () ->
-        let { closed = p, _; _ } = t in
-        Promise.await p;
-        None)
+         let { closed = p, _; _ } = t in
+         Promise.await p;
+         None)
 
 let take_nonblocking t =
   match t.stream with
@@ -116,7 +116,7 @@ let take_nonblocking t =
 
 let map ~f t =
   from ~f:(fun () ->
-      match take t with Some item -> Some (f item) | None -> None)
+    match take t with Some item -> Some (f item) | None -> None)
 
 let rec iter ~f t =
   match t.stream with

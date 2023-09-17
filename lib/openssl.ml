@@ -87,21 +87,21 @@ let log_cert_info ~allow_insecure ssl_sock =
   let expiration_date = Ssl.get_expiration_date cert in
   let verify_result = Ssl.get_verify_result ssl_sock in
   Logs.info (fun m ->
-      m
-        "@[<v 0>Server certificate:@]@]@;\
-         <0 2>@[<v 0>@[<h 0>Subject:@ %s@]@;\
-         @[<h 0>Start Date:@ %a@]@;\
-         @[<h 0>Expiration Date:@ %a@]@;\
-         @[<h 0>Issuer:@ %s@]@;\
-         @[<h 0>SSL certificate verify result:@ %a@]@]"
-        (Ssl.get_subject cert)
-        Time.pp_hum
-        start_date
-        Time.pp_hum
-        expiration_date
-        (Ssl.get_issuer cert)
-        (pp_cert_verify_result ~allow_insecure)
-        verify_result)
+    m
+      "@[<v 0>Server certificate:@]@]@;\
+       <0 2>@[<v 0>@[<h 0>Subject:@ %s@]@;\
+       @[<h 0>Start Date:@ %a@]@;\
+       @[<h 0>Expiration Date:@ %a@]@;\
+       @[<h 0>Issuer:@ %s@]@;\
+       @[<h 0>SSL certificate verify result:@ %a@]@]"
+      (Ssl.get_subject cert)
+      Time.pp_hum
+      start_date
+      Time.pp_hum
+      expiration_date
+      (Ssl.get_issuer cert)
+      (pp_cert_verify_result ~allow_insecure)
+      verify_result)
 
 let load_cert ~certificate ~private_key ctx =
   match certificate, private_key with
@@ -125,27 +125,27 @@ let load_verify_locations ?(cacert = "") ?(capath = "") ctx =
   | () -> Ok ()
   | exception (Invalid_argument _ as exn) ->
     Logs.err (fun m ->
-        m
-          "@[<v 0>Error setting certificate verify locations:@]@]@;\
-           <0 2>@[<h 0>CAfile:@ %s@]@;\
-           <0 2>@[<h 0>CApath:@ %s@]"
-          (if cacert = "" then "none" else cacert)
-          (if capath = "" then "none" else capath));
+      m
+        "@[<v 0>Error setting certificate verify locations:@]@]@;\
+         <0 2>@[<h 0>CAfile:@ %s@]@;\
+         <0 2>@[<h 0>CApath:@ %s@]"
+        (if cacert = "" then "none" else cacert)
+        (if capath = "" then "none" else capath));
     Error (`Exn exn)
 
 let configure_verify_locations ?cacert ?capath ctx =
   Eio_unix.run_in_systhread (fun () ->
-      match cacert with
-      | Some (Cert.Certpem cert) -> Ok (load_peer_ca_cert ~certificate:cert ctx)
-      | Some (Cert.Filepath cacert) -> load_verify_locations ~cacert ?capath ctx
+    match cacert with
+    | Some (Cert.Certpem cert) -> Ok (load_peer_ca_cert ~certificate:cert ctx)
+    | Some (Cert.Filepath cacert) -> load_verify_locations ~cacert ?capath ctx
+    | None ->
+      (match capath with
+      | Some capath -> load_verify_locations ~capath ctx
       | None ->
-        (match capath with
-        | Some capath -> load_verify_locations ~capath ctx
-        | None ->
-          (* Use default CA certificates *)
-          if Ssl.set_default_verify_paths ctx
-          then Ok ()
-          else Error (`Connect_error "Failed to set default verify paths")))
+        (* Use default CA certificates *)
+        if Ssl.set_default_verify_paths ctx
+        then Ok ()
+        else Error (`Connect_error "Failed to set default verify paths")))
 
 let version_of_ssl = function
   | (Ssl.SSLv23 [@alert "-deprecated"]) -> Versions.TLS.Any
@@ -198,9 +198,9 @@ module Error = struct
         | Error_want_async | Error_want_async_job | Error_want_client_hello_cb
         | Error_want_retry_verify ) as e ->
         Logs.err (fun m ->
-            m
-              "`%s` should never be raised. Please report an issue."
-              (ssl_error_to_string e));
+          m
+            "`%s` should never be raised. Please report an issue."
+            (ssl_error_to_string e));
         assert false
       | Error_ssl -> "SSL Error"
       | Error_syscall ->
@@ -357,11 +357,11 @@ let connect ~hostname ~config fd =
       let ssl_version = version_of_ssl (Ssl.version ssl_sock) in
       let ssl_cipher = Ssl.get_cipher ssl_sock in
       Logs.info (fun m ->
-          m
-            "SSL connection using %a / %s"
-            Versions.TLS.pp_hum
-            ssl_version
-            (Ssl.get_cipher_name ssl_cipher));
+        m
+          "SSL connection using %a / %s"
+          Versions.TLS.pp_hum
+          ssl_version
+          (Ssl.get_cipher_name ssl_cipher));
       (* Verification succeeded, or `allow_insecure` is true *)
       log_cert_info ~allow_insecure ssl_sock;
       Ok { ssl; ssl_ctx }
@@ -374,7 +374,7 @@ let connect ~hostname ~config fd =
          * remember. *)
         assert (not allow_insecure);
         Logs.err (fun m ->
-            m "%a" (pp_cert_verify_result ~allow_insecure) verify_result));
+          m "%a" (pp_cert_verify_result ~allow_insecure) verify_result));
       Error e
 
 let set_server_verify ~enforce_client_cert ctx =
@@ -434,7 +434,7 @@ let setup_server_ctx
 
     Ssl.set_context_alpn_protos ctx alpn_protocols;
     Ssl.set_context_alpn_select_callback ctx (fun client_protos ->
-        first_match client_protos alpn_protocols);
+      first_match client_protos alpn_protocols);
 
     let+! () = load_cert ~certificate ~private_key ctx
     and+! () = configure_verify_locations ?cacert ?capath ctx in

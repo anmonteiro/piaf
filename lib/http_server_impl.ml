@@ -46,12 +46,12 @@ let report_exn :
   =
  fun (module Http) reqd exn ->
   Logs.err (fun m ->
-      let raw_backtrace = Printexc.get_raw_backtrace () in
-      m
-        "Exception while handling request: %s.@]@;<0 2>@[<v 0>%a@]"
-        (Printexc.to_string exn)
-        Util.Backtrace.pp_hum
-        raw_backtrace);
+    let raw_backtrace = Printexc.get_raw_backtrace () in
+    m
+      "Exception while handling request: %s.@]@;<0 2>@[<v 0>%a@]"
+      (Printexc.to_string exn)
+      Util.Backtrace.pp_hum
+      raw_backtrace);
   Http.Reqd.report_exn reqd exn
 
 type t =
@@ -62,7 +62,7 @@ type t =
       ; scheme : Scheme.t
             (* ; connection_error_received : Error.server Promise.t *)
       ; version : Versions.HTTP.t
-            (** HTTP version that this connection speaks *)
+      (** HTTP version that this connection speaks *)
       ; upgrade : upgrade option
       ; handler : Request_info.t Server_intf.Handler.t
       ; client_address : Eio.Net.Sockaddr.stream
@@ -84,14 +84,14 @@ let create_descriptor :
     -> t
   =
  fun ?upgrade
-     (module Http)
-     ~config
-     ~fd
-     ~scheme
-     ~version
-     ~handler
-     ~client_address
-     reqd ->
+   (module Http)
+   ~config
+   ~fd
+   ~scheme
+   ~version
+   ~handler
+   ~client_address
+   reqd ->
   Descriptor
     { impl = (module Http)
     ; config
@@ -116,124 +116,122 @@ let do_sendfile :
  fun (module Http) ~src_fd ~fd ~report_exn response_body ->
   let fd = Option.get (Eio_unix.Resource.fd_opt fd) in
   Eio_unix.Fd.use_exn "sendfile" fd (fun fd ->
-      Http.Body.Writer.flush response_body (fun () ->
-          match
-            Posix.sendfile
-              (module Http.Body.Writer)
-              ~src_fd
-              ~dst_fd:fd
-              response_body
-          with
-          | Ok () -> Http.Body.Writer.close response_body
-          | Error exn ->
-            Http.Body.Writer.close response_body;
-            report_exn exn))
+    Http.Body.Writer.flush response_body (fun () ->
+      match
+        Posix.sendfile
+          (module Http.Body.Writer)
+          ~src_fd
+          ~dst_fd:fd
+          response_body
+      with
+      | Ok () -> Http.Body.Writer.close response_body
+      | Error exn ->
+        Http.Body.Writer.close response_body;
+        report_exn exn))
 
 let handle_request : sw:Switch.t -> t -> Request.t -> unit =
  fun ~sw
-     (Descriptor
-       { impl = (module Http)
-       ; config
-       ; reqd
-       ; handle
-       ; scheme
-       ; version
-       ; upgrade
-       ; handler
-       ; client_address
-       ; _
-       })
-     request ->
+   (Descriptor
+     { impl = (module Http)
+     ; config
+     ; reqd
+     ; handle
+     ; scheme
+     ; version
+     ; upgrade
+     ; handler
+     ; client_address
+     ; _
+     })
+   request ->
   let report_exn = report_exn (module Http) reqd in
   Fiber.fork ~sw (fun () ->
-      try
-        let ({ Response.headers; body; _ } as response) =
-          handler
-            { Server_intf.Handler.ctx =
-                { Request_info.client_address; scheme; version; sw }
-            ; request
-            }
+    try
+      let ({ Response.headers; body; _ } as response) =
+        handler
+          { Server_intf.Handler.ctx =
+              { Request_info.client_address; scheme; version; sw }
+          ; request
+          }
+      in
+      (* XXX(anmonteiro): It's a little weird that, given an actual
+       * response returned from the handler, we decide to completely ignore
+       * it. There's a good justification here, which is that the error
+       * handler will be called. The alternative would be to have the
+       * request handler return a result type, but then we'd be ignoring
+       * the error instead. *)
+      match Http.Reqd.error_code reqd with
+      | Some _ ->
+        (* Already handling an error, don't bother sending the response.
+         * `error_handler` will be called. *)
+        Logs.info (fun m ->
+          m
+            "Response returned by handler will not be written, currently \
+             handling error")
+      | None ->
+        let response =
+          { response with
+            headers =
+              Headers.add_length_related_headers
+                ~body_length:(Piaf_body.length body)
+                headers
+          }
         in
-        (* XXX(anmonteiro): It's a little weird that, given an actual
-         * response returned from the handler, we decide to completely ignore
-         * it. There's a good justification here, which is that the error
-         * handler will be called. The alternative would be to have the
-         * request handler return a result type, but then we'd be ignoring
-         * the error instead. *)
-        match Http.Reqd.error_code reqd with
-        | Some _ ->
-          (* Already handling an error, don't bother sending the response.
-           * `error_handler` will be called. *)
-          Logs.info (fun m ->
-              m
-                "Response returned by handler will not be written, currently \
-                 handling error")
-        | None ->
-          let response =
-            { response with
-              headers =
-                Headers.add_length_related_headers
-                  ~body_length:(Piaf_body.length body)
-                  headers
-            }
+        (match Piaf_body.contents body with
+        | `Empty upgrade_handler ->
+          if Piaf_body.Optional_upgrade_handler.is_none upgrade_handler
+          then
+            (* No upgrade *)
+            Http.Reqd.respond_with_bigstring reqd response Bigstringaf.empty
+          else (
+            (* we created it ourselves *)
+            assert (response.status = `Switching_protocols);
+            match upgrade with
+            | Some upgrade ->
+              Http.Reqd.respond_with_upgrade reqd response.headers (fun () ->
+                Piaf_body.Optional_upgrade_handler.call_if_some
+                  ~sw
+                  upgrade_handler
+                  upgrade)
+            | None ->
+              (* TODO(anmonteiro): upgrading not supported (not HTTP/1.1) *)
+              assert false)
+        | `String s -> Http.Reqd.respond_with_string reqd response s
+        | `Bigstring { IOVec.buffer; off; len } ->
+          let bstr = Bigstringaf.sub ~off ~len buffer in
+          Http.Reqd.respond_with_bigstring reqd response bstr
+        | `Stream { stream; _ } ->
+          let response_body =
+            let flush_headers_immediately = config.flush_headers_immediately in
+            Http.Reqd.respond_with_streaming
+              ~flush_headers_immediately
+              reqd
+              response
           in
-          (match Piaf_body.contents body with
-          | `Empty upgrade_handler ->
-            if Piaf_body.Optional_upgrade_handler.is_none upgrade_handler
-            then
-              (* No upgrade *)
-              Http.Reqd.respond_with_bigstring reqd response Bigstringaf.empty
-            else (
-              (* we created it ourselves *)
-              assert (response.status = `Switching_protocols);
-              match upgrade with
-              | Some upgrade ->
-                Http.Reqd.respond_with_upgrade reqd response.headers (fun () ->
-                    Piaf_body.Optional_upgrade_handler.call_if_some
-                      ~sw
-                      upgrade_handler
-                      upgrade)
-              | None ->
-                (* TODO(anmonteiro): upgrading not supported (not HTTP/1.1) *)
-                assert false)
-          | `String s -> Http.Reqd.respond_with_string reqd response s
-          | `Bigstring { IOVec.buffer; off; len } ->
-            let bstr = Bigstringaf.sub ~off ~len buffer in
-            Http.Reqd.respond_with_bigstring reqd response bstr
-          | `Stream { stream; _ } ->
+          Piaf_body.Raw.stream_write_body
+            (module Http.Body.Writer)
+            response_body
+            stream
+        | `Sendfile { fd = src_fd; _ } ->
+          (match scheme with
+          | `HTTP ->
             let response_body =
-              let flush_headers_immediately =
-                config.flush_headers_immediately
-              in
               Http.Reqd.respond_with_streaming
-                ~flush_headers_immediately
+                ~flush_headers_immediately:true
                 reqd
                 response
             in
-            Piaf_body.Raw.stream_write_body
-              (module Http.Body.Writer)
+            do_sendfile
+              (module Http)
+              ~src_fd
+              ~fd:handle
+              ~report_exn
               response_body
-              stream
-          | `Sendfile { fd = src_fd; _ } ->
-            (match scheme with
-            | `HTTP ->
-              let response_body =
-                Http.Reqd.respond_with_streaming
-                  ~flush_headers_immediately:true
-                  reqd
-                  response
-              in
-              do_sendfile
-                (module Http)
-                ~src_fd
-                ~fd:handle
-                ~report_exn
-                response_body
-            | `HTTPS ->
-              (* TODO(anmonteiro): can't sendfile on an encrypted connection *)
-              assert false))
-      with
-      | exn -> report_exn exn)
+          | `HTTPS ->
+            (* TODO(anmonteiro): can't sendfile on an encrypted connection *)
+            assert false))
+    with
+    | exn -> report_exn exn)
 
 let handle_error :
     type writer reqd.
@@ -250,13 +248,13 @@ let handle_error :
     -> unit
   =
  fun ?request
-     (module Http)
-     ~start_response
-     ~error_handler
-     ~scheme
-     ~fd
-     client_address
-     error ->
+   (module Http)
+   ~start_response
+   ~error_handler
+   ~scheme
+   ~fd
+   client_address
+   error ->
   let module Writer = Http.Body.Writer in
   let was_response_written = ref false in
   let respond ~headers body =
@@ -293,23 +291,23 @@ let handle_error :
   in
   try
     Logs.warn (fun m ->
-        m
-          "Error handler called with error: %a%a"
-          Error.pp_hum
-          error
-          (Format.pp_print_option (fun fmt request ->
-               Format.fprintf fmt "; Request: @?%a" Request.pp_hum request))
-          request);
+      m
+        "Error handler called with error: %a%a"
+        Error.pp_hum
+        error
+        (Format.pp_print_option (fun fmt request ->
+           Format.fprintf fmt "; Request: @?%a" Request.pp_hum request))
+        request);
     error_handler client_address ?request ~respond error
   with
   | exn ->
     Logs.err (fun m ->
-        let raw_backtrace = Printexc.get_raw_backtrace () in
-        m
-          "Exception in `error_handler`: %s.@]@;<0 2>@[<v 0>%a@]"
-          (Printexc.to_string exn)
-          Util.Backtrace.pp_hum
-          raw_backtrace);
+      let raw_backtrace = Printexc.get_raw_backtrace () in
+      m
+        "Exception in `error_handler`: %s.@]@;<0 2>@[<v 0>%a@]"
+        (Printexc.to_string exn)
+        Util.Backtrace.pp_hum
+        raw_backtrace);
     if not !was_response_written
     then
       respond

@@ -46,8 +46,8 @@ module type BODY = Body.Raw.BODY
 
 module Body :
   BODY
-    with type Reader.t = H2.Body.Reader.t
-     and type Writer.t = H2.Body.Writer.t = struct
+  with type Reader.t = H2.Body.Reader.t
+   and type Writer.t = H2.Body.Writer.t = struct
   module Reader = H2.Body.Reader
   module Writer = H2.Body.Writer
 end
@@ -55,10 +55,10 @@ end
 module MakeHTTP2 (Runtime_scheme : Scheme.Runtime.SCHEME) : sig
   include
     Http_intf.HTTPCommon
-      with type Client.t = H2_eio.Client.t
-       and type Body.Reader.t = H2.Body.Reader.t
-       and type Body.Writer.t = H2.Body.Writer.t
-       and type scheme = Runtime_scheme.t
+    with type Client.t = H2_eio.Client.t
+     and type Body.Reader.t = H2.Body.Reader.t
+     and type Body.Writer.t = H2.Body.Writer.t
+     and type scheme = Runtime_scheme.t
 
   val make_error_handler :
      fd:Eio_unix.Net.stream_socket_ty Eio.Net.stream_socket
@@ -154,7 +154,7 @@ end = struct
            | `Exn of exn
            | `Internal_server_error
            ]
-           option)
+             option)
   end
 
   module HttpServer = struct
@@ -237,8 +237,8 @@ module HTTP : Http_intf.HTTP2 with type scheme = Scheme.http = struct
   include (
     HTTP_2 :
       module type of HTTP_2
-        with module Client := HTTP_2.Client
-         and module Server = HTTP_2.Server)
+      with module Client := HTTP_2.Client
+       and module Server = HTTP_2.Server)
 
   module Client = struct
     include HTTP_2.Client
@@ -280,13 +280,13 @@ module HTTP : Http_intf.HTTP2 with type scheme = Scheme.http = struct
       in
       Stdlib.Result.map
         (fun connection ->
-          (* Perform the runtime upgrade -- stop speaking HTTP/1.1, start
-           * speaking HTTP/2 by feeding Gluten the `H2.Client_connection`
-           * protocol. *)
-          Gluten_eio.Client.upgrade
-            runtime
-            (Gluten.make (module H2.Client_connection) connection);
-          { H2_eio.Client.connection; runtime })
+           (* Perform the runtime upgrade -- stop speaking HTTP/1.1, start
+            * speaking HTTP/2 by feeding Gluten the `H2.Client_connection`
+            * protocol. *)
+           Gluten_eio.Client.upgrade
+             runtime
+             (Gluten.make (module H2.Client_connection) connection);
+           { H2_eio.Client.connection; runtime })
         connection
   end
 
@@ -305,13 +305,13 @@ module HTTP : Http_intf.HTTP2 with type scheme = Scheme.http = struct
         -> (H2.Server_connection.t, string) result
       =
      fun ~config
-         ~sw
-         ~fd
-         ~error_handler
-         ~http_request
-         ~request_body
-         ~client_address
-         request_handler ->
+       ~sw
+       ~fd
+       ~error_handler
+       ~http_request
+       ~request_body
+       ~client_address
+       request_handler ->
       let request_handler =
         make_request_handler ~sw ~config ~fd request_handler client_address
       in

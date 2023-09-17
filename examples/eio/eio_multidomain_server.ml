@@ -10,14 +10,14 @@ let start env =
   let host = Eio.Net.Ipaddr.V4.loopback
   and port = 8080 in
   Switch.run (fun sw ->
-      let config =
-        Server.Config.create
-          ~buffer_size:0x1000
-          ~domains:recommended_domain_count
-          (`Tcp (host, port))
-      in
-      let server = Server.create ~config connection_handler in
-      ignore (Server.Command.start ~sw env server : Server.Command.t))
+    let config =
+      Server.Config.create
+        ~buffer_size:0x1000
+        ~domains:recommended_domain_count
+        (`Tcp (host, port))
+    in
+    let server = Server.create ~config connection_handler in
+    ignore (Server.Command.start ~sw env server : Server.Command.t))
 
 let setup_log ?style_renderer level =
   Logs_threaded.enable ();

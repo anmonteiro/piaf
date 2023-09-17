@@ -134,61 +134,60 @@ module Handler = struct
           payload
       in
       Fiber.fork ~sw (fun () ->
-          match opcode with
-          | `Pong ->
-            (* From RFC6455§5.5.2:
-             *   A Pong frame MAY be sent unsolicited. This serves as a
-             *   unidirectional heartbeat. A response to an unsolicited Pong frame
-             *   is not expected. *)
-            (* Drain any application data payload in the Pong frame. *)
-            Stream.drain stream
-          | `Ping ->
-            (* From RFC6455§5.5.3:
-             *   Upon receipt of a Ping frame, an endpoint MUST send a Pong frame
-             *   in response, unless it already received a Close frame. *)
-            let payload =
-              let iovecs = Stream.to_list stream in
-              IOVec.concat iovecs
-            in
-            Wsd.send_pong ~application_data:payload wsd
-          | `Text | `Binary ->
-            let frame = Stream.to_list stream in
-            (match is_fin with
-            | true ->
-              (* FIN bit set, just push to the stream. *)
-              push_to_messages (Some (opcode, IOVec.concat frame))
-            | false ->
-              (* FIN bit not set, accumulate in the temp queue. *)
-              Queue.add (opcode, frame) frameq)
-          | `Continuation ->
-            let frame = Stream.to_list stream in
-            Queue.add (opcode, frame) frameq;
-            (match is_fin with
-            | true ->
-              (* FIN bit set, consume the queue. *)
-              let opcode, message =
-                let opcode, first_frame =
-                  (* invariant: the queue is non-empty if this is a continuation
-                     frame *)
-                  Queue.take frameq
-                in
-                let other_frames =
-                  Queue.to_seq frameq |> Seq.map snd |> List.of_seq
-                in
-                let all_frames = first_frame :: other_frames in
-                opcode, IOVec.concat (List.concat all_frames)
+        match opcode with
+        | `Pong ->
+          (* From RFC6455§5.5.2:
+           *   A Pong frame MAY be sent unsolicited. This serves as a
+           *   unidirectional heartbeat. A response to an unsolicited Pong frame
+           *   is not expected. *)
+          (* Drain any application data payload in the Pong frame. *)
+          Stream.drain stream
+        | `Ping ->
+          (* From RFC6455§5.5.3:
+           *   Upon receipt of a Ping frame, an endpoint MUST send a Pong frame
+           *   in response, unless it already received a Close frame. *)
+          let payload =
+            let iovecs = Stream.to_list stream in
+            IOVec.concat iovecs
+          in
+          Wsd.send_pong ~application_data:payload wsd
+        | `Text | `Binary ->
+          let frame = Stream.to_list stream in
+          (match is_fin with
+          | true ->
+            (* FIN bit set, just push to the stream. *)
+            push_to_messages (Some (opcode, IOVec.concat frame))
+          | false ->
+            (* FIN bit not set, accumulate in the temp queue. *)
+            Queue.add (opcode, frame) frameq)
+        | `Continuation ->
+          let frame = Stream.to_list stream in
+          Queue.add (opcode, frame) frameq;
+          (match is_fin with
+          | true ->
+            (* FIN bit set, consume the queue. *)
+            let opcode, message =
+              let opcode, first_frame =
+                (* invariant: the queue is non-empty if this is a continuation
+                   frame *)
+                Queue.take frameq
               in
-              (* Clear the queue after assembling the full message. *)
-              Queue.clear frameq;
-              push_to_messages (Some (opcode, message))
-            | false ->
-              (* FIN bit not set, keep accumulating in the temp queue. *)
-              ())
-          | `Connection_close ->
-            let message = Stream.to_list stream |> List.hd in
+              let other_frames =
+                Queue.to_seq frameq |> Seq.map snd |> List.of_seq
+              in
+              let all_frames = first_frame :: other_frames in
+              opcode, IOVec.concat (List.concat all_frames)
+            in
+            (* Clear the queue after assembling the full message. *)
+            Queue.clear frameq;
             push_to_messages (Some (opcode, message))
-          | `Other _ ->
-            failwith "Custom WebSocket frame types not yet supported")
+          | false ->
+            (* FIN bit not set, keep accumulating in the temp queue. *)
+            ())
+        | `Connection_close ->
+          let message = Stream.to_list stream |> List.hd in
+          push_to_messages (Some (opcode, message))
+        | `Other _ -> failwith "Custom WebSocket frame types not yet supported")
     in
 
     let eof () =
