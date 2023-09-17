@@ -49,7 +49,7 @@ let sendfile
      * `Gluten.Server.report_write_result` here given that we put
      * bytes in the file descriptor off-band. `report_write_result`
      * just tracks the internal Faraday buffers. *)
-    Logs.debug (fun m -> m "`sendfile` wrote %d bytes successfully" sent);
+    Logs.debug (fun m -> m "`sendfile` wrote %d bytes" sent);
     Ok ()
   | Error e ->
     Writer.close raw_write_body;

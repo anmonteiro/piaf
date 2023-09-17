@@ -19,12 +19,27 @@
 #include <sys/sendfile.h>
 #endif
 
+#include <errno.h>
+
 #define CAML_NAME_SPACE
+#include <caml/alloc.h>
+#include <caml/callback.h>
+#include <caml/custom.h>
 #include <caml/fail.h>
 #include <caml/memory.h>
 #include <caml/mlvalues.h>
 #include <caml/threads.h>
 #include <caml/unixsupport.h>
+
+value sendfile_unix_error(int errcode, off_t len) {
+  CAMLparam0();
+  value err, res;
+  err = caml_unix_error_of_code(errcode);
+  res = caml_alloc_small(2, 0);
+  Field(res, 0) = err;
+  Field(res, 1) = Val_long(len);
+  CAMLreturn(res);
+}
 
 /*
  * Sendfile has different signatures on macOS and Linux.
@@ -42,8 +57,26 @@ CAMLprim value ocaml_sendfile_sendfile_stub(value v_fd, value v_sock,
   ret = sendfile(Int_val(v_fd), Int_val(v_sock), offset, &len, NULL, 0);
   caml_acquire_runtime_system();
 
-  if (ret == -1)
-    uerror("sendfile", Nothing);
+  /*
+   * For the macOS case we raise a custom exception with the remaining length
+   * to be sent, due to `sendfile` differences in the Apple platform.
+   *
+   * From
+   * https://developer.apple.com/library/archive/documentation/System/Conceptual/ManPages_iPhoneOS/man2/sendfile.2.html:
+   *
+   * EINTR: A signal interrupted sendfile() before it could be completed.  If
+   * specified, the number of bytes successfully fully sent will
+   * be returned in *len.
+   *
+   * Similarly for EAGAIN:
+   * The socket is marked for non-blocking I/O and not all data was sent due to
+   * the socket buffer being full.  If specified, the number of bytes
+   * successfully sent will be returned in *len.
+   */
+  if (ret == -1) {
+    caml_raise_with_arg(*caml_named_value("sendfile_exn_unix_error"),
+                        sendfile_unix_error(errno, len));
+  }
 
   CAMLreturn(Val_long(len));
 }
