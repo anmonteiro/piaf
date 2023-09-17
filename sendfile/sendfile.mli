@@ -1,7 +1,6 @@
 val sendfile_once_exn :
    ?off:int (** Defaults to 0. *)
-  -> ?len:int
-       (** Defaults to length of data (file) associated with descriptor [fd]. *)
+  -> len:int
   -> src:Unix.file_descr
   -> Unix.file_descr
   -> int
@@ -11,8 +10,7 @@ val sendfile_once_exn :
 
 val sendfile_once :
    ?off:int (** Defaults to 0. *)
-  -> ?len:int
-       (** Defaults to length of data (file) associated with descriptor [fd]. *)
+  -> len:int
   -> src:Unix.file_descr
   -> Unix.file_descr
   -> (int, Unix.error) result
@@ -27,8 +25,8 @@ val sendfile_exn :
   -> src:Unix.file_descr
   -> Unix.file_descr
   -> int
-(** Calls `sendfile(2)`, possibly repeatedly (if EINTR is returned) until the
-    entire file has been sent.
+(** Calls `sendfile(2)`, possibly repeatedly (if EINTR / EAGAIN is returned)
+    until the entire file has been sent.
 
     @raise Sys_error if `sendfile` is not supported by the platform. *)
 
