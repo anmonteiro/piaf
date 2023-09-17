@@ -31,6 +31,11 @@
 #include <caml/threads.h>
 #include <caml/unixsupport.h>
 
+/*
+ * Sendfile has different signatures on macOS and Linux.
+ */
+
+#if defined(DARWIN_HOST_OS)
 value sendfile_unix_error(int errcode, off_t len) {
   CAMLparam0();
   value err, res;
@@ -41,11 +46,6 @@ value sendfile_unix_error(int errcode, off_t len) {
   CAMLreturn(res);
 }
 
-/*
- * Sendfile has different signatures on macOS and Linux.
- */
-
-#if defined(DARWIN_HOST_OS)
 CAMLprim value ocaml_sendfile_sendfile_stub(value v_fd, value v_sock,
                                             value v_pos, value v_len) {
   CAMLparam4(v_fd, v_sock, v_pos, v_len);
