@@ -73,7 +73,7 @@ module type Reqd = sig
   val error_code :
      t
     -> [ `Bad_request | `Bad_gateway | `Internal_server_error | `Exn of exn ]
-       option
+         option
 
   val report_exn : t -> exn -> unit
   val try_with : t -> (unit -> unit) -> (unit, exn) result

@@ -69,8 +69,8 @@ let is_requesting_h2c_upgrade ~config ~version ~scheme headers =
         let connection_segments = String.split_on_char ',' connection in
         List.exists
           (fun segment ->
-            let normalized = String.(trim (lowercase_ascii segment)) in
-            String.equal normalized Headers.Well_known.upgrade)
+             let normalized = String.(trim (lowercase_ascii segment)) in
+             String.equal normalized Headers.Well_known.upgrade)
           connection_segments
       | _ -> false
     else false
@@ -182,9 +182,9 @@ module Command = struct
     ; shutdown_resolvers : (unit -> unit) list
     ; client_sockets :
         ( int
-        , Eio_unix.Net.stream_socket_ty Eio_unix.Net.stream_socket )
-        Hashtbl.t
-        list
+          , Eio_unix.Net.stream_socket_ty Eio_unix.Net.stream_socket )
+          Hashtbl.t
+          list
     ; clock : float Eio.Time.clock_ty r
     ; shutdown_timeout : float
     }
@@ -202,57 +202,56 @@ module Command = struct
          sockets *)
       Fiber.first
         (fun () ->
-          (* We can exit earlier, without waiting for the full timeout. Check
-             every 100 ms. *)
-          while length client_sockets > 0 do
-            Eio.Time.sleep clock 0.1
-          done)
+           (* We can exit earlier, without waiting for the full timeout. Check
+              every 100 ms. *)
+           while length client_sockets > 0 do
+             Eio.Time.sleep clock 0.1
+           done)
         (* TODO(anmonteiro): we can be a whole lot smarter, and start sending
            `connection: close` in headers as soon as we detect we're shutting
            down. *)
-          (fun () ->
-          Eio.Time.sleep clock shutdown_timeout;
-          (* Shut down all client sockets after the shutdown timeout has
-             elapsed. *)
-          List.iter
-            (fun client_sockets ->
-              Hashtbl.iter
-                (fun _ client_socket ->
-                  try Eio.Flow.shutdown client_socket `All with
-                  | Eio.Io (Eio.Exn.X (Eio_unix.Unix_error (ENOTCONN, _, _)), _)
-                    ->
-                    Logs.debug (fun m -> m "Socket already disconnected"))
-                client_sockets)
-            client_sockets);
+           (fun () ->
+           Eio.Time.sleep clock shutdown_timeout;
+           (* Shut down all client sockets after the shutdown timeout has
+              elapsed. *)
+           List.iter
+             (fun client_sockets ->
+                Hashtbl.iter
+                  (fun _ client_socket ->
+                     try Eio.Flow.shutdown client_socket `All with
+                     | Eio.Io
+                         (Eio.Exn.X (Eio_unix.Unix_error (ENOTCONN, _, _)), _)
+                       ->
+                       Logs.debug (fun m -> m "Socket already disconnected"))
+                  client_sockets)
+             client_sockets);
       Logs.info (fun m -> m "Server teardown finished")
 
   let accept_loop ~sw ~socket ~client_sockets connection_handler =
     let released_p, released_u = Promise.create () in
     let await_release () = Promise.await released_p in
     Fiber.fork ~sw (fun () ->
-        let id = ref 0 in
-        while not (Promise.is_resolved released_p) do
-          Fiber.first await_release (fun () ->
-              Eio.Net.accept_fork
-                socket
-                ~sw
-                ~on_error:(fun exn ->
-                  Logs.err (fun m ->
-                      m
-                        "Error in connection handler: %s"
-                        (Printexc.to_string exn)))
-                (fun socket addr ->
-                  Switch.run (fun sw ->
-                      let connection_id =
-                        let cid = !id in
-                        incr id;
-                        cid
-                      in
-                      Hashtbl.replace client_sockets connection_id socket;
-                      Switch.on_release sw (fun () ->
-                          Hashtbl.remove client_sockets connection_id);
-                      connection_handler ~sw socket addr)))
-        done);
+      let id = ref 0 in
+      while not (Promise.is_resolved released_p) do
+        Fiber.first await_release (fun () ->
+          Eio.Net.accept_fork
+            socket
+            ~sw
+            ~on_error:(fun exn ->
+              Logs.err (fun m ->
+                m "Error in connection handler: %s" (Printexc.to_string exn)))
+            (fun socket addr ->
+               Switch.run (fun sw ->
+                 let connection_id =
+                   let cid = !id in
+                   incr id;
+                   cid
+                 in
+                 Hashtbl.replace client_sockets connection_id socket;
+                 Switch.on_release sw (fun () ->
+                   Hashtbl.remove client_sockets connection_id);
+                 connection_handler ~sw socket addr)))
+      done);
     fun () -> Promise.resolve released_u ()
 
   let listen
@@ -280,22 +279,22 @@ module Command = struct
     let all_started, resolve_all_started = Promise.create () in
     for idx = 0 to domains - 1 do
       Eio.Fiber.fork ~sw (fun () ->
-          let is_last_domain = idx = domains - 1 in
-          let run_accept_loop () =
-            Switch.run (fun sw ->
-                let client_sockets = Hashtbl.create 256 in
-                let resolver =
-                  accept_loop ~sw ~client_sockets ~socket connection_handler
-                in
-                Eio.Mutex.lock resolver_mutex;
-                resolvers := (resolver, client_sockets) :: !resolvers;
-                Eio.Mutex.unlock resolver_mutex;
-                if is_last_domain then Promise.resolve resolve_all_started ())
-          in
-          (* Last domain starts on the main thread. *)
-          if is_last_domain
-          then run_accept_loop ()
-          else Eio.Domain_manager.run domain_mgr run_accept_loop)
+        let is_last_domain = idx = domains - 1 in
+        let run_accept_loop () =
+          Switch.run (fun sw ->
+            let client_sockets = Hashtbl.create 256 in
+            let resolver =
+              accept_loop ~sw ~client_sockets ~socket connection_handler
+            in
+            Eio.Mutex.lock resolver_mutex;
+            resolvers := (resolver, client_sockets) :: !resolvers;
+            Eio.Mutex.unlock resolver_mutex;
+            if is_last_domain then Promise.resolve resolve_all_started ())
+        in
+        (* Last domain starts on the main thread. *)
+        if is_last_domain
+        then run_accept_loop ()
+        else Eio.Domain_manager.run domain_mgr run_accept_loop)
     done;
     Promise.await all_started;
     Logs.info (fun m -> m "Server listening on %a" Eio.Net.Sockaddr.pp address);

@@ -40,10 +40,7 @@ let resolve_host env ~config ~port hostname : (_, [> Error.client ]) result =
   let network = Eio.Stdenv.net env in
   match
     Eio.Time.with_timeout_exn clock config.Config.connect_timeout (fun () ->
-        Eio.Net.getaddrinfo_stream
-          ~service:(string_of_int port)
-          network
-          hostname)
+      Eio.Net.getaddrinfo_stream ~service:(string_of_int port) network hostname)
   with
   | [] ->
     Error
@@ -56,28 +53,28 @@ let resolve_host env ~config ~port hostname : (_, [> Error.client ]) result =
         (* Sort IPv4 ahead of IPv6 for compatibility. *)
         (List.sort
            (fun a1 a2 ->
-             match a1, a2 with
-             | `Unix s1, `Unix s2 -> String.compare s1 s2
-             | `Tcp (ip1, _), `Tcp (ip2, _) ->
-               compare (order_v4v6 ip1) (order_v4v6 ip2)
-             | `Unix _, `Tcp _ -> 1
-             | `Tcp _, `Unix _ -> -1)
+              match a1, a2 with
+              | `Unix s1, `Unix s2 -> String.compare s1 s2
+              | `Tcp (ip1, _), `Tcp (ip2, _) ->
+                compare (order_v4v6 ip1) (order_v4v6 ip2)
+              | `Unix _, `Tcp _ -> 1
+              | `Tcp _, `Unix _ -> -1)
            xs)
     | `V4 ->
       Ok
         (List.filter
            (function
-             | `Tcp (ip, _) ->
-               Eio.Net.Ipaddr.fold ~v4:(fun _ -> true) ~v6:(fun _ -> false) ip
-             | `Unix _ -> true)
+              | `Tcp (ip, _) ->
+                Eio.Net.Ipaddr.fold ~v4:(fun _ -> true) ~v6:(fun _ -> false) ip
+              | `Unix _ -> true)
            xs)
     | `V6 ->
       Ok
         (List.filter
            (function
-             | `Tcp (ip, _) ->
-               Eio.Net.Ipaddr.fold ~v4:(fun _ -> false) ~v6:(fun _ -> true) ip
-             | `Unix _ -> true)
+              | `Tcp (ip, _) ->
+                Eio.Net.Ipaddr.fold ~v4:(fun _ -> false) ~v6:(fun _ -> true) ip
+              | `Unix _ -> true)
            xs))
   | exception Eio.Time.Timeout ->
     Error
@@ -103,14 +100,16 @@ module Info = struct
     && (* At least one can match *)
     List.exists
       (fun a1 ->
-        List.exists
-          (fun a2 ->
-            match a1, a2 with
-            | `Tcp (addr1, _), `Tcp (addr2, _) ->
-              String.equal (Obj.magic addr1 : string) (Obj.magic addr2 : string)
-            | `Unix addr1, `Unix addr2 -> String.equal addr1 addr2
-            | _ -> false)
-          c2.addresses)
+         List.exists
+           (fun a2 ->
+              match a1, a2 with
+              | `Tcp (addr1, _), `Tcp (addr2, _) ->
+                String.equal
+                  (Obj.magic addr1 : string)
+                  (Obj.magic addr2 : string)
+              | `Unix addr1, `Unix addr2 -> String.equal addr1 addr2
+              | _ -> false)
+           c2.addresses)
       c1.addresses
 
   (* Use this shortcut to avoid resolving the new address. Not 100% correct
@@ -155,7 +154,7 @@ let connect ~sw ~clock ~network ~config conn_info =
   Logs.debug (fun m -> m "Trying connection to %a" Info.pp_hum conn_info);
   match
     Eio.Time.with_timeout_exn clock config.Config.connect_timeout (fun () ->
-        Eio.Net.connect ~sw network address)
+      Eio.Net.connect ~sw network address)
   with
   | sock -> Ok sock
   | exception exn ->

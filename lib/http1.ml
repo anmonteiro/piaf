@@ -36,18 +36,18 @@ module type BODY = Body.Raw.BODY
 
 module Body :
   BODY
-    with type Reader.t = Httpaf.Body.Reader.t
-     and type Writer.t = Httpaf.Body.Writer.t = struct
+  with type Reader.t = Httpaf.Body.Reader.t
+   and type Writer.t = Httpaf.Body.Writer.t = struct
   module Reader = Httpaf.Body.Reader
   module Writer = Httpaf.Body.Writer
 end
 
 module MakeHTTP1 (Runtime_scheme : Scheme.Runtime.SCHEME) :
   Http_intf.HTTP1
-    with type Client.t = Httpaf_eio.Client.t
-     and type Body.Reader.t = Httpaf.Body.Reader.t
-     and type Body.Writer.t = Httpaf.Body.Writer.t
-     and type scheme = Runtime_scheme.t = struct
+  with type Client.t = Httpaf_eio.Client.t
+   and type Body.Reader.t = Httpaf.Body.Reader.t
+   and type Body.Writer.t = Httpaf.Body.Writer.t
+   and type scheme = Runtime_scheme.t = struct
   type scheme = Runtime_scheme.t
 
   let scheme = Runtime_scheme.scheme
@@ -128,8 +128,8 @@ module MakeHTTP1 (Runtime_scheme : Scheme.Runtime.SCHEME) :
 
     module Reqd :
       Http_intf.Reqd
-        with type t = Httpaf.Reqd.t
-         and type write_body = Body.Writer.t = struct
+      with type t = Httpaf.Reqd.t
+       and type write_body = Body.Writer.t = struct
       include Httpaf.Reqd
 
       type write_body = Body.Writer.t
@@ -185,7 +185,7 @@ module MakeHTTP1 (Runtime_scheme : Scheme.Runtime.SCHEME) :
           ~on_eof:(fun t ->
             Option.iter
               (fun error ->
-                t.error_received := Promise.create_resolved (error :> Error.t))
+                 t.error_received := Promise.create_resolved (error :> Error.t))
               (Httpaf.Reqd.error_code reqd))
           (Httpaf.Reqd.request_body reqd)
       in

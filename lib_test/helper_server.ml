@@ -135,33 +135,33 @@ module ALPN = struct
       ~shutdown_timeout:0.
       env
       (fun ~sw fd client_addr ->
-        let server_ctx = Ssl.create_context Ssl.TLSv1_3 Ssl.Server_context in
-        Ssl.disable_protocols
-          server_ctx
-          ([ Ssl.SSLv23; Ssl.TLSv1_1 ] [@alert "-deprecated"]);
-        Ssl.load_verify_locations server_ctx ca "";
-        Ssl.use_certificate server_ctx cert priv_key;
-        if check_client_cert
-        then Ssl.set_verify server_ctx [ Ssl.Verify_fail_if_no_peer_cert ] None;
-        let protos = [ "h2"; "http/1.1" ] in
-        Ssl.set_context_alpn_protos server_ctx protos;
-        Ssl.set_context_alpn_select_callback server_ctx (fun client_protos ->
-            first_match client_protos protos);
-        try
-          let ssl_ctx = Eio_ssl.Context.create ~ctx:server_ctx fd in
-          let ssl_server = Eio_ssl.accept ssl_ctx in
-          let ssl_socket = Eio_ssl.Context.ssl_socket ssl_ctx in
-          match Ssl.get_negotiated_alpn_protocol ssl_socket with
-          | Some "http/1.1" -> http1s_handler ~sw client_addr ssl_server
-          | Some "h2" -> h2s_handler ~sw client_addr ssl_server
-          | None (* Unable to negotiate a protocol *) | Some _ ->
-            (* Can't really happen - would mean that TLS negotiated a
-             * protocol that we didn't specify. *)
-            assert false
-        with
-        | exn ->
-          Format.eprintf "Accept EXN: %s@." (Printexc.to_string exn);
-          raise exn)
+         let server_ctx = Ssl.create_context Ssl.TLSv1_3 Ssl.Server_context in
+         Ssl.disable_protocols
+           server_ctx
+           ([ Ssl.SSLv23; Ssl.TLSv1_1 ] [@alert "-deprecated"]);
+         Ssl.load_verify_locations server_ctx ca "";
+         Ssl.use_certificate server_ctx cert priv_key;
+         if check_client_cert
+         then Ssl.set_verify server_ctx [ Ssl.Verify_fail_if_no_peer_cert ] None;
+         let protos = [ "h2"; "http/1.1" ] in
+         Ssl.set_context_alpn_protos server_ctx protos;
+         Ssl.set_context_alpn_select_callback server_ctx (fun client_protos ->
+           first_match client_protos protos);
+         try
+           let ssl_ctx = Eio_ssl.Context.create ~ctx:server_ctx fd in
+           let ssl_server = Eio_ssl.accept ssl_ctx in
+           let ssl_socket = Eio_ssl.Context.ssl_socket ssl_ctx in
+           match Ssl.get_negotiated_alpn_protocol ssl_socket with
+           | Some "http/1.1" -> http1s_handler ~sw client_addr ssl_server
+           | Some "h2" -> h2s_handler ~sw client_addr ssl_server
+           | None (* Unable to negotiate a protocol *) | Some _ ->
+             (* Can't really happen - would mean that TLS negotiated a
+              * protocol that we didn't specify. *)
+             assert false
+         with
+         | exn ->
+           Format.eprintf "Accept EXN: %s@." (Printexc.to_string exn);
+           raise exn)
 end
 
 type t = Server.Command.t * Server.Command.t

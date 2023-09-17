@@ -4,7 +4,7 @@
   inputs.nix-filter.url = "github:numtide/nix-filter";
   inputs.flake-utils.url = "github:numtide/flake-utils";
   inputs.nixpkgs = {
-    url = "github:nix-ocaml/nix-overlays/anmonteiro/eio-0.12";
+    url = "github:nix-ocaml/nix-overlays";
     inputs.flake-utils.follows = "flake-utils";
   };
 

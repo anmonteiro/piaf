@@ -97,9 +97,9 @@ module Set_cookie = struct
     let attrs =
       List.map
         (fun attr ->
-          match Stringext.split ~on:'=' attr with
-          | [] -> "", ""
-          | n :: v -> n, String.concat "=" v)
+           match Stringext.split ~on:'=' attr with
+           | [] -> "", ""
+           | n :: v -> n, String.concat "=" v)
         attrs
     in
     try
@@ -184,19 +184,19 @@ module Cookie = struct
   let parse headers =
     List.fold_left
       (fun acc header ->
-        let comps = Stringext.split_trim_left ~on:";" ~trim:" \t" header in
-        (* We don't handle $Path, $Domain, $Port, $Version (or $anything
-           $else) *)
-        let cookies =
-          List.filter (fun s -> String.length s > 0 && s.[0] != '$') comps
-        in
-        let split_pair nvp =
-          match Stringext.split ~on:'=' nvp ~max:2 with
-          | [] -> "", ""
-          | [ n ] -> n, ""
-          | n :: v :: _ -> n, v
-        in
-        List.map split_pair cookies @ acc)
+         let comps = Stringext.split_trim_left ~on:";" ~trim:" \t" header in
+         (* We don't handle $Path, $Domain, $Port, $Version (or $anything
+            $else) *)
+         let cookies =
+           List.filter (fun s -> String.length s > 0 && s.[0] != '$') comps
+         in
+         let split_pair nvp =
+           match Stringext.split ~on:'=' nvp ~max:2 with
+           | [] -> "", ""
+           | [ n ] -> n, ""
+           | n :: v :: _ -> n, v
+         in
+         List.map split_pair cookies @ acc)
       []
       (Headers.get_multi headers "cookie")
 

@@ -12,64 +12,62 @@ let run cmd =
 (* XXX(anmonteiro): doesn't compare the response body. *)
 let response_testable =
   Alcotest.testable Response.pp_hum (fun r1 r2 ->
-      r1.status = r2.status
-      && r1.headers = r2.headers
-      && r1.version = r2.version)
+    r1.status = r2.status && r1.headers = r2.headers && r1.version = r2.version)
 
 let error_testable = Alcotest.of_pp Error.pp_hum
 
 let test_simple_get ~sw env () =
   let server = Helper_server.listen ~sw ~env () in
   Switch.run (fun sw ->
-      let response =
-        Client.Oneshot.get
-          env
-          ~sw
-          (Uri.of_string "http://localhost:8080")
-          ~headers:[ Headers.Well_known.connection, "close" ]
-      in
-      let response = Result.get_ok response in
-      Alcotest.check
-        response_testable
-        "expected response"
-        (Response.create
-           ~headers:
-             Headers.(
-               of_list
-                 [ Well_known.connection, "close"
-                 ; Well_known.content_length, "5"
-                 ])
-           `OK)
-        response;
-      let body = Body.to_string response.body in
-      Alcotest.(check (result string error_testable))
-        "expected body"
-        (Ok "GET /")
-        body);
+    let response =
+      Client.Oneshot.get
+        env
+        ~sw
+        (Uri.of_string "http://localhost:8080")
+        ~headers:[ Headers.Well_known.connection, "close" ]
+    in
+    let response = Result.get_ok response in
+    Alcotest.check
+      response_testable
+      "expected response"
+      (Response.create
+         ~headers:
+           Headers.(
+             of_list
+               [ Well_known.connection, "close"
+               ; Well_known.content_length, "5"
+               ])
+         `OK)
+      response;
+    let body = Body.to_string response.body in
+    Alcotest.(check (result string error_testable))
+      "expected body"
+      (Ok "GET /")
+      body);
   Helper_server.teardown server
 
 let test_simple_get_oneshot_keepalive ~sw env () =
   let server = Helper_server.listen ~sw ~env () in
   Switch.run (fun sw ->
-      let response =
-        Client.Oneshot.get env ~sw (Uri.of_string "http://localhost:8080")
-      in
-      let response = Result.get_ok response in
-      Alcotest.check
-        response_testable
-        "expected response"
-        (Response.create
-           ~headers:Headers.(of_list [ Well_known.content_length, "5" ])
-           `OK)
-        response;
-      let body = Body.to_string response.body in
-      Alcotest.(check (result string error_testable))
-        "expected body"
-        (Ok "GET /")
-        body;
-      Switch.on_release sw (fun () ->
-          Format.eprintf "release me@.";
-          Helper_server.teardown server))
+    let response =
+      Client.Oneshot.get env ~sw (Uri.of_string "http://localhost:8080")
+    in
+    let response = Result.get_ok response in
+    Alcotest.check
+      response_testable
+      "expected response"
+      (Response.create
+         ~headers:Headers.(of_list [ Well_known.content_length, "5" ])
+         `OK)
+      response;
+    let body = Body.to_string response.body in
+    Alcotest.(check (result string error_testable))
+      "expected body"
+      (Ok "GET /")
+      body;
+    Switch.on_release sw (fun () ->
+      Format.eprintf "release me@.";
+      Helper_server.teardown server))
 
 let test_redirection ~sw env () =
   let server = Helper_server.listen ~sw ~env () in
@@ -433,59 +431,54 @@ let test_https_client_certs ~sw env () =
 let test_https_no_client_cert () =
   (* No client certificate provided *)
   Eio_main.run (fun env ->
-      try
-        Switch.run (fun sw ->
-            let server =
-              Helper_server.listen ~sw ~env ~check_client_cert:true ()
-            in
-            let response =
-              Client.Oneshot.get
-                ~sw
-                ~config:
-                  { Config.default with
-                    follow_redirects = true
-                  ; max_redirects = 1
-                  ; allow_insecure = false
-                  ; max_http_version = HTTP_1_1
-                  ; cacert =
-                      Some (Cert.Filepath (Helper_server.cert_path // "ca.pem"))
-                  }
-                env
-                (Uri.of_string "https://localhost:9443")
-              |> Result.map (fun res ->
-                  Result.get_ok (Body.drain res.Response.body))
-            in
-            (match response with
-            | Ok () -> Alcotest.fail "expected response to be error"
-            | Error (`TLS_error { reason; _ }) ->
-              (match run "uname" with
-              | "Linux" ->
-                (* Differences between eio_linux / eio_luv *)
-                ()
-              | "Darwin" | _ ->
-                Alcotest.(check string)
-                  "response error"
-                  "tlsv13 alert certificate required"
-                  (Option.get reason))
-            | Error e ->
-              Alcotest.fail
-                (Format.asprintf
-                   "expected response to be error: %a"
-                   Error.pp_hum
-                   e));
+    try
+      Switch.run (fun sw ->
+        let server = Helper_server.listen ~sw ~env ~check_client_cert:true () in
+        let response =
+          Client.Oneshot.get
+            ~sw
+            ~config:
+              { Config.default with
+                follow_redirects = true
+              ; max_redirects = 1
+              ; allow_insecure = false
+              ; max_http_version = HTTP_1_1
+              ; cacert =
+                  Some (Cert.Filepath (Helper_server.cert_path // "ca.pem"))
+              }
+            env
+            (Uri.of_string "https://localhost:9443")
+          |> Result.map (fun res ->
+            Result.get_ok (Body.drain res.Response.body))
+        in
+        (match response with
+        | Ok () -> Alcotest.fail "expected response to be error"
+        | Error (`TLS_error { reason; _ }) ->
+          (match run "uname" with
+          | "Linux" ->
+            (* Differences between eio_linux / eio_luv *)
+            ()
+          | "Darwin" | _ ->
+            Alcotest.(check string)
+              "response error"
+              "tlsv13 alert certificate required"
+              (Option.get reason))
+        | Error e ->
+          Alcotest.fail
+            (Format.asprintf "expected response to be error: %a" Error.pp_hum e));
 
-            Helper_server.teardown server)
-      with
-      | Eio_ssl.Exn.Ssl_exception { reason; _ } ->
-        (match run "uname" with
-        | "Linux" ->
-          (* Differences between eio_linux / eio_luv *)
-          ()
-        | "Darwin" | _ ->
-          Alcotest.(check string)
-            "response error"
-            "tlsv13 alert certificate required"
-            (Option.get reason)))
+        Helper_server.teardown server)
+    with
+    | Eio_ssl.Exn.Ssl_exception { reason; _ } ->
+      (match run "uname" with
+      | "Linux" ->
+        (* Differences between eio_linux / eio_luv *)
+        ()
+      | "Darwin" | _ ->
+        Alcotest.(check string)
+          "response error"
+          "tlsv13 alert certificate required"
+          (Option.get reason)))
 
 let test_h2c ~sw env () =
   let server =
