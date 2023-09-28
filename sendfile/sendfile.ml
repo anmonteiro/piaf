@@ -93,7 +93,10 @@ external sendfile :
   -> int
   = "ocaml_sendfile_sendfile_stub"
 
-let sendfile_once_exn ?(off = 0) ~len ~src dst = sendfile ~src ~dst ~off ~len
+let sendfile_once_exn ?(off = 0) ~len ~src dst =
+  try sendfile ~src ~dst ~off ~len with
+  | Darwin_specific_unix_error (unix_err, _) ->
+    raise (Unix.Unix_error (unix_err, "sendfile", ""))
 
 let sendfile_once ?(off = 0) ~len ~src dst =
   try Ok (sendfile_once_exn ~src ~off ~len dst) with
@@ -101,7 +104,7 @@ let sendfile_once ?(off = 0) ~len ~src dst =
 
 let sendfile_exn ?(off = 0) ?len ~src dst =
   let rec sendfile_exn ~off ~len ~src dst =
-    match sendfile_once_exn ~src ~off ~len dst with
+    match sendfile ~src ~off ~len ~dst with
     | c when c = len -> len
     | c -> sendfile_exn ~src ~off:(off + c) ~len:(len - c) dst
     | exception Unix.Unix_error ((EINTR | EAGAIN), _, _) ->
@@ -110,6 +113,8 @@ let sendfile_exn ?(off = 0) ?len ~src dst =
       (* Darwin systems signal the number of bytes partially sent on EINTR /
          EAGAIN. *)
       sendfile_exn ~src ~off:(off + sent) ~len:(len - sent) dst
+    | exception Darwin_specific_unix_error (unix_err, _) ->
+      raise (Unix.Unix_error (unix_err, "sendfile", ""))
   in
   let len =
     match len with Some len -> len | None -> (Unix.fstat src).st_size - off
