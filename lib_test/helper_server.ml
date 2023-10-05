@@ -40,6 +40,8 @@ module HTTP = struct
       ~backlog
       ~domains
       ~address
+      ~reuse_port:false
+      ~reuse_addr:true
       ~shutdown_timeout:0.
       env
       (Server.http_connection_handler
@@ -130,6 +132,8 @@ module ALPN = struct
     Server.Command.listen
       ~sw
       ~address
+      ~reuse_port:false
+      ~reuse_addr:true
       ~backlog
       ~domains
       ~shutdown_timeout:0.
@@ -243,6 +247,8 @@ module H2c = struct
       ~backlog
       ~domains
       ~address
+      ~reuse_port:false
+      ~reuse_addr:true
       ~shutdown_timeout:0.
       env
       (Server.http_connection_handler

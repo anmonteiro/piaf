@@ -258,6 +258,8 @@ module Command = struct
       ~sw
       ~address
       ~backlog
+      ~reuse_addr
+      ~reuse_port
       ~domains
       ~shutdown_timeout
       env
@@ -266,13 +268,7 @@ module Command = struct
     let domain_mgr = Eio.Stdenv.domain_mgr env in
     let network = Eio.Stdenv.net env in
     let socket =
-      Eio.Net.listen
-        ~reuse_addr:true
-        ~reuse_port:true
-        ~backlog
-        ~sw
-        network
-        address
+      Eio.Net.listen ~reuse_addr ~reuse_port ~backlog ~sw network address
     in
     let resolvers = ref [] in
     let resolver_mutex = Eio.Mutex.create () in
@@ -317,6 +313,8 @@ module Command = struct
         ~backlog:config.backlog
         ~domains:config.domains
         ~shutdown_timeout:config.shutdown_timeout
+        ~reuse_addr:config.reuse_addr
+        ~reuse_port:config.reuse_port
         env
         connection_handler
     in
@@ -331,6 +329,8 @@ module Command = struct
           ~backlog:config.backlog
           ~domains:config.domains
           ~shutdown_timeout:config.shutdown_timeout
+          ~reuse_addr:config.reuse_addr
+          ~reuse_port:config.reuse_port
           env
           connection_handler
       in

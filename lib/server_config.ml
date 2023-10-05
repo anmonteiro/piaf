@@ -67,6 +67,8 @@ type t =
   (** The maximum length of the queue of pending connections. *)
   ; address : Eio.Net.Sockaddr.stream  (** The address to listen on. *)
   ; domains : int  (** The number of domains to use. *)
+  ; reuse_addr : bool
+  ; reuse_port : bool
   }
 
 let create
@@ -80,6 +82,8 @@ let create
     ?(body_buffer_size = 0x1000)
     ?(flush_headers_immediately = false)
     ?(backlog = 128)
+    ?(reuse_addr = true)
+    ?(reuse_port = true)
     ?(domains = 1)
     address
   =
@@ -96,6 +100,8 @@ let create
   ; flush_headers_immediately
   ; backlog
   ; address
+  ; reuse_addr
+  ; reuse_port
   ; domains
   }
 

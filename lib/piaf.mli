@@ -793,6 +793,8 @@ module Server : sig
       (** The maximum length of the queue of pending connections. *)
       ; address : Eio.Net.Sockaddr.stream  (** The address to listen on. *)
       ; domains : int  (** The number of domains to use. *)
+      ; reuse_addr : bool
+      ; reuse_port : bool
       }
 
     val create :
@@ -806,6 +808,8 @@ module Server : sig
       -> ?body_buffer_size:int
       -> ?flush_headers_immediately:bool
       -> ?backlog:int
+      -> ?reuse_addr:bool
+      -> ?reuse_port:bool
       -> ?domains:int
       -> Eio.Net.Sockaddr.stream
       -> t
@@ -874,6 +878,8 @@ module Server : sig
        sw:Eio.Switch.t
       -> address:Eio.Net.Sockaddr.stream
       -> backlog:int
+      -> reuse_addr:bool
+      -> reuse_port:bool
       -> domains:int
       -> shutdown_timeout:float
       -> Eio_unix.Stdenv.base
