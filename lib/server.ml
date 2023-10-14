@@ -55,25 +55,22 @@ let create ?(error_handler = default_error_handler) ~config handler : t =
   { config; error_handler; handler }
 
 let is_requesting_h2c_upgrade ~config ~version ~scheme headers =
-  match version, config.Config.max_http_version, config.h2c_upgrade, scheme with
-  | cur_version, max_version, true, `HTTP ->
-    if Versions.HTTP.Raw.(
-         equal (of_version max_version) v2_0
-         && equal (of_version cur_version) v1_1)
-    then
-      match
-        Headers.(
-          get headers Well_known.connection, get headers Well_known.upgrade)
-      with
-      | Some connection, Some "h2c" ->
-        let connection_segments = String.split_on_char ',' connection in
-        List.exists
-          (fun segment ->
-             let normalized = String.(trim (lowercase_ascii segment)) in
-             String.equal normalized Headers.Well_known.upgrade)
-          connection_segments
-      | _ -> false
-    else false
+  match
+    config.Config.h2c_upgrade, version, config.Config.max_http_version, scheme
+  with
+  | true, Versions.HTTP.HTTP_1_1, HTTP_2, `HTTP ->
+    (match
+       Headers.(
+         get headers Well_known.connection, get headers Well_known.upgrade)
+     with
+    | Some connection, Some "h2c" ->
+      let connection_segments = String.split_on_char ',' connection in
+      List.exists
+        (fun segment ->
+           let normalized = segment |> String.lowercase_ascii |> String.trim in
+           String.equal Headers.Well_known.upgrade normalized)
+        connection_segments
+    | _ -> false)
   | _ -> false
 
 let do_h2c_upgrade ~sw ~fd ~request_body server =
@@ -109,8 +106,6 @@ let do_h2c_upgrade ~sw ~fd ~request_body server =
   in
   request_handler
 
-module Http : Http_intf.HTTP = Http1.HTTP
-
 let http_connection_handler t : connection_handler =
   let { error_handler; handler; config } = t in
   fun ~sw socket client_address ->
@@ -127,8 +122,17 @@ let http_connection_handler t : connection_handler =
       with
       | false -> handler ctx
       | true ->
-        let request_body = Body.to_list request.body in
-        do_h2c_upgrade ~sw ~fd:socket ~request_body t ctx
+        let h2c_handler =
+          let request_body = Body.to_list request.body in
+          do_h2c_upgrade ~sw ~fd:socket ~request_body t
+        in
+        h2c_handler ctx
+    in
+    let (module Http) =
+      match config.max_http_version, config.h2c_upgrade with
+      | HTTP_2, true | (HTTP_1_0 | HTTP_1_1), _ ->
+        (module Http1.HTTP : Http_intf.HTTP)
+      | HTTP_2, false -> (module Http2.HTTP : Http_intf.HTTP)
     in
 
     Http.Server.create_connection_handler
