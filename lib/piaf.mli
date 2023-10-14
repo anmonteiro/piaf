@@ -766,7 +766,12 @@ module Server : sig
 
     type t =
       { max_http_version : Versions.HTTP.t
-      (** Use this as the highest HTTP version when sending requests *)
+      (** Use this as:
+          - the highest HTTP version that ALPN will negotiate with the remote
+            peer
+          - the version to listen on the insecure server:
+          - max_http_version == HTTP/2 && h2c_upgrade => HTTP/1.1 + H2c upgrade
+          - max_http_version == HTTP/2 => HTTP/2 server *)
       ; https : HTTPS.t option
       ; h2c_upgrade : bool
       (** Send an upgrade to `h2c` (HTTP/2 over TCP) request to the server.
@@ -774,10 +779,9 @@ module Server : sig
       ; tcp_nodelay : bool
       ; accept_timeout : float (* seconds *)
       ; shutdown_timeout : float
-            (* seconds. How long to wait until connections terminate before
-               shutting down the server. *)
-      ; (* Buffer sizes *)
-        buffer_size : int
+      (** seconds. How long to wait until connections terminate before shutting
+          down the server. *)
+      ; buffer_size : int
       (** Buffer size used for requests and responses. Defaults to 16384 bytes *)
       ; body_buffer_size : int
       (** Buffer size used for request and response bodies. *)
