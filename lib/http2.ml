@@ -181,31 +181,36 @@ end = struct
       Eio.Net.Sockaddr.stream -> H2.Reqd.t -> unit
     =
    fun client_addr reqd ->
-    let request = H2.Reqd.request reqd in
-    let body_length = H2.Request.body_length request in
-    let request_body =
-      Piaf_body.Raw.to_request_body
-        (module Body.Reader : Piaf_body.Raw.Reader
-          with type t = H2.Body.Reader.t)
-        ~body_length:(body_length :> Piaf_body.length)
-        ~on_eof:(fun t ->
-          match H2.Reqd.error_code reqd with
-          | Some error ->
-            t.error_received := Promise.create_resolved (error :> Error.t)
-          | None -> ())
-        (H2.Reqd.request_body reqd)
+    let arg =
+      let request = H2.Reqd.request reqd in
+      let request_body =
+        let body_length = H2.Request.body_length request in
+        Piaf_body.Raw.to_request_body
+          (module Body.Reader : Piaf_body.Raw.Reader
+            with type t = H2.Body.Reader.t)
+          ~body_length:(body_length :> Piaf_body.length)
+          ~on_eof:(fun t ->
+            match H2.Reqd.error_code reqd with
+            | Some error ->
+              t.error_received := Promise.create_resolved (error :> Error.t)
+            | None -> ())
+          (H2.Reqd.request_body reqd)
+      in
+      { Server_intf.Handler.ctx =
+          { Request_info.client_address = client_addr
+          ; scheme = Runtime_scheme.scheme
+          ; version = HTTP_2
+          ; sw
+          }
+      ; request = Request.of_h2 ~body:request_body request
+      }
     in
-    let request = Request.of_h2 ~body:request_body request in
     Http_server_impl.handle_request
-      ~sw
       (module HttpServer)
       ~config
       ~fd
-      ~scheme:Runtime_scheme.scheme
-      ~version:HTTP_1_1
       ~handler
-      ~client_address:client_addr
-      ~request
+      ~arg
       reqd
 
   module Server = struct

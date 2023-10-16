@@ -81,42 +81,23 @@ let do_sendfile :
 
 let handle_request :
     type reqd writer.
-    sw:Switch.t
-    -> (module Http_intf.HTTPServerCommon
-          with type Reqd.t = reqd
-           and type Body.Writer.t = writer)
+    (module Http_intf.HTTPServerCommon
+       with type Reqd.t = reqd
+        and type Body.Writer.t = writer)
     -> config:Server_config.t
     -> ?upgrade:_
     -> fd:_
-    -> scheme:_
-    -> version:_
     -> handler:_
-    -> client_address:_
-    -> request:Request.t
+    -> arg:Request_info.t Server_intf.Handler.ctx
     -> reqd
     -> unit
   =
- fun ~sw
-   (module Http)
-   ~config
-   ?upgrade
-   ~fd:handle
-   ~scheme
-   ~version
-   ~handler
-   ~client_address
-   ~request
-   reqd ->
+ fun (module Http) ~config ?upgrade ~fd ~handler ~arg reqd ->
   let report_exn = report_exn (module Http) reqd in
+  let { Server_intf.Handler.ctx = { Request_info.sw; scheme; _ }; _ } = arg in
   Fiber.fork ~sw (fun () ->
     try
-      let ({ Response.headers; body; _ } as response) =
-        handler
-          { Server_intf.Handler.ctx =
-              { Request_info.client_address; scheme; version; sw }
-          ; request
-          }
-      in
+      let ({ Response.headers; body; _ } as response) = handler arg in
       (* XXX(anmonteiro): It's a little weird that, given an actual
        * response returned from the handler, we decide to completely ignore
        * it. There's a good justification here, which is that the error
@@ -184,12 +165,7 @@ let handle_request :
                 reqd
                 response
             in
-            do_sendfile
-              (module Http)
-              ~src_fd
-              ~fd:handle
-              ~report_exn
-              response_body
+            do_sendfile (module Http) ~src_fd ~fd ~report_exn response_body
           | `HTTPS -> failwith "sendfile is not supported in HTTPS connections"))
     with
     | exn -> report_exn exn)
