@@ -56,15 +56,17 @@ module Multipart = struct
       let stream (* , _or_error *) = Body.to_stream request.body in
       let kvs, push_to_kvs = Stream.create 128 in
       let emit name stream = push_to_kvs (Some (name, stream)) in
-      let+! multipart =
-        Multipart.parse_multipart_form
-          ~content_type
-          ~max_chunk_size
-          ~emit
-          ~finish:(fun () -> push_to_kvs None)
-          stream
+      let+! multipart_fields =
+        let+! multipart =
+          Multipart.parse_multipart_form
+            ~content_type
+            ~max_chunk_size
+            ~emit
+            ~finish:(fun () -> push_to_kvs None)
+            stream
+        in
+        Multipart.result_fields multipart
       in
-      let multipart_fields = Multipart.result_fields multipart in
       Stream.map
         ~f:(fun (name, stream) ->
           let name = Option.get name in

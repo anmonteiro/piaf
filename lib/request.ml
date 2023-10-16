@@ -39,9 +39,11 @@ type t =
   }
 
 let uri { scheme; target; headers; version; _ } =
-  let host = Headers.host ~version headers in
-  let scheme = Scheme.to_string scheme in
-  let uri = Uri.with_uri ~host ~scheme:(Some scheme) (Uri.of_string target) in
+  let uri =
+    let scheme = Scheme.to_string scheme in
+    let host = Headers.host ~version headers in
+    Uri.with_uri ~host ~scheme:(Some scheme) (Uri.of_string target)
+  in
   Uri.canonicalize uri
 
 let create ~scheme ~version ?(headers = Headers.empty) ~meth ~body target =

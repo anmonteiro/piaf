@@ -58,11 +58,11 @@ let create_connection
   let connection_error_received, notify_connection_error_received =
     Promise.create ()
   in
-  let error_handler = make_error_handler notify_connection_error_received in
-  let connection, runtime =
-    Http_impl.Client.create_connection ~config ~error_handler ~sw socket
-  in
   let conn =
+    let error_handler = make_error_handler notify_connection_error_received in
+    let connection, runtime =
+      Http_impl.Client.create_connection ~config ~error_handler ~sw socket
+    in
     Connection.Conn
       { impl = (module Http_impl)
       ; connection
@@ -142,25 +142,27 @@ let send_request :
   let module Client = Http.Client in
   let module Bodyw = Http.Body.Writer in
   let response_received, notify_response = Promise.create () in
-  let response_handler response = Promise.resolve notify_response response in
   let error_received, notify_error = Promise.create () in
-  let error_handler = make_error_handler notify_error in
-  Logs.info (fun m ->
-    m "@[<v 0>Sending request:@]@]@;<0 2>@[<v 0>%a@]@." Request.pp_hum request);
-  let flush_headers_immediately =
-    match body.contents with
-    | `Sendfile _ -> true
-    | _ -> config.flush_headers_immediately
-  in
-  let request_body =
-    Http.Client.request
-      connection
-      ~flush_headers_immediately
-      ~error_handler
-      ~response_handler
-      request
-  in
   Fiber.fork ~sw (fun () ->
+    Logs.info (fun m ->
+      m "@[<v 0>Sending request:@]@]@;<0 2>@[<v 0>%a@]@." Request.pp_hum request);
+    let request_body =
+      let error_handler = make_error_handler notify_error in
+      let response_handler response =
+        Promise.resolve notify_response response
+      in
+      let flush_headers_immediately =
+        match body.contents with
+        | `Sendfile _ -> true
+        | _ -> config.flush_headers_immediately
+      in
+      Http.Client.request
+        connection
+        ~flush_headers_immediately
+        ~error_handler
+        ~response_handler
+        request
+    in
     match body.contents with
     | `Empty _ -> Bodyw.close request_body
     | `String s ->
@@ -206,11 +208,11 @@ let upgrade_connection :
     let wsd_received, notify_wsd = Promise.create () in
     let error_received, notify_error = Promise.create () in
 
-    let error_handler _wsd error =
-      Promise.resolve notify_error (error :> Error.client)
-    in
     Logs.info (fun m -> m "Upgrading connection to the Websocket protocol");
     let ws_conn =
+      let error_handler _wsd error =
+        Promise.resolve notify_error (error :> Error.client)
+      in
       Websocketaf.Client_connection.create
         ~error_handler
         (Ws.Handler.websocket_handler ~sw ~notify_wsd)
@@ -250,37 +252,37 @@ let create_h2c_connection
   | `HTTP ->
     let (module Http2) = (module Http2.HTTP : Http_intf.HTTP2) in
     let response_received, notify_response_received = Promise.create () in
-    let response_handler response =
-      Promise.resolve notify_response_received response
-    in
     let connection_error_received, notify_error_received = Promise.create () in
-    let error_handler = make_error_handler notify_error_received in
     let response_error_received, notify_response_error_received =
       Promise.create ()
     in
-    let response_error_handler =
-      make_error_handler notify_response_error_received
+    let result =
+      let response_handler response =
+        Promise.resolve notify_response_received response
+      in
+      let error_handler = make_error_handler notify_error_received in
+      let response_error_handler =
+        make_error_handler notify_response_error_received
+      in
+      Http2.Client.create_h2c
+        ~config
+        ~http_request:(Request.to_http1 http_request)
+        ~error_handler
+        (response_handler, response_error_handler)
+        runtime
     in
-    (match
-       Http2.Client.create_h2c
-         ~config
-         ~http_request:(Request.to_http1 http_request)
-         ~error_handler
-         (response_handler, response_error_handler)
-         runtime
-     with
+    (match result with
     | Ok connection ->
       Logs.info (fun m -> m "Connection state changed (HTTP/2 confirmed)");
       (* Doesn't write the body by design. The server holds on to the HTTP/1.1 body
        * that was sent as part of the upgrade. *)
-      let result =
-        handle_response
-          ~sw
-          response_received
-          response_error_received
-          connection_error_received
-      in
-      (match result with
+      (match
+         handle_response
+           ~sw
+           response_received
+           response_error_received
+           connection_error_received
+       with
       | Ok response ->
         let connection =
           Connection.Conn

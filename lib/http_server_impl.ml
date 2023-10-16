@@ -66,6 +66,9 @@ let do_sendfile :
  fun (module Http) ~src_fd ~fd ~report_exn response_body ->
   let fd = Option.get (Eio_unix.Resource.fd_opt fd) in
   Eio_unix.Fd.use_exn "sendfile" fd (fun fd ->
+    (* Flush everything to the wire before calling `sendfile`, as we're gonna
+       bypass the http/af runtime and write bytes to the file descriptor
+       directly. *)
     Http.Body.Writer.flush response_body (fun () ->
       match
         Posix.sendfile
@@ -226,17 +229,15 @@ let handle_error :
           response_body
       | `HTTPS -> failwith "sendfile is not supported in HTTPS connections")
   in
-  try
-    Logs.warn (fun m ->
-      m
-        "Error handler called with error: %a%a"
-        Error.pp_hum
-        error
-        (Format.pp_print_option (fun fmt request ->
-           Format.fprintf fmt "; Request: @?%a" Request.pp_hum request))
-        request);
-    error_handler client_address ?request ~respond error
-  with
+  Logs.warn (fun m ->
+    m
+      "Error handler called with error: %a%a"
+      Error.pp_hum
+      error
+      (Format.pp_print_option (fun fmt request ->
+         Format.fprintf fmt "; Request: @?%a" Request.pp_hum request))
+      request);
+  try error_handler client_address ?request ~respond error with
   | exn ->
     Logs.err (fun m ->
       let raw_backtrace = Printexc.get_raw_backtrace () in

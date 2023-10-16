@@ -38,8 +38,8 @@ module Uri = struct
     | None -> raise (Failure "host_exn")
 
   let parse_with_base_uri ~scheme ~uri location =
-    let location_uri = Uri.of_string location in
     let new_uri =
+      let location_uri = Uri.of_string location in
       match Uri.host location_uri with
       | Some _ -> location_uri
       | None ->
