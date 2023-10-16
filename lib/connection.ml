@@ -35,51 +35,61 @@ module Version = Httpaf.Version
 module Logs =
   (val Logging.setup ~src:"piaf.connection" ~doc:"Piaf Connection module")
 
-let resolve_host env ~config ~port hostname : (_, [> Error.client ]) result =
-  let clock = Eio.Stdenv.clock env in
-  let network = Eio.Stdenv.net env in
-  match
-    Eio.Time.with_timeout_exn clock config.Config.connect_timeout (fun () ->
-      Eio.Net.getaddrinfo_stream ~service:(string_of_int port) network hostname)
-  with
-  | [] ->
-    Error
-      (`Connect_error (Format.asprintf "Can't resolve hostname: %s" hostname))
-  | xs ->
-    (match config.Config.prefer_ip_version with
-    | `Both ->
-      let order_v4v6 = Eio.Net.Ipaddr.fold ~v4:(fun _ -> -1) ~v6:(fun _ -> 1) in
-      Ok
-        (* Sort IPv4 ahead of IPv6 for compatibility. *)
-        (List.sort
-           (fun a1 a2 ->
-              match a1, a2 with
-              | `Unix s1, `Unix s2 -> String.compare s1 s2
-              | `Tcp (ip1, _), `Tcp (ip2, _) ->
-                compare (order_v4v6 ip1) (order_v4v6 ip2)
-              | `Unix _, `Tcp _ -> 1
-              | `Tcp _, `Unix _ -> -1)
-           xs)
-    | `V4 ->
-      Ok
-        (List.filter
-           (function
-              | `Tcp (ip, _) ->
-                Eio.Net.Ipaddr.fold ~v4:(fun _ -> true) ~v6:(fun _ -> false) ip
-              | `Unix _ -> true)
-           xs)
-    | `V6 ->
-      Ok
-        (List.filter
-           (function
-              | `Tcp (ip, _) ->
-                Eio.Net.Ipaddr.fold ~v4:(fun _ -> false) ~v6:(fun _ -> true) ip
-              | `Unix _ -> true)
-           xs))
-  | exception Eio.Time.Timeout ->
-    Error
-      (`Connect_error
-        (Format.asprintf "Timed out resolving hostname: %s" hostname))
+let resolve_host =
+  let order_v4v6 = Eio.Net.Ipaddr.fold ~v4:(fun _ -> -1) ~v6:(fun _ -> 1) in
+  fun (env : Eio_unix.Stdenv.base) ~config ~port hostname ->
+    let clock = Eio.Stdenv.clock env in
+    let network = Eio.Stdenv.net env in
+    match
+      Eio.Time.with_timeout_exn clock config.Config.connect_timeout (fun () ->
+        Eio.Net.getaddrinfo_stream
+          ~service:(string_of_int port)
+          network
+          hostname)
+    with
+    | [] ->
+      Error
+        (`Connect_error (Format.asprintf "Can't resolve hostname: %s" hostname))
+    | xs ->
+      (match config.Config.prefer_ip_version with
+      | `Both ->
+        Ok
+          (* Sort IPv4 ahead of IPv6 for compatibility. *)
+          (List.sort
+             (fun a1 a2 ->
+                match a1, a2 with
+                | `Unix s1, `Unix s2 -> String.compare s1 s2
+                | `Tcp (ip1, _), `Tcp (ip2, _) ->
+                  compare (order_v4v6 ip1) (order_v4v6 ip2)
+                | `Unix _, `Tcp _ -> 1
+                | `Tcp _, `Unix _ -> -1)
+             xs)
+      | `V4 ->
+        Ok
+          (List.filter
+             (function
+                | `Tcp (ip, _) ->
+                  Eio.Net.Ipaddr.fold
+                    ~v4:(fun _ -> true)
+                    ~v6:(fun _ -> false)
+                    ip
+                | `Unix _ -> true)
+             xs)
+      | `V6 ->
+        Ok
+          (List.filter
+             (function
+                | `Tcp (ip, _) ->
+                  Eio.Net.Ipaddr.fold
+                    ~v4:(fun _ -> false)
+                    ~v6:(fun _ -> true)
+                    ip
+                | `Unix _ -> true)
+             xs))
+    | exception Eio.Time.Timeout ->
+      Error
+        (`Connect_error
+          (Format.asprintf "Timed out resolving hostname: %s" hostname))
 
 module Info = struct
   (* This represents information that changes from connection to connection,

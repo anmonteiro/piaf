@@ -61,18 +61,14 @@ let of_stream ?version ?headers ~body status =
   create ?version ?headers ~body:(Body.of_stream body) status
 
 let sendfile ?version ?(headers = Headers.empty) path =
-  let mime = Magic_mime.lookup path in
+  let+! body = Body.sendfile path in
   let headers =
+    let mime = Magic_mime.lookup path in
     Headers.(add_unless_exists headers Well_known.content_type mime)
   in
-  let+! body = Body.sendfile path in
   create ?version ~headers ~body `OK
 
 let copy_file ?version ?(headers = Headers.empty) path =
-  let mime = Magic_mime.lookup path in
-  let headers =
-    Headers.(add_unless_exists headers Well_known.content_type mime)
-  in
   let*! fd =
     try
       Eio_unix.run_in_systhread (fun () ->
@@ -82,6 +78,10 @@ let copy_file ?version ?(headers = Headers.empty) path =
     | exn -> Result.error (`Exn exn)
   in
 
+  let headers =
+    let mime = Magic_mime.lookup path in
+    Headers.(add_unless_exists headers Well_known.content_type mime)
+  in
   let stream = Body.stream_of_fd fd in
   Ok
     (create
@@ -105,25 +105,25 @@ module Upgrade = struct
     match request.version with
     | HTTP_1_0 | HTTP_2 -> Error `Upgrade_not_supported
     | HTTP_1_1 ->
-      let wsd_received, notify_wsd = Promise.create () in
-      let _error_received, notify_error = Promise.create () in
-      let upgrade_handler ~sw upgrade =
-        let error_handler _wsd error =
-          Promise.resolve notify_error (error :> Error.client)
-        in
+      let upgrade_handler =
+        let wsd_received, notify_wsd = Promise.create () in
+        let _error_received, notify_error = Promise.create () in
+        fun ~sw upgrade ->
+          let error_handler _wsd error =
+            Promise.resolve notify_error (error :> Error.client)
+          in
 
-        let ws_conn =
-          Websocketaf.Server_connection.create_websocket
-            ~error_handler
-            (Ws.Handler.websocket_handler ~sw ~notify_wsd)
-        in
-        Fiber.fork ~sw (fun () -> f (Promise.await wsd_received));
-        upgrade (Gluten.make (module Websocketaf.Server_connection) ws_conn)
+          let ws_conn =
+            Websocketaf.Server_connection.create_websocket
+              ~error_handler
+              (Ws.Handler.websocket_handler ~sw ~notify_wsd)
+          in
+          Fiber.fork ~sw (fun () -> f (Promise.await wsd_received));
+          upgrade (Gluten.make (module Websocketaf.Server_connection) ws_conn)
       in
 
-      let httpaf_headers = Headers.to_http1 request.headers in
-
       (match
+         let httpaf_headers = Headers.to_http1 request.headers in
          Websocketaf.Handshake.upgrade_headers
            ~sha1:Openssl.sha1
            ~request_method:request.meth

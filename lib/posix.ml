@@ -39,11 +39,7 @@ let sendfile
     ~dst_fd
     raw_write_body
   =
-  (* Flush everything to the wire before calling `sendfile`, as we're gonna
-     bypass the http/af runtime and write bytes to the file descriptor
-     directly. *)
-  let sent_ret = Sendfile.sendfile ~src:src_fd dst_fd in
-  match sent_ret with
+  match Sendfile.sendfile ~src:src_fd dst_fd with
   | Ok sent ->
     (* NOTE(anmonteiro): we don't need to
      * `Gluten.Server.report_write_result` here given that we put

@@ -161,10 +161,12 @@ let sendfile ?length path =
 
 (* TODO: accept buffer for I/O, so that caller can pool buffers? *)
 let stream_of_fd ?on_close fd =
-  let { Unix.st_size = length; _ } =
-    Eio_unix.run_in_systhread (fun () -> Unix.fstat fd)
+  let remaining =
+    let { Unix.st_size = length; _ } =
+      Eio_unix.run_in_systhread (fun () -> Unix.fstat fd)
+    in
+    Atomic.make length
   in
-  let remaining = Atomic.make length in
   Stream.from ~f:(fun () ->
     let current = Atomic.get remaining in
     if current = 0
@@ -343,15 +345,6 @@ module Raw = struct
     let rec read_fn () =
       let t = Lazy.force t in
       let p, u = Promise.create () in
-      let on_read_direct buffer ~off ~len =
-        total_len := Int64.add !total_len (Int64.of_int len);
-        Promise.resolve u (Some (IOVec.make buffer ~off ~len))
-      and on_read_with_yield buffer ~off ~len =
-        total_len := Int64.add !total_len (Int64.of_int len);
-        Fiber.yield ();
-        Promise.resolve u (Some (IOVec.make buffer ~off ~len))
-      in
-      t.read_counter <- t.read_counter + 1;
       let on_eof () =
         Option.iter (fun f -> f t) on_eof;
         Reader.close body;
@@ -367,12 +360,21 @@ module Raw = struct
         Promise.resolve u None
       in
       let on_read =
+        let on_read_direct buffer ~off ~len =
+          total_len := Int64.add !total_len (Int64.of_int len);
+          Promise.resolve u (Some (IOVec.make buffer ~off ~len))
+        and on_read_with_yield buffer ~off ~len =
+          total_len := Int64.add !total_len (Int64.of_int len);
+          Fiber.yield ();
+          Promise.resolve u (Some (IOVec.make buffer ~off ~len))
+        in
         if t.read_counter > 128
         then (
           t.read_counter <- 0;
           on_read_with_yield)
         else on_read_direct
       in
+      t.read_counter <- t.read_counter + 1;
       Reader.schedule_read body ~on_eof ~on_read;
       Fiber.first
         (fun () -> Promise.await p)

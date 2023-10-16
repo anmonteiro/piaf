@@ -164,14 +164,17 @@ let version_to_ssl = function
   | TLSv1_3 -> TLSv1_3
 
 let protocols_to_disable min max =
-  let f =
-    match min, max with
-    | Versions.TLS.Any, _ -> fun x -> Versions.TLS.compare x max > 0
-    | _, Versions.TLS.Any -> fun x -> Versions.TLS.compare x min < 0
-    | _ ->
-      fun x -> Versions.TLS.compare x min < 0 || Versions.TLS.compare x max > 0
+  let protocols, _ =
+    let f =
+      match min, max with
+      | Versions.TLS.Any, _ -> fun x -> Versions.TLS.compare x max > 0
+      | _, Versions.TLS.Any -> fun x -> Versions.TLS.compare x min < 0
+      | _ ->
+        fun x ->
+          Versions.TLS.compare x min < 0 || Versions.TLS.compare x max > 0
+    in
+    List.partition f Versions.TLS.ordered
   in
-  let protocols, _ = List.partition f Versions.TLS.ordered in
   protocols
 
 module Error = struct
@@ -268,7 +271,6 @@ let setup_client_ctx
     ~hostname
     fd
   =
-  let alpn_protocols = Versions.ALPN.protocols_of_version max_http_version in
   match
     Ssl.(
       create_context
@@ -284,10 +286,15 @@ let setup_client_ctx
     Ssl.set_max_protocol_version
       ctx
       (Versions.TLS.to_max_version max_tls_version);
-    List.iter
-      (fun proto -> Logs.info (fun m -> m "ALPN: offering %s" proto))
-      alpn_protocols;
-    Ssl.set_context_alpn_protos ctx alpn_protocols;
+    let () =
+      let alpn_protocols =
+        Versions.ALPN.protocols_of_version max_http_version
+      in
+      List.iter
+        (fun proto -> Logs.info (fun m -> m "ALPN: offering %s" proto))
+        alpn_protocols;
+      Ssl.set_context_alpn_protos ctx alpn_protocols
+    in
     (* Use the server's preferences rather than the client's *)
     Ssl.honor_cipher_order ctx;
     let*! () =
@@ -302,9 +309,8 @@ let setup_client_ctx
     let ssl_ctx = Eio_ssl.Context.create ~ctx fd in
     let ssl_sock = Eio_ssl.Context.ssl_socket ssl_ctx in
     (* If hostname is an IP address, check that instead of the hostname *)
-    let ipaddr = Ipaddr.of_string hostname in
-    (match ipaddr with
-    | Ok ipadr -> Ssl.set_ip ssl_sock (Ipaddr.to_string ipadr)
+    (match Ipaddr.of_string hostname with
+    | Ok ipaddr -> Ssl.set_ip ssl_sock (Ipaddr.to_string ipaddr)
     | _ ->
       Ssl.set_client_SNI_hostname ssl_sock hostname;
       (* https://wiki.openssl.org/index.php/Hostname_validation *)
@@ -409,7 +415,6 @@ let setup_server_ctx
         }
     ~max_http_version
   =
-  let alpn_protocols = Versions.ALPN.protocols_of_version max_http_version in
   match
     Ssl.(
       create_context
@@ -425,6 +430,7 @@ let setup_server_ctx
         (protocols_to_disable min_tls_version max_tls_version)
     in
     Ssl.disable_protocols ctx disabled_protocols;
+    let alpn_protocols = Versions.ALPN.protocols_of_version max_http_version in
     List.iter
       (fun proto -> Logs.info (fun m -> m "ALPN: offering %s" proto))
       alpn_protocols;
@@ -446,8 +452,10 @@ let setup_server_ctx
 
 (* assumes an `accept`ed socket *)
 let get_negotiated_alpn_protocol ssl_ctx =
-  let ssl_socket = Eio_ssl.Context.ssl_socket ssl_ctx in
-  match Ssl.get_negotiated_alpn_protocol ssl_socket with
+  match
+    let ssl_socket = Eio_ssl.Context.ssl_socket ssl_ctx in
+    Ssl.get_negotiated_alpn_protocol ssl_socket
+  with
   | Some "http/1.1" -> Versions.HTTP.HTTP_1_1
   | Some "h2" -> HTTP_2
   | None (* Unable to negotiate a protocol *) | Some _ ->
@@ -470,14 +478,18 @@ let accept
     ~timeout
     fd
   =
-  let*! ctx = setup_server_ctx ~config ~max_http_version in
-  let ssl_ctx = Eio_ssl.Context.create ~ctx fd in
+  let*! ssl_ctx =
+    let+! ctx = setup_server_ctx ~config ~max_http_version in
+    Eio_ssl.Context.create ~ctx fd
+  in
   match
     Eio.Time.with_timeout clock timeout (fun () -> Ok (Eio_ssl.accept ssl_ctx))
   with
   | Ok ssl_server ->
-    let alpn_version = get_negotiated_alpn_protocol ssl_ctx in
-    Ok { socket = ssl_server; alpn_version }
+    Ok
+      { socket = ssl_server
+      ; alpn_version = get_negotiated_alpn_protocol ssl_ctx
+      }
   | Error `Timeout ->
     Result.error
       (`Connect_error

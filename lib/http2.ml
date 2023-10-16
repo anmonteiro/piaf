@@ -282,7 +282,7 @@ module HTTP : Http_intf.HTTP2 with type scheme = Scheme.http = struct
           ~error_handler:(make_client_error_handler error_handler `Connection)
           (response_handler, response_error_handler)
       in
-      Stdlib.Result.map
+      Result.map
         (fun connection ->
            (* Perform the runtime upgrade -- stop speaking HTTP/1.1, start
             * speaking HTTP/2 by feeding Gluten the `H2.Client_connection`

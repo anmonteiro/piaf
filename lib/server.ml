@@ -74,62 +74,58 @@ let is_requesting_h2c_upgrade ~config ~version ~scheme headers =
   | _ -> false
 
 let do_h2c_upgrade ~sw ~fd ~request_body server =
-  let { config; error_handler; handler } = server in
-  let upgrade_handler ~sw:_ client_address (request : Request.t) upgrade =
-    let http_request =
-      Httpaf.Request.create
-        ~headers:
-          (Httpaf.Headers.of_rev_list (Headers.to_rev_list request.headers))
-        request.meth
-        request.target
-    in
-    let connection =
-      Result.get_ok
-        (Http2.HTTP.Server.create_h2c_connection_handler
-           ~config
-           ~sw
-           ~fd
-           ~error_handler
-           ~http_request
-           ~request_body
-           ~client_address
-           handler)
-    in
-    upgrade (Gluten.make (module H2.Server_connection) connection)
+  let upgrade_handler =
+    let { config; error_handler; handler } = server in
+    fun ~sw:_ client_address (request : Request.t) upgrade ->
+      let http_request =
+        Httpaf.Request.create
+          ~headers:
+            (Httpaf.Headers.of_rev_list (Headers.to_rev_list request.headers))
+          request.meth
+          request.target
+      in
+      let connection =
+        Result.get_ok
+          (Http2.HTTP.Server.create_h2c_connection_handler
+             ~config
+             ~sw
+             ~fd
+             ~error_handler
+             ~http_request
+             ~request_body
+             ~client_address
+             handler)
+      in
+      upgrade (Gluten.make (module H2.Server_connection) connection)
   in
-  let request_handler { request; ctx = { Request_info.client_address; _ } } =
+  fun { request; ctx = { Request_info.client_address; _ } } ->
     let headers =
       Headers.(
         of_list [ Well_known.connection, "Upgrade"; Well_known.upgrade, "h2c" ])
     in
     Response.Upgrade.generic ~headers (upgrade_handler client_address request)
-  in
-  request_handler
 
 let http_connection_handler t : connection_handler =
-  let { error_handler; handler; config } = t in
   let (module Http) =
-    match config.max_http_version, config.h2c_upgrade with
+    match t.config.max_http_version, t.config.h2c_upgrade with
     | HTTP_2, true | (HTTP_1_0 | HTTP_1_1), _ ->
       (module Http1.HTTP : Http_intf.HTTP)
     | HTTP_2, false -> (module Http2.HTTP : Http_intf.HTTP)
   in
   fun ~sw socket client_address ->
-    let request_handler
-        ({ request; ctx = { Request_info.client_address = _; scheme; _ } } as
-         ctx)
-      =
-      match
-        is_requesting_h2c_upgrade
-          ~config
-          ~version:request.version
-          ~scheme
-          request.headers
-      with
+    let { error_handler; handler; config } = t in
+    let request_handler ctx =
+      let { request = { version; headers; body; _ }
+          ; ctx = { Request_info.scheme; _ }
+          }
+        =
+        ctx
+      in
+      match is_requesting_h2c_upgrade ~config ~version ~scheme headers with
       | false -> handler ctx
       | true ->
         let h2c_handler =
-          let request_body = Body.to_list request.body in
+          let request_body = Body.to_list body in
           do_h2c_upgrade ~sw ~fd:socket ~request_body t
         in
         h2c_handler ctx
@@ -249,14 +245,16 @@ module Command = struct
                    m "Error in connection handler: %s" (Printexc.to_string exn)))
                (fun socket addr ->
                   Switch.run (fun sw ->
-                    let connection_id =
-                      let cid = !id in
-                      incr id;
-                      cid
+                    let () =
+                      let connection_id =
+                        let cid = !id in
+                        incr id;
+                        cid
+                      in
+                      Hashtbl.replace client_sockets connection_id socket;
+                      Switch.on_release sw (fun () ->
+                        Hashtbl.remove client_sockets connection_id)
                     in
-                    Hashtbl.replace client_sockets connection_id socket;
-                    Switch.on_release sw (fun () ->
-                      Hashtbl.remove client_sockets connection_id);
                     connection_handler ~sw socket addr)))
       done);
     fun () -> Promise.resolve released_u ()
@@ -272,9 +270,8 @@ module Command = struct
       env
       connection_handler
     =
-    let domain_mgr = Eio.Stdenv.domain_mgr env in
-    let network = Eio.Stdenv.net env in
     let socket =
+      let network = Eio.Stdenv.net env in
       Eio.Net.listen ~reuse_addr ~reuse_port ~backlog ~sw network address
     in
     let resolvers = ref [] in
@@ -285,9 +282,10 @@ module Command = struct
         let is_last_domain = idx = domains - 1 in
         let run_accept_loop () =
           Switch.run (fun sw ->
-            let client_sockets = Hashtbl.create 256 in
-            let resolver =
-              accept_loop ~sw ~client_sockets ~socket connection_handler
+            let resolver, client_sockets =
+              let client_sockets = Hashtbl.create 256 in
+              ( accept_loop ~sw ~client_sockets ~socket connection_handler
+              , client_sockets )
             in
             Eio.Mutex.lock resolver_mutex;
             resolvers := (resolver, client_sockets) :: !resolvers;
@@ -297,7 +295,9 @@ module Command = struct
         (* Last domain starts on the main thread. *)
         if is_last_domain
         then run_accept_loop ()
-        else Eio.Domain_manager.run domain_mgr run_accept_loop)
+        else
+          let domain_mgr = Eio.Stdenv.domain_mgr env in
+          Eio.Domain_manager.run domain_mgr run_accept_loop)
     done;
     Promise.await all_started;
     Logs.info (fun m -> m "Server listening on %a" Eio.Net.Sockaddr.pp address);
@@ -310,10 +310,9 @@ module Command = struct
 
   let start ~sw env server =
     let { config; _ } = server in
-    let clock = Eio.Stdenv.clock env in
     (* TODO(anmonteiro): config option to listen only in HTTPS? *)
-    let connection_handler = http_connection_handler server in
     let command =
+      let connection_handler = http_connection_handler server in
       listen
         ~sw
         ~address:config.address
@@ -328,8 +327,11 @@ module Command = struct
     match config.https with
     | None -> command
     | Some https ->
-      let connection_handler = https_connection_handler ~clock ~https server in
+      let clock = Eio.Stdenv.clock env in
       let https_command =
+        let connection_handler =
+          https_connection_handler ~clock ~https server
+        in
         listen
           ~sw
           ~address:https.address

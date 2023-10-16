@@ -73,8 +73,8 @@ let create_https_connection ~sw ~config ~conn_info ~uri fd =
   let*! { ssl = ssl_client; ssl_ctx } =
     Openssl.connect ~config ~hostname:host fd
   in
-  let ssl_socket = Eio_ssl.Context.ssl_socket ssl_ctx in
   let (module Https), version =
+    let ssl_socket = Eio_ssl.Context.ssl_socket ssl_ctx in
     match Ssl.get_negotiated_alpn_protocol ssl_socket with
     | None ->
       Logs.warn (fun m ->
@@ -127,9 +127,11 @@ let create_https_connection ~sw ~config ~conn_info ~uri fd =
     ssl_client
 
 let open_connection ~sw ~config ~uri env conn_info =
-  let clock = Eio.Stdenv.clock env in
-  let network = Eio.Stdenv.net env in
-  let*! socket = Connection.connect ~sw ~clock ~network ~config conn_info in
+  let*! socket =
+    let clock = Eio.Stdenv.clock env in
+    let network = Eio.Stdenv.net env in
+    Connection.connect ~sw ~clock ~network ~config conn_info
+  in
   (if config.Config.tcp_nodelay
    then
      let fd = Eio_unix.Resource.fd_opt socket |> Option.get in
@@ -320,28 +322,27 @@ let make_request_info
   =
   let { Connection_info.host; scheme; _ } = info in
   let is_h2c_upgrade = is_h2c_upgrade ~config ~version ~scheme in
-  let h2_settings = H2.Settings.to_base64 (Config.to_http2_settings config) in
-  let canonical_headers =
-    (* Important that this doesn't shadow the labeled `headers` argument
-     * above. We need the original headers as issued by the caller in order to
-     * reproduce them e.g. when following redirects. *)
-    let headers =
-      let open Headers in
-      if is_h2c_upgrade
-      then
-        (Well_known.connection, "Upgrade, HTTP2-Settings")
-        :: (Well_known.upgrade, "h2c")
-        :: ("HTTP2-Settings", Result.get_ok h2_settings)
-        :: headers
-      else headers
-    in
-    Headers.canonicalize_headers
-      ~version
-      ~host
-      ~body_length:body.Body.length
-      headers
-  in
   let request =
+    let canonical_headers =
+      let h2_settings =
+        H2.Settings.to_base64 (Config.to_http2_settings config)
+      in
+      let headers =
+        let open Headers in
+        if is_h2c_upgrade
+        then
+          (Well_known.connection, "Upgrade, HTTP2-Settings")
+          :: (Well_known.upgrade, "h2c")
+          :: ("HTTP2-Settings", Result.get_ok h2_settings)
+          :: headers
+        else headers
+      in
+      Headers.canonicalize_headers
+        ~version
+        ~host
+        ~body_length:body.Body.length
+        headers
+    in
     Request.create
       ~meth
       ~version
@@ -398,28 +399,29 @@ let rec send_request_and_handle_response
             ());
         if Status.is_permanent_redirection response.status
         then conn.uri <- new_uri;
-        let target = Uri.path_and_query new_uri in
-        (* From RFC7231§6.4:
-        *   Note: In HTTP/1.0, the status codes 301 (Moved Permanently) and 302
-         *   (Found) were defined for the first type of redirect ([RFC1945],
-         *   Section 9.3).  Early user agents split on whether the method applied
-         *   to the redirect target would be the same as the original request or
-         *   would be rewritten as GET.  Although HTTP originally defined the former
-         *   semantics for 301 and 302 (to match its original implementation at
-         *   CERN), and defined 303 (See Other) to match the latter semantics,
-         *   prevailing practice gradually converged on the latter semantics for
-         *   301 and 302 as well.  The first revision of HTTP/1.1 added 307
-         *   (Temporary Redirect) to indicate the former semantics without being
-         *   impacted by divergent practice.  Over 10 years later, most user agents
-         *   still do method rewriting for 301 and 302; therefore, this
-         *   specification makes that behavior conformant when the original request
-         *   is POST. *)
-        let meth' =
-          match meth, response.status with
-          | `POST, (`Found | `Moved_permanently) -> `GET
-          | _ -> meth
-        in
         let request_info' =
+          let target = Uri.path_and_query new_uri in
+          (* From RFC7231§6.4:
+           *   Note: In HTTP/1.0, the status codes 301 (Moved Permanently) and
+           *   302 (Found) were defined for the first type of redirect
+           *   ([RFC1945], Section 9.3).  Early user agents split on whether
+           *   the method applied to the redirect target would be the same as
+           *   the original request or would be rewritten as GET.  Although
+           *   HTTP originally defined the former semantics for 301 and 302 (to
+           *   match its original implementation at CERN), and defined 303 (See
+           *   Other) to match the latter semantics, prevailing practice
+           *   gradually converged on the latter semantics for 301 and 302 as
+           *   well.  The first revision of HTTP/1.1 added 307 (Temporary
+           *   Redirect) to indicate the former semantics without being
+           *   impacted by divergent practice.  Over 10 years later, most user
+           *   agents still do method rewriting for 301 and 302; therefore,
+           *   this specification makes that behavior conformant when the
+           *   original request is POST. *)
+          let meth' =
+            match meth, response.status with
+            | `POST, (`Found | `Moved_permanently) -> `GET
+            | _ -> meth
+          in
           make_request_info
             t
             ~remaining_redirects:(remaining_redirects - 1)
@@ -452,8 +454,10 @@ let call t ~meth ?(headers = []) ?(body = Body.empty) target =
   match reused with
   | Error #Error.client as err -> err
   | Ok _ ->
-    let headers = t.config.default_headers @ headers in
-    let request_info = make_request_info t ~meth ~headers ~body target in
+    let request_info =
+      let headers = t.config.default_headers @ headers in
+      make_request_info t ~meth ~headers ~body target
+    in
     let (Connection.Conn conn) = t.conn in
     conn.persistent <- Request.persistent_connection request_info.request;
     send_request_and_handle_response t ~body request_info
@@ -480,20 +484,22 @@ let ws_upgrade :
     -> (Ws.Descriptor.t, [> Error.client ]) result
   =
  fun t ?(headers = []) target ->
-  let (Conn { info; _ }) = t.conn in
-  (* From RFC6455§4.1:
-   *   The value of this header field MUST be a nonce consisting of a randomly
-   *   selected 16-byte value that has been base64-encoded (see Section 4 of
-   *   [RFC4648]). The nonce MUST be selected randomly for each connection. *)
-  let nonce = Openssl.random_string 16 in
-  let request =
-    Ws.upgrade_request
-      ~headers:(Httpaf.Headers.of_list headers)
-      ~scheme:info.scheme
-      ~nonce
-      target
+  let*! response =
+    let request =
+      let (Conn { info; _ }) = t.conn in
+      (* From RFC6455§4.1:
+       *   The value of this header field MUST be a nonce consisting of a randomly
+       *   selected 16-byte value that has been base64-encoded (see Section 4 of
+       *   [RFC4648]). The nonce MUST be selected randomly for each connection. *)
+      let nonce = Openssl.random_string 16 in
+      Ws.upgrade_request
+        ~headers:(Httpaf.Headers.of_list headers)
+        ~scheme:info.scheme
+        ~nonce
+        target
+    in
+    send t request
   in
-  let*! response = send t request in
   match Body.drain response.body with
   | Error #Error.t as err -> err
   | Ok () -> Http_impl.upgrade_connection ~sw:t.sw t.conn
