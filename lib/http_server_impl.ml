@@ -54,56 +54,6 @@ let report_exn :
       raw_backtrace);
   Http.Reqd.report_exn reqd exn
 
-type t =
-  | Descriptor :
-      { impl : (module Http_intf.HTTPServerCommon with type Reqd.t = 'reqd)
-      ; reqd : 'reqd
-      ; handle : Eio_unix.Net.stream_socket_ty Eio.Net.stream_socket
-      ; scheme : Scheme.t
-            (* ; connection_error_received : Error.server Promise.t *)
-      ; version : Versions.HTTP.t
-      (** HTTP version that this connection speaks *)
-      ; upgrade : upgrade option
-      ; handler : Request_info.t Server_intf.Handler.t
-      ; client_address : Eio.Net.Sockaddr.stream
-      ; config : Server_config.t
-      }
-      -> t
-
-let create_descriptor :
-    type reqd.
-    ?upgrade:upgrade
-    -> (module Http_intf.HTTPServerCommon with type Reqd.t = reqd)
-    -> config:Server_config.t
-    -> fd:Eio_unix.Net.stream_socket_ty Eio.Net.stream_socket
-    -> scheme:Scheme.t
-    -> version:Versions.HTTP.t
-    -> handler:Request_info.t Server_intf.Handler.t
-    -> client_address:Eio.Net.Sockaddr.stream
-    -> reqd
-    -> t
-  =
- fun ?upgrade
-   (module Http)
-   ~config
-   ~fd
-   ~scheme
-   ~version
-   ~handler
-   ~client_address
-   reqd ->
-  Descriptor
-    { impl = (module Http)
-    ; config
-    ; handle = fd
-    ; reqd
-    ; scheme
-    ; version
-    ; upgrade
-    ; handler
-    ; client_address
-    }
-
 let do_sendfile :
     type writer.
     (module Http_intf.HTTPServerCommon with type Body.Writer.t = writer)
@@ -129,31 +79,25 @@ let do_sendfile :
         Http.Body.Writer.close response_body;
         report_exn exn))
 
-let handle_request : sw:Switch.t -> t -> Request.t -> unit =
- fun ~sw
-   (Descriptor
-     { impl = (module Http)
-     ; config
-     ; reqd
-     ; handle
-     ; scheme
-     ; version
-     ; upgrade
-     ; handler
-     ; client_address
-     ; _
-     })
-   request ->
+let handle_request :
+    type reqd writer.
+    (module Http_intf.HTTPServerCommon
+       with type Reqd.t = reqd
+        and type Body.Writer.t = writer)
+    -> config:Server_config.t
+    -> ?upgrade:_
+    -> fd:_
+    -> handler:_
+    -> arg:Request_info.t Server_intf.Handler.ctx
+    -> reqd
+    -> unit
+  =
+ fun (module Http) ~config ?upgrade ~fd ~handler ~arg reqd ->
   let report_exn = report_exn (module Http) reqd in
+  let { Server_intf.Handler.ctx = { Request_info.sw; scheme; _ }; _ } = arg in
   Fiber.fork ~sw (fun () ->
     try
-      let ({ Response.headers; body; _ } as response) =
-        handler
-          { Server_intf.Handler.ctx =
-              { Request_info.client_address; scheme; version; sw }
-          ; request
-          }
-      in
+      let ({ Response.headers; body; _ } as response) = handler arg in
       (* XXX(anmonteiro): It's a little weird that, given an actual
        * response returned from the handler, we decide to completely ignore
        * it. There's a good justification here, which is that the error
@@ -221,12 +165,7 @@ let handle_request : sw:Switch.t -> t -> Request.t -> unit =
                 reqd
                 response
             in
-            do_sendfile
-              (module Http)
-              ~src_fd
-              ~fd:handle
-              ~report_exn
-              response_body
+            do_sendfile (module Http) ~src_fd ~fd ~report_exn response_body
           | `HTTPS -> failwith "sendfile is not supported in HTTPS connections"))
     with
     | exn -> report_exn exn)

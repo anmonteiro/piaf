@@ -175,34 +175,39 @@ module MakeHTTP1 (Runtime_scheme : Scheme.Runtime.SCHEME) :
       =
      fun client_addr reqd ->
       let { Gluten.reqd; upgrade } = reqd in
-      let request = Httpaf.Reqd.request reqd in
-      let body_length = Httpaf.Request.body_length request in
-      let request_body =
-        Piaf_body.Raw.to_request_body
-          (module Body.Reader : Piaf_body.Raw.Reader
-            with type t = Httpaf.Body.Reader.t)
-          ~body_length:(body_length :> Piaf_body.length)
-          ~on_eof:(fun t ->
-            Option.iter
-              (fun error ->
-                 t.error_received := Promise.create_resolved (error :> Error.t))
-              (Httpaf.Reqd.error_code reqd))
-          (Httpaf.Reqd.request_body reqd)
+      let arg =
+        let request = Httpaf.Reqd.request reqd in
+        let request_body =
+          let body_length = Httpaf.Request.body_length request in
+          Piaf_body.Raw.to_request_body
+            (module Body.Reader : Piaf_body.Raw.Reader
+              with type t = Httpaf.Body.Reader.t)
+            ~body_length:(body_length :> Piaf_body.length)
+            ~on_eof:(fun t ->
+              Option.iter
+                (fun error ->
+                   t.error_received :=
+                     Promise.create_resolved (error :> Error.t))
+                (Httpaf.Reqd.error_code reqd))
+            (Httpaf.Reqd.request_body reqd)
+        in
+        { Server_intf.Handler.ctx =
+            { Request_info.client_address = client_addr
+            ; scheme = Runtime_scheme.scheme
+            ; version = HTTP_1_1
+            ; sw
+            }
+        ; request = request_of_http1 ~body:request_body request
+        }
       in
-      let request = request_of_http1 ~body:request_body request in
-      let descriptor =
-        Http_server_impl.create_descriptor
-          (module HttpServer)
-          ~config
-          ~upgrade
-          ~fd
-          ~scheme:Runtime_scheme.scheme
-          ~version:HTTP_1_1
-          ~handler
-          ~client_address:client_addr
-          reqd
-      in
-      Http_server_impl.handle_request ~sw descriptor request
+      Http_server_impl.handle_request
+        (module HttpServer)
+        ~config
+        ~upgrade
+        ~fd
+        ~handler
+        ~arg
+        reqd
 
     let create_connection_handler ~config ~request_handler ~error_handler :
         Server_intf.connection_handler
