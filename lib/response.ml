@@ -30,7 +30,6 @@
  *---------------------------------------------------------------------------*)
 
 open Import
-module Status = H2.Status
 
 type t =
   { (* `H2.Status.t` is a strict superset of `Httpaf.Status.t` *)

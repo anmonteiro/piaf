@@ -52,28 +52,29 @@ module HTTP = struct
   let pp fmt version = Format.fprintf fmt "%s" (to_string version)
 
   module Raw = struct
+    type v = t
+
     include Httpaf.Version
 
+    let equal v1 v2 = compare v1 v2 = 0
     let v1_0 = { major = 1; minor = 0 }
     let v1_1 = { major = 1; minor = 1 }
     let v2_0 = { major = 2; minor = 0 }
-    let equal v1 v2 = compare v1 v2 = 0
 
-    let to_version = function
-      | { major = 1; minor = 0 } -> Some HTTP_1_0
-      | { major = 1; minor = 1 } -> Some HTTP_1_1
-      | { major = 2; minor = 0 } -> Some HTTP_2
-      | _ -> None
+    (* indexing: version_map[major][minor] *)
+    let version_map = [| [||]; [| HTTP_1_0; HTTP_1_1 |]; [| HTTP_2 |] |]
+    let[@inline] to_version_exn t = version_map.(t.major).(t.minor)
 
-    let to_version_exn version =
-      match to_version version with
-      | Some x -> x
-      | None -> raise (Failure "Versions.ALPN.of_version_exn")
+    let to_version t =
+      match to_version_exn t with
+      | version -> Some version
+      | exception Invalid_argument _ -> None
 
-    let of_version = function
-      | HTTP_1_0 -> v1_0
-      | HTTP_1_1 -> v1_1
-      | HTTP_2 -> v2_0
+    let rev_version_map = [| v1_0; v1_1; v2_0 |]
+
+    let of_version (v : v) =
+      let idx : int = Obj.magic v in
+      rev_version_map.(idx)
   end
 end
 
