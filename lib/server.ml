@@ -108,6 +108,12 @@ let do_h2c_upgrade ~sw ~fd ~request_body server =
 
 let http_connection_handler t : connection_handler =
   let { error_handler; handler; config } = t in
+  let (module Http) =
+    match config.max_http_version, config.h2c_upgrade with
+    | HTTP_2, true | (HTTP_1_0 | HTTP_1_1), _ ->
+      (module Http1.HTTP : Http_intf.HTTP)
+    | HTTP_2, false -> (module Http2.HTTP : Http_intf.HTTP)
+  in
   fun ~sw socket client_address ->
     let request_handler
         ({ request; ctx = { Request_info.client_address = _; scheme; _ } } as
@@ -127,12 +133,6 @@ let http_connection_handler t : connection_handler =
           do_h2c_upgrade ~sw ~fd:socket ~request_body t
         in
         h2c_handler ctx
-    in
-    let (module Http) =
-      match config.max_http_version, config.h2c_upgrade with
-      | HTTP_2, true | (HTTP_1_0 | HTTP_1_1), _ ->
-        (module Http1.HTTP : Http_intf.HTTP)
-      | HTTP_2, false -> (module Http2.HTTP : Http_intf.HTTP)
     in
 
     Http.Server.create_connection_handler
@@ -233,28 +233,31 @@ module Command = struct
 
   let accept_loop ~sw ~socket ~client_sockets connection_handler =
     let released_p, released_u = Promise.create () in
-    let await_release () = Promise.await released_p in
     Fiber.fork ~sw (fun () ->
       let id = ref 0 in
       while not (Promise.is_resolved released_p) do
-        Fiber.first await_release (fun () ->
-          Eio.Net.accept_fork
-            socket
-            ~sw
-            ~on_error:(fun exn ->
-              Logs.err (fun m ->
-                m "Error in connection handler: %s" (Printexc.to_string exn)))
-            (fun socket addr ->
-               Switch.run (fun sw ->
-                 let connection_id =
-                   let cid = !id in
-                   incr id;
-                   cid
-                 in
-                 Hashtbl.replace client_sockets connection_id socket;
-                 Switch.on_release sw (fun () ->
-                   Hashtbl.remove client_sockets connection_id);
-                 connection_handler ~sw socket addr)))
+        Fiber.first
+          (fun () -> Promise.await released_p)
+          (fun () ->
+             Eio.Net.accept_fork
+               socket
+               ~sw
+               ~on_error:(fun exn ->
+                 let bt = Printexc.get_backtrace () in
+                 Format.eprintf "sheesh: %s %s @." (Printexc.to_string exn) bt;
+                 Logs.err (fun m ->
+                   m "Error in connection handler: %s" (Printexc.to_string exn)))
+               (fun socket addr ->
+                  Switch.run (fun sw ->
+                    let connection_id =
+                      let cid = !id in
+                      incr id;
+                      cid
+                    in
+                    Hashtbl.replace client_sockets connection_id socket;
+                    Switch.on_release sw (fun () ->
+                      Hashtbl.remove client_sockets connection_id);
+                    connection_handler ~sw socket addr)))
       done);
     fun () -> Promise.resolve released_u ()
 

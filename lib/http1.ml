@@ -190,19 +190,18 @@ module MakeHTTP1 (Runtime_scheme : Scheme.Runtime.SCHEME) :
           (Httpaf.Reqd.request_body reqd)
       in
       let request = request_of_http1 ~body:request_body request in
-      let descriptor =
-        Http_server_impl.create_descriptor
-          (module HttpServer)
-          ~config
-          ~upgrade
-          ~fd
-          ~scheme:Runtime_scheme.scheme
-          ~version:HTTP_1_1
-          ~handler
-          ~client_address:client_addr
-          reqd
-      in
-      Http_server_impl.handle_request ~sw descriptor request
+      Http_server_impl.handle_request
+        ~sw
+        (module HttpServer)
+        ~config
+        ~upgrade
+        ~fd
+        ~scheme:Runtime_scheme.scheme
+        ~version:HTTP_1_1
+        ~handler
+        ~client_address:client_addr
+        ~request
+        reqd
 
     let create_connection_handler ~config ~request_handler ~error_handler :
         Server_intf.connection_handler

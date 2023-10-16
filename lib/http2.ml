@@ -196,18 +196,17 @@ end = struct
         (H2.Reqd.request_body reqd)
     in
     let request = Request.of_h2 ~body:request_body request in
-    let descriptor =
-      Http_server_impl.create_descriptor
-        (module HttpServer)
-        ~config
-        ~fd
-        ~scheme:Runtime_scheme.scheme
-        ~version:HTTP_1_1
-        ~handler
-        ~client_address:client_addr
-        reqd
-    in
-    Http_server_impl.handle_request ~sw descriptor request
+    Http_server_impl.handle_request
+      ~sw
+      (module HttpServer)
+      ~config
+      ~fd
+      ~scheme:Runtime_scheme.scheme
+      ~version:HTTP_1_1
+      ~handler
+      ~client_address:client_addr
+      ~request
+      reqd
 
   module Server = struct
     include H2_eio.Server
