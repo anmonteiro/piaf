@@ -65,6 +65,7 @@ let create_connection
     in
     Connection.Conn
       { impl = (module Http_impl)
+      ; config
       ; connection
       ; fd
       ; info = conn_info
@@ -112,8 +113,8 @@ let handle_response :
     Fiber.fork ~sw (fun () ->
       match
         Fiber.any
-          [ (fun () -> Error (Promise.await response_error_p :> Error.t))
-          ; (fun () -> Error (Promise.await connection_error_p :> Error.t))
+          [ (ptoerr response_error_p :> unit -> (_, Error.t) result)
+          ; (ptoerr connection_error_p :> unit -> (_, Error.t) result)
           ; (fun () -> Body.closed response.body)
           ]
       with
@@ -128,14 +129,18 @@ let handle_response :
 let send_request :
      sw:Switch.t
     -> Connection.t
-    -> config:Config.t
-    -> body:Body.t
     -> Request.t
     -> (Response.t, Error.client) result
   =
- fun ~sw conn ~config ~body request ->
+ fun ~sw conn request ->
   let (Connection.Conn
-        { impl = (module Http); connection; fd; connection_error_received; _ })
+        { impl = (module Http)
+        ; connection
+        ; config
+        ; fd
+        ; connection_error_received
+        ; _
+        })
     =
     conn
   in
@@ -152,7 +157,7 @@ let send_request :
         Promise.resolve notify_response response
       in
       let flush_headers_immediately =
-        match body.contents with
+        match request.body.contents with
         | `Sendfile _ -> true
         | _ -> config.flush_headers_immediately
       in
@@ -163,7 +168,7 @@ let send_request :
         ~response_handler
         request
     in
-    match body.contents with
+    match request.body.contents with
     | `Empty _ -> Bodyw.close request_body
     | `String s ->
       Bodyw.write_string request_body s;
@@ -287,6 +292,7 @@ let create_h2c_connection
         let connection =
           Connection.Conn
             { impl = (module Http2)
+            ; config
             ; fd
             ; connection
             ; info = conn_info

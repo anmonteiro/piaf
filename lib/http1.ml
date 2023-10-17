@@ -165,6 +165,13 @@ module MakeHTTP1 (Runtime_scheme : Scheme.Runtime.SCHEME) :
         (module HttpServer)
         ~fd
         ~scheme:Runtime_scheme.scheme
+        ~version:
+          (Option.value
+             ~default:HTTP_1_1
+             (Option.map
+                (fun (request : Httpaf.Request.t) ->
+                   Versions.HTTP.Raw.to_version_exn request.version)
+                request))
         ~error_handler
         ~start_response
         client_addr
@@ -194,7 +201,7 @@ module MakeHTTP1 (Runtime_scheme : Scheme.Runtime.SCHEME) :
         { Server_intf.Handler.ctx =
             { Request_info.client_address = client_addr
             ; scheme = Runtime_scheme.scheme
-            ; version = HTTP_1_1
+            ; version = Versions.HTTP.Raw.to_version_exn request.version
             ; sw
             }
         ; request = request_of_http1 ~body:request_body request

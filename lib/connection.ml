@@ -209,6 +209,7 @@ type t =
   | Conn :
       { impl : (module Http_intf.HTTPCommon with type Client.t = 'a)
       ; connection : 'a
+      ; config : Config.t
       ; fd : Eio_unix.Net.stream_socket_ty Eio.Net.stream_socket
       ; mutable info : Info.t
       ; mutable uri : Uri.t

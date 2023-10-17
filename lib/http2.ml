@@ -171,6 +171,7 @@ end = struct
       ?request:(Option.map Request.of_h2 request)
       (module HttpServer)
       ~scheme:Runtime_scheme.scheme
+      ~version:HTTP_2
       ~fd
       ~error_handler
       ~start_response
