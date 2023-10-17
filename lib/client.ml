@@ -35,7 +35,6 @@ module Connection_info = Connection.Info
 
 type t =
   { mutable conn : Connection.t
-  ; config : Config.t
   ; env : Eio_unix.Stdenv.base
   ; sw : Switch.t
   }
@@ -160,11 +159,9 @@ let shutdown_conn (Connection.Conn { impl; connection; info; fd; _ }) =
   Http_impl.shutdown (module (val impl)) ~fd connection
 
 let change_connection t (conn_info : Connection_info.t) =
-  let { sw; conn; env; _ } = t in
+  let { sw; conn = Connection.Conn { config; _ } as conn; env; _ } = t in
   Fiber.fork ~sw (fun () -> shutdown_conn conn);
-  let+! conn' =
-    open_connection ~sw ~config:t.config ~uri:conn_info.uri env conn_info
-  in
+  let+! conn' = open_connection ~sw ~config ~uri:conn_info.uri env conn_info in
   t.conn <- conn'
 
 let shutdown t = shutdown_conn t.conn
@@ -172,8 +169,8 @@ let shutdown t = shutdown_conn t.conn
 (* returns true if it succeeding in reusing the connection, false otherwise. *)
 let reuse_or_set_up_new_connection
     ({ conn =
-         Connection.Conn ({ impl = (module Http); connection; info; _ } as conn)
-     ; config
+         Connection.Conn
+           ({ impl = (module Http); connection; config; info; _ } as conn)
      ; env
      ; _
      } as t)
@@ -247,7 +244,7 @@ type request_info =
   }
 
 let rec return_response
-    ({ conn; config; sw; _ } as t)
+    ({ conn; sw; _ } as t)
     ({ request; _ } as request_info)
     ({ Response.status; headers; version; body } as response)
   =
@@ -257,6 +254,7 @@ let rec return_response
         ; info = { Connection_info.scheme; _ } as conn_info
         ; uri
         ; fd
+        ; config
         ; _
         })
     =
@@ -313,7 +311,7 @@ let is_h2c_upgrade ~config ~version ~scheme =
   | _ -> false
 
 let make_request_info
-    { conn = Connection.Conn { version; info; _ }; config; _ }
+    { conn = Connection.Conn { version; info; config; _ }; _ }
     ?(remaining_redirects = config.max_redirects)
     ~meth
     ~headers
@@ -355,12 +353,11 @@ let make_request_info
 
 let rec send_request_and_handle_response
     t
-    ~body
     ({ remaining_redirects; request; headers; meth; _ } as request_info)
   =
-  let { conn = Conn ({ info; uri; _ } as conn); config; _ } = t in
+  let { conn = Conn ({ info; uri; config; _ } as conn); _ } = t in
 
-  match Http_impl.send_request ~sw:t.sw t.conn ~config ~body request with
+  match Http_impl.send_request ~sw:t.sw t.conn request with
   | Error (#Error.client as err) -> Error err
   | Ok response ->
     if conn.persistent
@@ -427,10 +424,10 @@ let rec send_request_and_handle_response
             ~remaining_redirects:(remaining_redirects - 1)
             ~meth:meth'
             ~headers
-            ~body
+            ~body:request.body
             target
         in
-        send_request_and_handle_response t ~body request_info')
+        send_request_and_handle_response t request_info')
     (* Either not a redirect, or we shouldn't follow redirects. *)
     | false, _, _, _ | _, false, _, _ | true, true, _, None ->
       return_response t request_info response)
@@ -438,16 +435,18 @@ let rec send_request_and_handle_response
 let create ?(config = Config.default) ~sw env uri =
   let*! conn_info = Connection_info.of_uri env ~config uri in
   match open_connection ~config ~sw ~uri:conn_info.uri env conn_info with
-  | Ok conn -> Ok { conn; config; env; sw }
+  | Ok conn -> Ok { conn; env; sw }
   | Error (#Error.client as err) -> Error err
 
 let call t ~meth ?(headers = []) ?(body = Body.empty) target =
   (* Need to try to reconnect to the base host on every call, if redirects are
    * enabled, because the connection manager could have tried to follow a
    * temporary redirect. We remember permanent redirects. *)
-  let (Connection.Conn { impl = (module Http); connection; uri; _ }) = t.conn in
+  let (Connection.Conn { impl = (module Http); connection; config; uri; _ }) =
+    t.conn
+  in
   let reused =
-    if t.config.follow_redirects || Http_impl.is_closed (module Http) connection
+    if config.follow_redirects || Http_impl.is_closed (module Http) connection
     then reuse_or_set_up_new_connection t uri
     else Ok true
   in
@@ -455,12 +454,12 @@ let call t ~meth ?(headers = []) ?(body = Body.empty) target =
   | Error #Error.client as err -> err
   | Ok _ ->
     let request_info =
-      let headers = t.config.default_headers @ headers in
+      let headers = config.default_headers @ headers in
       make_request_info t ~meth ~headers ~body target
     in
     let (Connection.Conn conn) = t.conn in
     conn.persistent <- Request.persistent_connection request_info.request;
-    send_request_and_handle_response t ~body request_info
+    send_request_and_handle_response t request_info
 
 let request t ?headers ?body ~meth target = call t ?headers ?body ~meth target
 
@@ -523,12 +522,10 @@ module Oneshot = struct
       create ~config ~sw env uri
     in
     let target = Uri.path_and_query conn.uri in
-    let headers = t.config.default_headers @ headers in
+    let headers = conn.config.default_headers @ headers in
     let request_info = make_request_info t ~meth ~headers ~body target in
     conn.persistent <- Request.persistent_connection request_info.request;
-    let response_result =
-      send_request_and_handle_response t ~body request_info
-    in
+    let response_result = send_request_and_handle_response t request_info in
     Fiber.fork ~sw (fun () ->
       (match response_result with
       | Ok { Response.body; _ } ->

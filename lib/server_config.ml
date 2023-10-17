@@ -44,7 +44,10 @@ type t =
       - the highest HTTP version that ALPN will negotiate with the remote peer
       - the version to listen on the insecure server:
       - max_http_version == HTTP/2 && h2c_upgrade => HTTP/1.1 + H2c upgrade
-      - max_http_version == HTTP/2 => HTTP/2 server *)
+      - max_http_version == HTTP/2 => HTTP/2 server.
+
+      TODO(anmonteiro): doesn't make it possible to create a http/https server
+      where https is listening on http/2 and http on http1.1 *)
   ; https : HTTPS.t option
   ; h2c_upgrade : bool
   (** Send an upgrade to `h2c` (HTTP/2 over TCP) request to the server.

@@ -97,7 +97,9 @@ let handle_request :
   =
  fun (module Http) ~config ?upgrade ~fd ~handler ~arg reqd ->
   let report_exn = report_exn (module Http) reqd in
-  let { Server_intf.Handler.ctx = { Request_info.sw; scheme; _ }; _ } = arg in
+  let { Server_intf.Handler.ctx = { Request_info.sw; scheme; version; _ }; _ } =
+    arg
+  in
   Fiber.fork ~sw (fun () ->
     try
       let ({ Response.headers; body; _ } as response) = handler arg in
@@ -118,8 +120,10 @@ let handle_request :
       | None ->
         let response =
           { response with
-            headers =
+            version
+          ; headers =
               Headers.add_length_related_headers
+                ~version
                 ~body_length:(Piaf_body.length body)
                 headers
           }
@@ -182,6 +186,7 @@ let handle_error :
     -> start_response:(Headers.t -> writer)
     -> error_handler:Server_intf.error_handler
     -> scheme:Scheme.t
+    -> version:Versions.HTTP.t
     -> fd:Eio_unix.Net.stream_socket_ty Eio.Net.stream_socket
     -> Eio.Net.Sockaddr.stream
     -> Error.server
@@ -192,6 +197,7 @@ let handle_error :
    ~start_response
    ~error_handler
    ~scheme
+   ~version
    ~fd
    client_address
    error ->
@@ -200,6 +206,7 @@ let handle_error :
   let respond ~headers body =
     let headers =
       Headers.add_length_related_headers
+        ~version
         ~body_length:(Piaf_body.length body)
         headers
     in
