@@ -10,7 +10,7 @@ let
   pkgs = import src {
     extraOverlays = [
       (self: super: {
-        ocamlPackages = super.ocaml-ng."ocamlPackages_${ocamlVersion}".overrideScope'
+        ocamlPackages = super.ocaml-ng."ocamlPackages_${ocamlVersion}".overrideScope
           (oself: osuper: {
             eio_main = osuper.eio_main.overrideAttrs (_: {
               # Use eio_posix until the kernel version for GH Actions gets rolled
