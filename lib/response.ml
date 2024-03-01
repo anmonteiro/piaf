@@ -48,6 +48,13 @@ let create
   =
   { status; headers; version; body }
 
+let with_ ?status ?headers ?version ?body response =
+  { status = Option.value status ~default:response.status
+  ; version = Option.value version ~default:response.version
+  ; headers = Option.value headers ~default:response.headers
+  ; body = Option.value body ~default:response.body
+  }
+
 let of_string ?version ?headers ~body status =
   create ?version ?headers ~body:(Body.of_string body) status
 

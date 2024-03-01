@@ -473,6 +473,16 @@ module Request : sig
     -> string
     -> t
 
+  val with_ :
+     ?meth:Method.t
+    -> ?target:string
+    -> ?version:Versions.HTTP.t
+    -> ?headers:Headers.t
+    -> ?scheme:Scheme.t
+    -> ?body:Body.t
+    -> t
+    -> t
+
   val uri : t -> Uri.t
   val persistent_connection : t -> bool
   val pp_hum : Format.formatter -> t -> unit [@@ocaml.toplevel_printer]
@@ -491,6 +501,14 @@ module Response : sig
     -> ?headers:Headers.t
     -> ?body:Body.t
     -> Status.t
+    -> t
+
+  val with_ :
+     ?status:Status.t
+    -> ?headers:Headers.t
+    -> ?version:Versions.HTTP.t
+    -> ?body:Body.t
+    -> t
     -> t
 
   val of_string :
