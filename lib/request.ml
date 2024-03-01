@@ -49,6 +49,15 @@ let uri { scheme; target; headers; version; _ } =
 let create ~scheme ~version ?(headers = Headers.empty) ~meth ~body target =
   { meth; target; version; headers; scheme; body }
 
+let with_ ?meth ?target ?version ?headers ?scheme ?body request =
+  { meth = Option.value meth ~default:request.meth
+  ; target = Option.value target ~default:request.target
+  ; version = Option.value version ~default:request.version
+  ; headers = Option.value headers ~default:request.headers
+  ; scheme = Option.value scheme ~default:request.scheme
+  ; body = Option.value body ~default:request.body
+  }
+
 let of_http1 ?(body = Body.empty) ~scheme request =
   let { Httpaf.Request.meth; target; version; headers } = request in
   { meth
