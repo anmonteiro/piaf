@@ -67,11 +67,11 @@ module ALPN = struct
       Reqd.respond_with_string reqd response request.target
 
     let error_handler :
-         Eio.Net.Sockaddr.stream
-        -> ?request:Request.t
-        -> _
-        -> (Headers.t -> Body.Writer.t)
-        -> unit
+       Eio.Net.Sockaddr.stream
+      -> ?request:Request.t
+      -> _
+      -> (Headers.t -> Body.Writer.t)
+      -> unit
       =
      fun _client_address ?request:_ _error start_response ->
       let response_body = start_response Headers.empty in
