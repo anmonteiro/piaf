@@ -68,7 +68,7 @@ let add_length_related_headers ~version ~body_length headers =
      *   field and those listed as having connection-specific semantics in
      *   Section 7.6.1 of [HTTP] (that is, Proxy-Connection, Keep-Alive,
      *   Transfer-Encoding, and Upgrade).
-     *)
+    *)
     (match version with
     | Versions.HTTP.HTTP_2 -> headers
     | HTTP_1_0 | HTTP_1_1 ->
