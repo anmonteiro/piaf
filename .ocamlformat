@@ -24,4 +24,5 @@ space-around-records= true
 space-around-variants= true
 type-decl = sparse
 wrap-comments = true
+parse-docstrings = false
 wrap-fun-args = false

@@ -10,7 +10,7 @@ homepage: "https://github.com/anmonteiro/piaf"
 bug-reports: "https://github.com/anmonteiro/piaf/issues"
 depends: [
   "dune" {>= "2.8"}
-  "ocaml" {>= "5.0"}
+  "ocaml" {>= "5.1"}
   "logs"
   "eio-ssl" {dev}
   "magic-mime"
