@@ -109,7 +109,6 @@ let default =
 
 let to_http1_config { body_buffer_size; buffer_size; _ } =
   { Httpaf.Config.read_buffer_size = buffer_size
-  ; request_buffer_size = buffer_size
   ; request_body_buffer_size = body_buffer_size
   ; response_buffer_size = buffer_size
   ; response_body_buffer_size = body_buffer_size
