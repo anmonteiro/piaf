@@ -39,6 +39,11 @@ type t =
   ; body : Body.t
   }
 
+let status { status; _ } = status
+let headers { headers; _ } = headers
+let version { version; _ } = version
+let body { body; _ } = body
+
 (* TODO: Add content-length... *)
 let create
     ?(version = Versions.HTTP.HTTP_1_1)
