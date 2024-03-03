@@ -38,6 +38,13 @@ type t =
   ; body : Body.t
   }
 
+let meth { meth; _ } = meth
+let target { target; _ } = target
+let version { version; _ } = version
+let headers { headers; _ } = headers
+let scheme { scheme; _ } = scheme
+let body { body; _ } = body
+
 let uri { scheme; target; headers; version; _ } =
   let uri =
     let scheme = Scheme.to_string scheme in

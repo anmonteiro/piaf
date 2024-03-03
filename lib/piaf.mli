@@ -464,6 +464,13 @@ module Request : sig
     ; body : Body.t
     }
 
+  val meth : t -> Method.t
+  val target : t -> string
+  val version : t -> Versions.HTTP.t
+  val headers : t -> Headers.t
+  val scheme : t -> Scheme.t
+  val body : t -> Body.t
+
   val create :
      scheme:Scheme.t
     -> version:Versions.HTTP.t
@@ -495,6 +502,11 @@ module Response : sig
     ; version : Versions.HTTP.t
     ; body : Body.t
     }
+
+  val status : t -> Status.t
+  val headers : t -> Headers.t
+  val version : t -> Versions.HTTP.t
+  val body : t -> Body.t
 
   val create :
      ?version:Versions.HTTP.t
