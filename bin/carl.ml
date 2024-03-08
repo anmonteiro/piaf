@@ -231,10 +231,10 @@ let inflate response_body =
   Buffer.contents result_buf
 
 let handle_response
-    ~cli
-    ~sw
-    ~(stdout : _ Eio_unix.sink)
-    ({ Response.body; _ } as response)
+      ~cli
+      ~sw
+      ~(stdout : _ Eio_unix.sink)
+      ({ Response.body; _ } as response)
   =
   let open Util.Result.Syntax in
   let { head; compressed; include_; _ } = cli in
@@ -321,7 +321,7 @@ let handle_response
   result
 
 let build_headers
-    ~cli:{ headers; user_agent; referer; compressed; oauth2_bearer; user; _ }
+      ~cli:{ headers; user_agent; referer; compressed; oauth2_bearer; user; _ }
   =
   let headers = ("User-Agent", user_agent) :: headers in
   let headers =
@@ -420,21 +420,21 @@ let log_level_of_list ~silent = function
   | _ -> Some Debug
 
 let piaf_config_of_cli
-    { follow_redirects
-    ; max_redirects
-    ; max_http_version
-    ; h2c_upgrade
-    ; http2_prior_knowledge
-    ; cacert
-    ; capath
-    ; insecure
-    ; min_tls_version
-    ; max_tls_version
-    ; connect_timeout
-    ; data
-    ; head
-    ; _
-    }
+      { follow_redirects
+      ; max_redirects
+      ; max_http_version
+      ; h2c_upgrade
+      ; http2_prior_knowledge
+      ; cacert
+      ; capath
+      ; insecure
+      ; min_tls_version
+      ; max_tls_version
+      ; connect_timeout
+      ; data
+      ; head
+      ; _
+      }
   =
   match data, head with
   | Some _, true ->
@@ -476,7 +476,7 @@ let main ({ log_level; urls; _ } as cli) =
  * --retry-connrefused Retry on connection refused (use with --retry)
  * --retry-delay <seconds> Wait time between retries
  * --retry-max-time <seconds> Retry only within this period
- *)
+*)
 module CLI = struct
   let request =
     let request_conv =
@@ -688,41 +688,41 @@ module CLI = struct
     Arg.(non_empty & pos_all string [] & info [] ~docv)
 
   let parse
-      cacert
-      capath
-      cert
-      compressed
-      connect_timeout
-      data
-      default_proto
-      head
-      headers
-      include_
-      insecure
-      key
-      follow_redirects
-      max_redirects
-      request
-      use_http_1_0
-      use_http_1_1
-      use_http_2
-      http2_prior_knowledge
-      referer
-      sslv3
-      tlsv1
-      tlsv1_0
-      tlsv1_1
-      tlsv1_2
-      tlsv1_3
-      max_tls_version
-      upload_file
-      user_agent
-      user
-      oauth2_bearer
-      silent
-      verbose
-      output
-      urls
+        cacert
+        capath
+        cert
+        compressed
+        connect_timeout
+        data
+        default_proto
+        head
+        headers
+        include_
+        insecure
+        key
+        follow_redirects
+        max_redirects
+        request
+        use_http_1_0
+        use_http_1_1
+        use_http_2
+        http2_prior_knowledge
+        referer
+        sslv3
+        tlsv1
+        tlsv1_0
+        tlsv1_1
+        tlsv1_2
+        tlsv1_3
+        max_tls_version
+        upload_file
+        user_agent
+        user
+        oauth2_bearer
+        silent
+        verbose
+        output
+        urls
     =
     { follow_redirects
     ; max_redirects

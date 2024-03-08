@@ -21,7 +21,8 @@ jobs:
           # - macos-latest
           - ubuntu-latest
         ocaml-compiler:
-          - 5.x
+          - 5.1
+          - 'ocaml-base-compiler.5.2.0~alpha1'
 
     runs-on: ${{ matrix.os }}
 
@@ -36,8 +37,4 @@ jobs:
 
       - name: Install locally
         run: |
-          opam pin add eio --dev-repo -y
-          opam pin add eio_linux --dev-repo -y
-          opam pin add eio_posix --dev-repo -y
-          opam pin add eio_main --dev-repo -y
-          opam install .
+          opam install . -t

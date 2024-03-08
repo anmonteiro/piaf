@@ -26,7 +26,7 @@
   "Piaf is an HTTP library and webserver written entirely in OCaml.")
  (depends
   (ocaml
-   (>= "5.0"))
+   (>= "5.1"))
   logs
   (eio-ssl :dev)
   magic-mime
