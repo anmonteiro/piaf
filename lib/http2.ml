@@ -277,9 +277,10 @@ module HTTP : Http_intf.HTTP2 with type scheme = Scheme.http = struct
         make_client_error_handler response_error_handler `Stream
       in
       let connection =
+        let { Httpun.Request.headers; meth; target; _ } = http_request in
         H2.Client_connection.create_h2c
           ~config:(Config.to_http2_config config)
-          ~http_request
+          ~headers ~meth ~target
           ~error_handler:(make_client_error_handler error_handler `Connection)
           (response_handler, response_error_handler)
       in
@@ -321,9 +322,12 @@ module HTTP : Http_intf.HTTP2 with type scheme = Scheme.http = struct
         make_request_handler ~sw ~config ~fd request_handler client_address
       in
       let error_handler = make_error_handler ~fd error_handler client_address in
+      let { Httpun.Request.headers; meth; target; _ } = http_request in
       H2.Server_connection.create_h2c
         ~config:(Server_config.to_http2_config config)
-        ~http_request
+        ~headers
+        ~meth
+        ~target
         ~request_body
         ~error_handler
         request_handler

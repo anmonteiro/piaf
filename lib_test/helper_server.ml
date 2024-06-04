@@ -212,9 +212,12 @@ module H2c = struct
       -> (H2.Server_connection.t, string) result
     =
    fun client_addr http_request request_body ->
+     let { Httpun.Request.headers; meth; target; _ } = http_request in
     H2.Server_connection.create_h2c
       ?config:None
-      ~http_request
+      ~headers
+      ~meth
+      ~target
       ~request_body
       ~error_handler:(ALPN.H2_handler.error_handler client_addr)
       (ALPN.H2_handler.request_handler client_addr)
