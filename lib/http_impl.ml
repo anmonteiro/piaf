@@ -218,7 +218,7 @@ let upgrade_connection :
       let error_handler _wsd error =
         Promise.resolve notify_error (error :> Error.client)
       in
-      Websocketaf.Client_connection.create
+      Httpun_ws.Client_connection.create
         ~error_handler
         (Ws.Handler.websocket_handler ~sw ~notify_wsd)
     in
@@ -234,7 +234,7 @@ let upgrade_connection :
       Logs.info (fun m -> m "Websocket Upgrade confirmed");
       Gluten_eio.Client.upgrade
         runtime
-        (Gluten.make (module Websocketaf.Client_connection) ws_conn);
+        (Gluten.make (module Httpun_ws.Client_connection) ws_conn);
 
       Ok wsd
     | Error #Error.client as error ->

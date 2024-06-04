@@ -258,7 +258,7 @@ module HTTP : Http_intf.HTTP2 with type scheme = Scheme.http = struct
       =
       let response_handler response body =
         let request_method =
-          match http_request.Httpaf.Request.meth with
+          match http_request.Httpun.Request.meth with
           | #Method.standard as meth -> meth
           | `Other _ -> `GET
         in
@@ -303,7 +303,7 @@ module HTTP : Http_intf.HTTP2 with type scheme = Scheme.http = struct
         -> sw:Eio.Switch.t
         -> fd:Eio_unix.Net.stream_socket_ty Eio.Net.stream_socket
         -> error_handler:Server_intf.error_handler
-        -> http_request:Httpaf.Request.t
+        -> http_request:Httpun.Request.t
         -> request_body:Bigstringaf.t IOVec.t list
         -> client_address:Eio.Net.Sockaddr.stream
         -> Request_info.t Server_intf.Handler.t

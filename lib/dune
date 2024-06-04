@@ -7,9 +7,9 @@
   multipart
   h2
   h2-eio
-  httpaf
-  httpaf-eio
-  websocketaf
+  httpun
+  httpun-eio
+  httpun-ws
   logs
   eio
   eio-ssl

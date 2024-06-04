@@ -54,7 +54,7 @@ module HTTP = struct
   module Raw = struct
     type v = t
 
-    include Httpaf.Version
+    include Httpun.Version
 
     let equal v1 v2 = compare v1 v2 = 0
     let v1_0 = { major = 1; minor = 0 }

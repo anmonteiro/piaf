@@ -32,8 +32,8 @@
 open Import
 include Server_intf
 module Logs = (val Logging.setup ~src:"piaf.server" ~doc:"Piaf Server module")
-module Reqd = Httpaf.Reqd
-module Server_connection = Httpaf.Server_connection
+module Reqd = Httpun.Reqd
+module Server_connection = Httpun.Server_connection
 module Config = Server_config
 
 type 'ctx ctx = 'ctx Handler.ctx =
@@ -78,9 +78,9 @@ let do_h2c_upgrade ~sw ~fd ~request_body server =
     let { config; error_handler; handler } = server in
     fun ~sw:_ client_address (request : Request.t) upgrade ->
       let http_request =
-        Httpaf.Request.create
+        Httpun.Request.create
           ~headers:
-            (Httpaf.Headers.of_rev_list (Headers.to_rev_list request.headers))
+            (Httpun.Headers.of_rev_list (Headers.to_rev_list request.headers))
           request.meth
           request.target
       in
@@ -130,7 +130,6 @@ let http_connection_handler t : connection_handler =
         in
         h2c_handler ctx
     in
-
     Http.Server.create_connection_handler
       ~config
       ~error_handler

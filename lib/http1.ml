@@ -36,17 +36,17 @@ module type BODY = Body.Raw.BODY
 
 module Body :
   BODY
-  with type Reader.t = Httpaf.Body.Reader.t
-   and type Writer.t = Httpaf.Body.Writer.t = struct
-  module Reader = Httpaf.Body.Reader
-  module Writer = Httpaf.Body.Writer
+  with type Reader.t = Httpun.Body.Reader.t
+   and type Writer.t = Httpun.Body.Writer.t = struct
+  module Reader = Httpun.Body.Reader
+  module Writer = Httpun.Body.Writer
 end
 
 module MakeHTTP1 (Runtime_scheme : Scheme.Runtime.SCHEME) :
   Http_intf.HTTP1
-  with type Client.t = Httpaf_eio.Client.t
-   and type Body.Reader.t = Httpaf.Body.Reader.t
-   and type Body.Writer.t = Httpaf.Body.Writer.t
+  with type Client.t = Httpun_eio.Client.t
+   and type Body.Reader.t = Httpun.Body.Reader.t
+   and type Body.Writer.t = Httpun.Body.Writer.t
    and type scheme = Runtime_scheme.t = struct
   type scheme = Runtime_scheme.t
 
@@ -55,7 +55,7 @@ module MakeHTTP1 (Runtime_scheme : Scheme.Runtime.SCHEME) :
   module Body = Body
 
   module Client = struct
-    include Httpaf_eio.Client
+    include Httpun_eio.Client
 
     (* Error handler for HTTP/1 connections isn't used *)
     let create_connection ~config ~error_handler:_ ~sw fd =
@@ -93,9 +93,9 @@ module MakeHTTP1 (Runtime_scheme : Scheme.Runtime.SCHEME) :
         let body =
           Piaf_body.Raw.to_response_body
             (module Body.Reader : Piaf_body.Raw.Reader
-              with type t = Httpaf.Body.Reader.t)
+              with type t = Httpun.Body.Reader.t)
             ~body_length:
-              (Httpaf.Response.body_length ~request_method response
+              (Httpun.Response.body_length ~request_method response
                 :> Piaf_body.length)
             body
         in
@@ -104,7 +104,7 @@ module MakeHTTP1 (Runtime_scheme : Scheme.Runtime.SCHEME) :
       let error_handler error =
         let error : Error.client =
           match error with
-          | `Invalid_response_body_length { Httpaf.Response.status; headers; _ }
+          | `Invalid_response_body_length { Httpun.Response.status; headers; _ }
             ->
             `Invalid_response_body_length
               ((status :> H2.Status.t), Headers.of_http1 headers)
@@ -124,13 +124,13 @@ module MakeHTTP1 (Runtime_scheme : Scheme.Runtime.SCHEME) :
   module Server = struct
     let request_of_http1 = Request.of_http1 ~scheme:Runtime_scheme.scheme
 
-    include Httpaf_eio.Server
+    include Httpun_eio.Server
 
     module Reqd :
       Http_intf.Reqd
-      with type t = Httpaf.Reqd.t
+      with type t = Httpun.Reqd.t
        and type write_body = Body.Writer.t = struct
-      include Httpaf.Reqd
+      include Httpun.Reqd
 
       type write_body = Body.Writer.t
 
@@ -156,7 +156,7 @@ module MakeHTTP1 (Runtime_scheme : Scheme.Runtime.SCHEME) :
     end
 
     let make_error_handler ~fd error_handler :
-        Eio.Net.Sockaddr.stream -> Httpaf.Server_connection.error_handler
+        Eio.Net.Sockaddr.stream -> Httpun.Server_connection.error_handler
       =
      fun client_addr ?request error start_response ->
       let start_response headers = start_response (Headers.to_http1 headers) in
@@ -169,7 +169,7 @@ module MakeHTTP1 (Runtime_scheme : Scheme.Runtime.SCHEME) :
           (Option.value
              ~default:HTTP_1_1
              (Option.map
-                (fun (request : Httpaf.Request.t) ->
+                (fun (request : Httpun.Request.t) ->
                    Versions.HTTP.Raw.to_version_exn request.version)
                 request))
         ~error_handler
@@ -178,25 +178,25 @@ module MakeHTTP1 (Runtime_scheme : Scheme.Runtime.SCHEME) :
         (error :> Error.server)
 
     let make_request_handler ~sw ~config ~fd handler :
-        Eio.Net.Sockaddr.stream -> Httpaf.Reqd.t Gluten.reqd -> unit
+        Eio.Net.Sockaddr.stream -> Httpun.Reqd.t Gluten.reqd -> unit
       =
      fun client_addr reqd ->
       let { Gluten.reqd; upgrade } = reqd in
       let arg =
-        let request = Httpaf.Reqd.request reqd in
+        let request = Httpun.Reqd.request reqd in
         let request_body =
-          let body_length = Httpaf.Request.body_length request in
+          let body_length = Httpun.Request.body_length request in
           Piaf_body.Raw.to_request_body
             (module Body.Reader : Piaf_body.Raw.Reader
-              with type t = Httpaf.Body.Reader.t)
+              with type t = Httpun.Body.Reader.t)
             ~body_length:(body_length :> Piaf_body.length)
             ~on_eof:(fun t ->
               Option.iter
                 (fun error ->
                    t.error_received :=
                      Promise.create_resolved (error :> Error.t))
-                (Httpaf.Reqd.error_code reqd))
-            (Httpaf.Reqd.request_body reqd)
+                (Httpun.Reqd.error_code reqd))
+            (Httpun.Reqd.request_body reqd)
         in
         { Server_intf.Handler.ctx =
             { Request_info.client_address = client_addr

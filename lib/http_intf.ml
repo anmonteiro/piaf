@@ -136,7 +136,7 @@ module type HTTP2 = sig
       val create_h2c :
          config:Config.t
         -> ?push_handler:(Request.t -> (response_handler, unit) result)
-        -> http_request:Httpaf.Request.t
+        -> http_request:Httpun.Request.t
         -> error_handler:error_handler
         -> response_handler * error_handler
         -> Gluten_eio.Client.t
@@ -151,7 +151,7 @@ module type HTTP2 = sig
         -> sw:Eio.Switch.t
         -> fd:Eio_unix.Net.stream_socket_ty Eio.Net.stream_socket
         -> error_handler:Server_intf.error_handler
-        -> http_request:Httpaf.Request.t
+        -> http_request:Httpun.Request.t
         -> request_body:Bigstringaf.t IOVec.t list
         -> client_address:Eio.Net.Sockaddr.stream
         -> Request_info.t Server_intf.Handler.t
