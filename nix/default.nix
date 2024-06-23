@@ -29,10 +29,10 @@ rec {
       uri
       ipaddr
 
-      httpaf-eio
+      httpun-eio
       gluten-eio
       h2-eio
-      websocketaf
+      httpun-ws
 
       multipart_form
 
