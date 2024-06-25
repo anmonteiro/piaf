@@ -39,6 +39,10 @@ let
     cachedBuild = { name, branches ? [ "master" ], os }:
       lib.generators.toYAML { } {
         inherit name;
+        concurrency = {
+          group = "\${{ github.workflow }}-\${{ github.ref }}";
+          cancel-in-progress = true;
+        };
         on = {
           pull_request = null;
           push = {
@@ -65,7 +69,7 @@ gh-actions.cachedBuild {
   os = {
     macos-latest = {
       name = "Run nix-build";
-      ocamlVersions = [ "5_1" "5_2" ];
+      ocamlVersions = [ "5_2" ];
       run = "nix-build ./nix/ci/test.nix -A native --argstr ocamlVersion \${{ matrix.ocamlVersion }}";
     };
     ubuntu-latest = {
