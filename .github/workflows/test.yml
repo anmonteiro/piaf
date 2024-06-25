@@ -1,4 +1,8 @@
 {
+  "concurrency": {
+    "cancel-in-progress": true,
+    "group": "${{ github.workflow }}-${{ github.ref }}"
+  },
   "jobs": {
     "macos-latest": {
       "runs-on": "macos-latest",

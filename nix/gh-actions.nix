@@ -39,6 +39,10 @@ let
     cachedBuild = { name, branches ? [ "master" ], os }:
       lib.generators.toYAML { } {
         inherit name;
+        concurrency = {
+          group = "\${{ github.workflow }}-\${{ github.ref }}";
+          cancel-in-progress = true;
+        };
         on = {
           pull_request = null;
           push = {
