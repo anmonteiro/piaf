@@ -3,13 +3,13 @@
 let
   commonSteps = [
     {
-      uses = "actions/checkout@v2";
+      uses = "actions/checkout@v4";
       "with" = {
         "submodules" = "recursive";
       };
     }
     {
-      uses = "cachix/install-nix-action@v22";
+      uses = "cachix/install-nix-action@v27";
       "with" = {
         extra_nix_config = ''
           extra-substituters = https://anmonteiro.nix-cache.workers.dev
