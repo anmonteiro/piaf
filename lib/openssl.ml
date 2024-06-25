@@ -178,56 +178,6 @@ let protocols_to_disable min max =
   protocols
 
 module Error = struct
-  let ssl_error_to_string = function
-    | Ssl.Error_none -> "Error_none"
-    | Error_ssl -> "Error_ssl"
-    | Error_want_read -> "Error_want_read"
-    | Error_want_write -> "Error_want_write"
-    | Error_want_x509_lookup -> "Error_want_x509_lookup"
-    | Error_syscall -> "Error_syscall"
-    | Error_zero_return -> "Error_zero_return"
-    | Error_want_connect -> "Error_want_connect"
-    | Error_want_accept -> "Error_want_accept"
-    | Error_want_async -> "Error_want_async"
-    | Error_want_async_job -> "Error_want_async_job"
-    | Error_want_client_hello_cb -> "Error_want_client_hello_cb"
-    | Error_want_retry_verify -> "Error_want_retry_verify"
-
-  let ssl_error_to_string ssl_error =
-    let error_string =
-      match ssl_error with
-      | ( Ssl.Error_none | Error_want_read | Error_want_write
-        | Error_want_connect | Error_want_accept | Error_want_x509_lookup
-        | Error_want_async | Error_want_async_job | Error_want_client_hello_cb
-        | Error_want_retry_verify ) as e ->
-        Logs.err (fun m ->
-          m
-            "`%s` should never be raised. Please report an issue."
-            (ssl_error_to_string e));
-        assert false
-      | Error_ssl -> "SSL Error"
-      | Error_syscall ->
-        (* Some I/O error occurred. The OpenSSL error queue may contain more
-           information on the error. *)
-        "Syscall Error"
-      | Error_zero_return ->
-        (* The TLS/SSL connection has been closed. If the protocol version is
-           SSL 3.0 or TLS 1.0, this result code is returned only if a closure
-           alert has occurred in the protocol, i.e. if the connection has been
-           closed cleanly. Note that in this case [Error_zero_return] does not
-           necessarily indicate that the underlying transport has been
-           closed. *)
-        "SSL Connection closed"
-    in
-    let { Ssl.Error.library_number = _; reason_code; lib = _; reason } =
-      Ssl.Error.get_error ()
-    in
-    Format.asprintf
-      "%s(%d): %s"
-      error_string
-      reason_code
-      (Option.value ~default:"unknown" reason)
-
   let fail_with_too_old_ssl max_tls_version =
     let reason =
       Format.asprintf
