@@ -30,14 +30,14 @@
  *---------------------------------------------------------------------------*)
 
 open Import
-module Wsd = Websocketaf.Wsd
-module Websocket = Websocketaf.Websocket
+module Wsd = Httpun_ws.Wsd
+module Websocket = Httpun_ws.Websocket
 module Logs = (val Logging.setup ~src:"piaf.ws" ~doc:"Piaf Websocket module")
 
 let upgrade_request ~headers ~scheme ~nonce target =
   Request.of_http1
     ~scheme
-    (Websocketaf.Handshake.create_request ~nonce ~headers target)
+    (Httpun_ws.Handshake.create_request ~nonce ~headers target)
 
 module Message = struct
   type t = Websocket.Opcode.t * Bigstringaf.t IOVec.t
@@ -122,8 +122,8 @@ module Handler = struct
       let { Body.stream; _ } =
         let body_length = `Fixed (Int64.of_int len) in
         Body.Raw.to_stream
-          (module Websocketaf.Payload : Body.Raw.Reader
-            with type t = Websocketaf.Payload.t)
+          (module Httpun_ws.Payload : Body.Raw.Reader
+            with type t = Httpun_ws.Payload.t)
           ~body_length
           ~body_error:(`Msg "")
           ~on_eof:(fun t ->
@@ -192,8 +192,8 @@ module Handler = struct
 
     let eof () =
       Logs.info (fun m -> m "Websocket connection EOF");
-      Websocketaf.Wsd.close wsd;
+      Httpun_ws.Wsd.close wsd;
       push_to_messages None
     in
-    { Websocketaf.Websocket_connection.frame; eof }
+    { Httpun_ws.Websocket_connection.frame; eof }
 end

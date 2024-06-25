@@ -226,7 +226,7 @@ module Versions : sig
 
     module Raw : sig
       include module type of struct
-        include Httpaf.Version
+        include Httpun.Version
       end
 
       val v1_0 : t
@@ -432,7 +432,7 @@ end
 
 module Ws : sig
   module Message : sig
-    type t = Websocketaf.Websocket.Opcode.t * Bigstringaf.t IOVec.t
+    type t = Httpun_ws.Websocket.Opcode.t * Bigstringaf.t IOVec.t
   end
 
   module Descriptor : sig

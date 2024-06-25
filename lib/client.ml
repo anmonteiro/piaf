@@ -492,7 +492,7 @@ let ws_upgrade :
        *   [RFC4648]). The nonce MUST be selected randomly for each connection. *)
       let nonce = Openssl.random_string 16 in
       Ws.upgrade_request
-        ~headers:(Httpaf.Headers.of_list headers)
+        ~headers:(Httpun.Headers.of_list headers)
         ~scheme:info.scheme
         ~nonce
         target

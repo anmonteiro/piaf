@@ -66,7 +66,7 @@ let with_ ?meth ?target ?version ?headers ?scheme ?body request =
   }
 
 let of_http1 ?(body = Body.empty) ~scheme request =
-  let { Httpaf.Request.meth; target; version; headers } = request in
+  let { Httpun.Request.meth; target; version; headers } = request in
   { meth
   ; target
   ; version = Versions.HTTP.Raw.to_version_exn version
@@ -86,7 +86,7 @@ let of_h2 ?(body = Body.empty) request =
   }
 
 let to_http1 { meth; target; version; headers; _ } =
-  Httpaf.Request.create
+  Httpun.Request.create
     ~version:(Versions.HTTP.Raw.of_version version)
     ~headers:(Headers.to_http1 headers)
     meth

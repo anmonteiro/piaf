@@ -33,11 +33,12 @@
   (ssl :dev)
   uri
   ipaddr
-  (httpaf-eio :dev)
-  (gluten-eio :dev)
+  httpun-eio
+  gluten-eio
   (h2-eio :dev)
-  (websocketaf :dev)
+  (httpun-ws :dev)
   (multipart_form :dev)
-  (eio_main :dev)
+  (eio_main
+   (>= "1.0"))
   (dune-site :with-test)
   (alcotest :with-test)))

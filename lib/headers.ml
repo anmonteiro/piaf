@@ -55,7 +55,7 @@ module Well_known = struct
 end
 
 let add_length_related_headers ~version ~body_length headers =
-  (* TODO: check `Httpaf.Response.body_length` because we may have to issue a
+  (* TODO: check `Httpun.Response.body_length` because we may have to issue a
    * 0-length response body. *)
   (* Don't step over an explicit `content-length` header. *)
   match body_length with
@@ -100,5 +100,5 @@ let host t ~version =
   | Versions.HTTP.HTTP_2 -> get t Well_known.HTTP2.host
   | HTTP_1_0 | HTTP_1_1 -> get t Well_known.HTTP1.host
 
-let of_http1 headers = of_rev_list (Httpaf.Headers.to_rev_list headers)
-let to_http1 headers = Httpaf.Headers.of_rev_list (to_rev_list headers)
+let of_http1 headers = of_rev_list (Httpun.Headers.to_rev_list headers)
+let to_http1 headers = Httpun.Headers.of_rev_list (to_rev_list headers)

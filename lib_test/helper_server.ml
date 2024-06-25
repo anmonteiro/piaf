@@ -49,7 +49,7 @@ module HTTP = struct
 end
 
 module ALPN = struct
-  open Httpaf
+  open Httpun
 
   module Http1_handler = struct
     let request_handler : Eio.Net.Sockaddr.stream -> Reqd.t Gluten.reqd -> unit =
@@ -100,7 +100,7 @@ module ALPN = struct
   end
 
   let http1s_handler =
-    Httpaf_eio.Server.create_connection_handler
+    Httpun_eio.Server.create_connection_handler
       ?config:None
       ~request_handler:Http1_handler.request_handler
       ~error_handler:Http1_handler.error_handler
@@ -207,14 +207,17 @@ module H2c = struct
 
   let h2c_connection_handler :
        Eio.Net.Sockaddr.stream
-      -> Httpaf.Request.t
+      -> Httpun.Request.t
       -> Bigstringaf.t H2.IOVec.t list
       -> (H2.Server_connection.t, string) result
     =
    fun client_addr http_request request_body ->
+    let { Httpun.Request.headers; meth; target; _ } = http_request in
     H2.Server_connection.create_h2c
       ?config:None
-      ~http_request
+      ~headers
+      ~meth
+      ~target
       ~request_body
       ~error_handler:(ALPN.H2_handler.error_handler client_addr)
       (ALPN.H2_handler.request_handler client_addr)
@@ -222,9 +225,9 @@ module H2c = struct
   let connection_handler =
     let upgrade_handler client_addr (request : Request.t) ~sw:_ upgrade =
       let request =
-        Httpaf.Request.create
+        Httpun.Request.create
           ~headers:
-            (Httpaf.Headers.of_rev_list (Headers.to_rev_list request.headers))
+            (Httpun.Headers.of_rev_list (Headers.to_rev_list request.headers))
           request.meth
           request.target
       in

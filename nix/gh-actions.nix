@@ -3,13 +3,13 @@
 let
   commonSteps = [
     {
-      uses = "actions/checkout@v2";
+      uses = "actions/checkout@v4";
       "with" = {
         "submodules" = "recursive";
       };
     }
     {
-      uses = "cachix/install-nix-action@v22";
+      uses = "cachix/install-nix-action@v27";
       "with" = {
         extra_nix_config = ''
           extra-substituters = https://anmonteiro.nix-cache.workers.dev
@@ -65,11 +65,11 @@ gh-actions.cachedBuild {
   os = {
     macos-latest = {
       name = "Run nix-build";
-      ocamlVersions = [ "5_0" "5_1" ];
+      ocamlVersions = [ "5_1" "5_2" ];
       run = "nix-build ./nix/ci/test.nix -A native --argstr ocamlVersion \${{ matrix.ocamlVersion }}";
     };
     ubuntu-latest = {
-      ocamlVersions = [ "5_0" "5_1" ];
+      ocamlVersions = [ "5_1" "5_2" ];
       name = "Run nix-build";
       run = "nix-build ./nix/ci/test.nix -A native -A musl64 --argstr ocamlVersion \${{ matrix.ocamlVersion }}";
     };

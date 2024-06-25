@@ -30,7 +30,7 @@
  *---------------------------------------------------------------------------*)
 
 open Import
-module Version = Httpaf.Version
+module Version = Httpun.Version
 
 module Logs =
   (val Logging.setup ~src:"piaf.connection" ~doc:"Piaf Connection module")
