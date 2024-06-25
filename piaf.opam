@@ -43,11 +43,6 @@ build: [
 ]
 dev-repo: "git+https://github.com/anmonteiro/piaf.git"
 pin-depends: [
-  [ "hpack.dev" "git+https://github.com/anmonteiro/ocaml-h2.git" ]
-  [ "h2.dev" "git+https://github.com/anmonteiro/ocaml-h2.git" ]
-  [ "h2-eio.dev" "git+https://github.com/anmonteiro/ocaml-h2.git" ]
-  [ "ssl.dev" "git+https://github.com/savonet/ocaml-ssl.git" ]
-  [ "eio-ssl.dev" "git+https://github.com/anmonteiro/eio-ssl.git" ]
-  [ "httpun-ws.dev" "git+https://github.com/anmonteiro/httpun-ws.git" ]
+  [ "eio-ssl.dev" "git+https://github.com/anmonteiro/eio-ssl.git#0.3.0" ]
   [ "multipart_form.dev" "git+https://github.com/anmonteiro/multipart_form.git" ]
 ]
