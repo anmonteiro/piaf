@@ -30,7 +30,7 @@
   logs
   (eio-ssl :dev)
   magic-mime
-  (ssl :dev)
+  ssl
   uri
   ipaddr
   httpun-eio
