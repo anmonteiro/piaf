@@ -35,8 +35,8 @@
   ipaddr
   httpun-eio
   gluten-eio
-  (h2-eio :dev)
-  (httpun-ws :dev)
+  h2-eio
+  httpun-ws
   (multipart_form :dev)
   (eio_main
    (>= "1.0"))
