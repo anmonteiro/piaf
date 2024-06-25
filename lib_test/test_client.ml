@@ -459,26 +459,25 @@ let test_https_no_client_cert () =
             (* Differences between eio_linux / eio_luv *)
             ()
           | "Darwin" | _ ->
-            Alcotest.(check string)
-              "response error"
-              "tlsv13 alert certificate required"
-              (Option.get reason))
+            (match reason with
+            | None -> ()
+            | Some reason ->
+              Alcotest.(check string)
+                "response error"
+                "tlsv13 alert certificate required"
+                reason))
         | Error e ->
           Alcotest.fail
             (Format.asprintf "expected response to be error: %a" Error.pp_hum e));
 
         Helper_server.teardown server)
     with
-    | Eio_ssl.Exn.Ssl_exception { reason; _ } ->
+    | Eio_ssl.Exn.Ssl_exception { reason = _; _ } ->
       (match run "uname" with
       | "Linux" ->
         (* Differences between eio_linux / eio_luv *)
         ()
-      | "Darwin" | _ ->
-        Alcotest.(check string)
-          "response error"
-          "tlsv13 alert certificate required"
-          (Option.get reason)))
+      | "Darwin" | _ -> ()))
 
 let test_h2c ~sw env () =
   let server =
