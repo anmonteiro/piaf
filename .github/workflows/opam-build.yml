@@ -35,4 +35,6 @@ jobs:
           ocaml-compiler: ${{ matrix.ocaml-compiler }}
 
       - name: Install locally
+        env:
+          EIO_BACKEND: posix
         run: opam pin add piaf.dev . --with-test -y
