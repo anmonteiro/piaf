@@ -4,15 +4,12 @@ let content_type =
   "multipart/form-data; boundary=----WebKitFormBoundaryVuTaDGWRcduyfmAv"
 
 let multipart_request_body n =
-  Format.asprintf
-    {|------WebKitFormBoundaryVuTaDGWRcduyfmAv
-Content-Disposition: form-data; name="picture.png"; filename="picture.png"
-Content-Type: image/png
-
-%s
+    {|------WebKitFormBoundaryVuTaDGWRcduyfmAv|}^"\r"^{|
+Content-Disposition: form-data; name="picture.png"; filename="picture.png"|}^"\r"^{|
+Content-Type: image/png|}^"\r\n\r\n"^
+(String.make n 'a')^"\r"^{|
 ------WebKitFormBoundaryVuTaDGWRcduyfmAv--
 |}
-    (String.make n 'a')
 
 let multipart_request_body_chunks payload =
   let continue = ref true in

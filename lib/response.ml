@@ -89,7 +89,6 @@ let copy_file ?version ?(headers = Headers.empty) path =
     with
     | exn -> Result.error (`Exn exn)
   in
-
   let headers =
     let mime = Magic_mime.lookup path in
     Headers.(add_unless_exists headers Well_known.content_type mime)
