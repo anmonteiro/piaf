@@ -14,8 +14,6 @@
         pkgs = nixpkgs.legacyPackages."${system}".extend (self: super: {
           ocamlPackages = super.ocaml-ng.ocamlPackages_5_2;
         });
-      in
-      rec {
         packages = {
           native = pkgs.callPackage ./nix {
             nix-filter = nix-filter.lib;
@@ -32,8 +30,12 @@
             };
 
         };
-        defaultPackage = packages.native.piaf;
-        devShell = pkgs.callPackage ./shell.nix { inherit packages; };
+      in
+      {
+        packages = packages // { default = packages.native.piaf; };
+        devShells = {
+          default = pkgs.callPackage ./nix/shell.nix { inherit packages; };
+        };
         gh-actions = pkgs.callPackage ./nix/gh-actions.nix { };
       });
 }
