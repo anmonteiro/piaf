@@ -18,6 +18,7 @@ rec {
         "stream"
         "multipart"
         "multipart_test"
+        "vendor"
       ];
     };
 
@@ -33,8 +34,6 @@ rec {
       gluten-eio
       h2-eio
       httpun-ws
-
-      multipart_form
 
       dune-site
 
