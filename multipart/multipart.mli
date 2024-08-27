@@ -29,6 +29,8 @@
  * POSSIBILITY OF SUCH DAMAGE.
  *---------------------------------------------------------------------------*)
 
+module Multipart_form = Piaf_multipart_form.Multipart_form
+
 type t
 
 module Pp : sig

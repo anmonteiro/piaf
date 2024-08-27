@@ -21,7 +21,9 @@ depends: [
   "gluten-eio"
   "h2-eio"
   "httpun-ws"
-  "multipart_form" {dev}
+  "pecu"
+  "prettym"
+  "unstrctrd"
   "eio_main" {>= "1.0"}
   "dune-site" {with-test}
   "alcotest" {with-test}
@@ -50,5 +52,4 @@ pin-depends: [
   [ "h2.dev" "git+https://github.com/anmonteiro/ocaml-h2.git" ]
   [ "h2-eio.dev" "git+https://github.com/anmonteiro/ocaml-h2.git" ]
   [ "httpun-ws.dev" "git+https://github.com/anmonteiro/httpun-ws.git" ]
-  [ "multipart_form.dev" "git+https://github.com/anmonteiro/multipart_form.git" ]
 ]

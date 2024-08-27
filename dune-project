@@ -37,7 +37,9 @@
   gluten-eio
   h2-eio
   httpun-ws
-  (multipart_form :dev)
+  pecu
+  prettym
+  unstrctrd
   (eio_main
    (>= "1.0"))
   (dune-site :with-test)

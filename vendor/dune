@@ -1,0 +1,21 @@
+(data_only_dirs *)
+
+(subdir
+ multipart_form/lib
+ (library
+  (name piaf_multipart_form)
+  (public_name piaf.multipart_form)
+  (libraries
+   logs
+   bigstringaf
+   ke
+   unstrctrd
+   unstrctrd.parser
+   base64
+   base64.rfc2045
+   prettym
+   pecu
+   uutf
+   fmt
+   angstrom
+   faraday)))

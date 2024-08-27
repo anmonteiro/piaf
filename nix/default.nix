@@ -18,6 +18,7 @@ rec {
         "stream"
         "multipart"
         "multipart_test"
+        "vendor"
       ];
     };
 
@@ -34,7 +35,9 @@ rec {
       h2-eio
       httpun-ws
 
-      multipart_form
+      pecu
+      unstrctrd
+      prettym
 
       dune-site
 

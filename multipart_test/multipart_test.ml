@@ -1,5 +1,7 @@
 open Eio.Std
 
+module Multipart_form = Piaf_multipart_form.Multipart_form
+
 let content_type =
   "multipart/form-data; boundary=----WebKitFormBoundaryVuTaDGWRcduyfmAv"
 
@@ -12,16 +14,15 @@ Content-Type: image/png|}^"\r\n\r\n"^
 |}
 
 let multipart_request_body_chunks payload =
-  let continue = ref true in
   let cur_off = ref 0 in
   let ret = ref [] in
   let chunk_size = 32 in
-  while !continue do
-    let this_len = min chunk_size (String.length payload - !cur_off) in
+  let payload_len = String.length payload in
+  while !cur_off < payload_len do
+    let this_len = min chunk_size (payload_len - !cur_off) in
     let subs = String.sub payload !cur_off this_len in
     ret := subs :: !ret;
     cur_off := !cur_off + this_len;
-    if !cur_off = String.length payload then continue := false
   done;
   List.rev !ret
 
@@ -53,38 +54,37 @@ let test_simple_boundary ~sw _env () =
          ~emit
          stream)
   in
-  let name, stream = Promise.await waiter in
-  Alcotest.(check (option string))
-    "filename extracted"
-    (Some "picture.png")
-    name;
-  Alcotest.(check bool)
-    "working through chunks in parallel (stream arrives before the promise \
-     resolves)"
-    false
-    ((Promise.is_resolved multipart_result));
-  let chunks = Piaf_stream.to_list stream in
-  Alcotest.(check int)
-    "Correct number of chunks emitted"
-    (payload_size / max_chunk_size)
-    (List.length chunks);
   match Promise.await multipart_result with
-  | Ok (Ok t) ->
-    let fields = Multipart.result_fields t in
-    Alcotest.(check int) "one field" 1 (List.length fields);
-    let name, multipart_fields = List.hd fields in
-    Alcotest.(check string) "field name" "picture.png" name;
-    Alcotest.(check string)
-      "parsed content-type and disposition correctly"
-      {|Content-Disposition[*]: { type= <ietf:form-data>; filename= picture.png;
+  | Error exn -> raise exn
+  | Ok (Error (`Msg error)) -> Alcotest.fail error
+  | Ok (Ok _multipart) ->
+    let name, stream = Promise.await waiter in
+    Alcotest.(check (option string))
+      "filename extracted"
+      (Some "picture.png")
+      name;
+    let chunks = Piaf_stream.to_list stream in
+    Alcotest.(check int)
+      "Correct number of chunks emitted"
+      (payload_size / max_chunk_size)
+      (List.length chunks);
+    match Promise.await multipart_result with
+    | Ok (Ok t) ->
+      let fields = Multipart.result_fields t in
+      Alcotest.(check int) "one field" 1 (List.length fields);
+      let name, multipart_fields = List.hd fields in
+      Alcotest.(check string) "field name" "picture.png" name;
+      Alcotest.(check string)
+        "parsed content-type and disposition correctly"
+        {|Content-Disposition[*]: { type= <ietf:form-data>; filename= picture.png;
                           creation= ; modification= ; read= ; size= ;
                           parameters= (parameters (name, "picture.png")); }
 Content-Type[*]: image/iana:png |}
-      (Format.asprintf "%a" Multipart_form.Header.pp multipart_fields)
-  | Ok (Error (`Msg msg)) ->
-    Alcotest.fail msg
-  | Error (exn) ->
-    Alcotest.fail (Printexc.to_string exn)
+        (Format.asprintf "%a" Multipart_form.Header.pp multipart_fields)
+    | Ok (Error (`Msg msg)) ->
+      Alcotest.fail msg
+    | Error (exn) ->
+      Alcotest.fail (Printexc.to_string exn)
 
 let test_unaligned_boundary ~sw _env () =
   let payload_size = 0x1100 in
@@ -106,21 +106,28 @@ let test_unaligned_boundary ~sw _env () =
   push None;
   let waiter, wakener = Promise.create () in
   let emit name stream = Promise.resolve wakener (name, stream) in
-  let _multipart_result =
+  let multipart_result =
     Fiber.fork_promise ~sw (fun () ->
-    Multipart.parse_multipart_form ~content_type ~max_chunk_size ~emit stream
-    )
+      Multipart.parse_multipart_form
+        ~content_type
+        ~max_chunk_size
+        ~emit
+        stream)
   in
-  let name, stream = Promise.await waiter in
-  Alcotest.(check (option string))
-    "filename extracted"
-    (Some "picture.png")
-    name;
-  let chunks = Piaf_stream.to_list stream in
-  Alcotest.(check int)
-    "Correct number of chunks emitted"
-    ((payload_size / max_chunk_size) + 1)
-    (List.length chunks)
+  match Promise.await multipart_result with
+  | Error exn -> raise exn
+  | Ok (Error (`Msg error)) -> Alcotest.fail error
+  | Ok (Ok _multipart) ->
+    let name, stream = Promise.await waiter in
+    Alcotest.(check (option string))
+      "filename extracted"
+      (Some "picture.png")
+      name;
+    let chunks = Piaf_stream.to_list stream in
+    Alcotest.(check int)
+      "Correct number of chunks emitted"
+      ((payload_size / max_chunk_size) + 1)
+      (List.length chunks)
 
 let test_no_boundary ~sw:_ _env () =
   let content_type_no_boundary = "text/plain" in

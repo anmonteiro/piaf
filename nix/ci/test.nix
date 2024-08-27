@@ -2,25 +2,28 @@
 
 let
   lock = builtins.fromJSON (builtins.readFile ./../../flake.lock);
-  src = fetchGit {
-    url = with lock.nodes.nixpkgs.locked;"https://github.com/${owner}/${repo}";
-    inherit (lock.nodes.nixpkgs.locked) rev;
-    allRefs = true;
-  };
-  pkgs = import src {
-    extraOverlays = [
-      (self: super: {
-        ocamlPackages = super.ocaml-ng."ocamlPackages_${ocamlVersion}".overrideScope
-          (oself: osuper: {
-            eio_main = osuper.eio_main.overrideAttrs (_: {
-              # Use eio_posix until the kernel version for GH Actions gets rolled
-              # forward. There seems to be a io_uring bug
-              propagatedBuildInputs = [ oself.eio_posix ];
+  pkgs =
+    let
+      src = fetchGit {
+        url = with lock.nodes.nixpkgs.locked;"https://github.com/${owner}/${repo}";
+        inherit (lock.nodes.nixpkgs.locked) rev;
+        allRefs = true;
+      };
+    in
+    import src {
+      extraOverlays = [
+        (self: super: {
+          ocamlPackages = super.ocaml-ng."ocamlPackages_${ocamlVersion}".overrideScope
+            (oself: osuper: {
+              eio_main = osuper.eio_main.overrideAttrs (_: {
+                # Use eio_posix until the kernel version for GH Actions gets rolled
+                # forward. There seems to be a io_uring bug
+                propagatedBuildInputs = [ oself.eio_posix ];
+              });
             });
-          });
-      })
-    ];
-  };
+        })
+      ];
+    };
   nix-filter-src = fetchGit {
     url = with lock.nodes.nix-filter.locked; "https://github.com/${owner}/${repo}";
     inherit (lock.nodes.nix-filter.locked) rev;
@@ -71,6 +74,7 @@ let
           "lib_test"
           "multipart"
           "multipart_test"
+          "vendor"
           "sendfile"
           "stream"
           "examples"
