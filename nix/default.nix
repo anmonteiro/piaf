@@ -35,6 +35,10 @@ rec {
       h2-eio
       httpun-ws
 
+      pecu
+      unstrctrd
+      prettym
+
       dune-site
 
       # Not in checkInputs because we also run tests in the musl64 build
