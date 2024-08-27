@@ -1,4 +1,6 @@
 pin-depends: [
-  [ "eio-ssl.dev" "git+https://github.com/anmonteiro/eio-ssl.git#0.3.0" ]
+  [ "httpun.dev" "git+https://github.com/anmonteiro/httpun.git" ]
+  [ "h2.dev" "git+https://github.com/anmonteiro/ocaml-h2.git" ]
+  [ "httpun-ws.dev" "git+https://github.com/anmonteiro/httpun-ws.git" ]
   [ "multipart_form.dev" "git+https://github.com/anmonteiro/multipart_form.git" ]
 ]
