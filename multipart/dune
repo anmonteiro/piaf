@@ -1,4 +1,4 @@
 (library
  (name multipart)
  (public_name piaf.multipart)
- (libraries faraday ke multipart_form eio piaf.stream))
+ (libraries faraday ke piaf.multipart_form eio piaf.stream))

@@ -32,6 +32,8 @@
 open Import
 
 module Multipart = struct
+  module Multipart_form = Piaf_multipart_form.Multipart_form
+
   type t =
     { name : string
     ; filename : string option
@@ -44,8 +46,7 @@ module Multipart = struct
     Buffer.add_string ctbuf ct;
     Buffer.add_char ctbuf '\r';
     Buffer.add_char ctbuf '\n';
-    let ct = Multipart_form.Content_type.of_string (Buffer.contents ctbuf) in
-    match ct with
+    match Multipart_form.Content_type.of_string (Buffer.contents ctbuf) with
     | Ok { Multipart_form.Content_type.ty = `Multipart; _ } -> true
     | Ok _ | Error _ -> false
 

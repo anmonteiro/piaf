@@ -29,3 +29,5 @@
     --write-to
     %{target})
    (bash "echo \"$(cat %{target} | jq -r)\" > %{target}"))))
+
+(vendored_dirs vendor)
