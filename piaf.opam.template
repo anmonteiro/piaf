@@ -1,4 +1,5 @@
 pin-depends: [
+  [ "httpun-types.dev" "git+https://github.com/anmonteiro/httpun.git" ]
   [ "httpun.dev" "git+https://github.com/anmonteiro/httpun.git" ]
   [ "httpun-eio.dev" "git+https://github.com/anmonteiro/httpun.git" ]
   [ "h2.dev" "git+https://github.com/anmonteiro/ocaml-h2.git" ]
