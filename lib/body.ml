@@ -321,7 +321,7 @@ module Raw = struct
     val write_string : t -> ?off:int -> ?len:int -> string -> unit
     val write_bigstring : t -> ?off:int -> ?len:int -> Bigstringaf.t -> unit
     val schedule_bigstring : t -> ?off:int -> ?len:int -> Bigstringaf.t -> unit
-    val flush : t -> (unit -> unit) -> unit
+    val flush : t -> ([ `Written | `Closed ] -> unit) -> unit
     val close : t -> unit
     val is_closed : t -> bool
   end
@@ -438,36 +438,44 @@ module Raw = struct
     to_t reader ?on_eof ~body_length ~body_error:incomplete_body_error body
 
   let flush_and_close :
-      type a. (module Writer with type t = a) -> a -> (unit -> unit) -> unit
+      type a.
+      (module Writer with type t = a)
+      -> a
+      -> ([ `Written | `Closed ] -> unit)
+      -> unit
     =
    fun (module Writer) body f ->
     Writer.close body;
     Writer.flush body f
 
-  let stream_write_body :
-      type a.
-      (module Writer with type t = a)
-      -> a
-      -> Bigstringaf.t IOVec.t Stream.t
-      -> unit
-    =
-   fun (module Writer) body stream ->
-    Stream.iter
-      ~f:(fun { IOVec.buffer; off; len } ->
-        (* If the peer left abruptly the connection will be shutdown. Avoid
-         * crashing the server with exceptions related to the writer being
-         * closed. *)
-        if not (Writer.is_closed body)
-        then (
+  exception Local
+
+  let stream_write_body =
+    let stream_write_body :
+        type a.
+        (module Writer with type t = a)
+        -> a
+        -> Bigstringaf.t IOVec.t Stream.t
+        -> unit
+      =
+     fun (module Writer) body stream ->
+      Stream.iter
+        ~f:(fun { IOVec.buffer; off; len } ->
+          (* If the peer left abruptly the connection will be shutdown. Avoid
+           * crashing the server with exceptions related to the writer being
+           * closed. *)
           Writer.schedule_bigstring body ~off ~len buffer;
           let p, u = Promise.create () in
-          Writer.flush body (fun () ->
-            Promise.resolve u ();
+          Writer.flush body (fun reason ->
+            Promise.resolve u reason;
             Logs.debug (fun m -> m "Flushed output chunk of length %d" len));
-          Promise.await p)
-        else ())
-      stream;
-    flush_and_close (module Writer) body ignore
+          match Promise.await p with `Closed -> raise Local | `Written -> ())
+        stream;
+      flush_and_close (module Writer) body ignore
+    in
+
+    fun writer body stream ->
+      try stream_write_body writer body stream with Local -> ()
 end
 
 (* Traversal *)

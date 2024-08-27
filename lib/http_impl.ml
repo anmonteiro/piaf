@@ -82,9 +82,11 @@ let flush_and_close :
     type a. (module Body.Raw.Writer with type t = a) -> a -> unit
   =
  fun b request_body ->
-  Body.Raw.flush_and_close b request_body (fun () ->
-    Logs.info (fun m ->
-      m "Request body has been completely and successfully uploaded"))
+  Body.Raw.flush_and_close b request_body (function
+    | `Closed -> Logs.warn (fun m -> m "Request body not completely written")
+    | `Written ->
+      Logs.info (fun m ->
+        m "Request body has been completely and successfully uploaded"))
 
 let handle_response :
      sw:Switch.t
@@ -215,12 +217,8 @@ let upgrade_connection :
 
     Logs.info (fun m -> m "Upgrading connection to the Websocket protocol");
     let ws_conn =
-      let error_handler _wsd error =
-        Promise.resolve notify_error (error :> Error.client)
-      in
       Httpun_ws.Client_connection.create
-        ~error_handler
-        (Ws.Handler.websocket_handler ~sw ~notify_wsd)
+        (Ws.Handler.websocket_handler ~sw ~notify_wsd ~notify_error)
     in
     let result =
       Fiber.any

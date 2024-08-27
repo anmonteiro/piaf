@@ -69,18 +69,20 @@ let do_sendfile :
     (* Flush everything to the wire before calling `sendfile`, as we're gonna
        bypass the http/af runtime and write bytes to the file descriptor
        directly. *)
-    Http.Body.Writer.flush response_body (fun () ->
-      match
-        Posix.sendfile
-          (module Http.Body.Writer)
-          ~src_fd
-          ~dst_fd:fd
-          response_body
-      with
-      | Ok () -> Http.Body.Writer.close response_body
-      | Error exn ->
-        Http.Body.Writer.close response_body;
-        report_exn exn))
+    Http.Body.Writer.flush response_body (function
+      | `Closed -> ()
+      | `Written ->
+        (match
+           Posix.sendfile
+             (module Http.Body.Writer)
+             ~src_fd
+             ~dst_fd:fd
+             response_body
+         with
+        | Ok () -> Http.Body.Writer.close response_body
+        | Error exn ->
+          Http.Body.Writer.close response_body;
+          report_exn exn)))
 
 let handle_request :
     type reqd writer.

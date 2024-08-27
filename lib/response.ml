@@ -118,16 +118,12 @@ module Upgrade = struct
     | HTTP_1_1 ->
       let upgrade_handler =
         let wsd_received, notify_wsd = Promise.create () in
+        (* TODO(anmonteiro): not handling this error? *)
         let _error_received, notify_error = Promise.create () in
         fun ~sw upgrade ->
-          let error_handler _wsd error =
-            Promise.resolve notify_error (error :> Error.client)
-          in
-
           let ws_conn =
             Httpun_ws.Server_connection.create_websocket
-              ~error_handler
-              (Ws.Handler.websocket_handler ~sw ~notify_wsd)
+              (Ws.Handler.websocket_handler ~sw ~notify_wsd ~notify_error)
           in
           Fiber.fork ~sw (fun () -> f (Promise.await wsd_received));
           upgrade (Gluten.make (module Httpun_ws.Server_connection) ws_conn)

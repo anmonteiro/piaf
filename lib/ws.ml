@@ -113,7 +113,7 @@ end = struct
 end
 
 module Handler = struct
-  let websocket_handler ~sw ~notify_wsd wsd =
+  let websocket_handler ~sw ~notify_wsd ~notify_error wsd =
     let frameq = Queue.create () in
     let messages, push_to_messages = Stream.create 256 in
     Promise.resolve notify_wsd (Descriptor.create ~messages wsd);
@@ -190,10 +190,15 @@ module Handler = struct
         | `Other _ -> failwith "Custom WebSocket frame types not yet supported")
     in
 
-    let eof () =
-      Logs.info (fun m -> m "Websocket connection EOF");
-      Httpun_ws.Wsd.close wsd;
-      push_to_messages None
+    let eof ?error () =
+      match error with
+      | Some error ->
+        Httpun_ws.Wsd.close wsd;
+        Promise.resolve notify_error (error :> Error.client)
+      | None ->
+        Logs.info (fun m -> m "Websocket connection EOF");
+        Httpun_ws.Wsd.close wsd;
+        push_to_messages None
     in
     { Httpun_ws.Websocket_connection.frame; eof }
 end
