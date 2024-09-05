@@ -28,15 +28,19 @@
   (ocaml
    (>= "5.1"))
   logs
-  (eio-ssl :dev)
+  (eio-ssl
+   (>= 0.3.0))
   magic-mime
   ssl
   uri
   ipaddr
-  httpun-eio
+  (httpun-eio
+   (>= 0.2.0))
   gluten-eio
-  h2-eio
-  httpun-ws
+  (h2-eio
+   (>= 0.13.0))
+  (httpun-ws
+   (>= 0.2.0))
   pecu
   prettym
   unstrctrd
