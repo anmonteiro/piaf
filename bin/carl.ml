@@ -492,7 +492,7 @@ module CLI = struct
   let cacert =
     let cert_conv =
       let parse s = Ok (Cert.Filepath s) in
-      Arg.conv ~docv:"method" (parse, Cert.pp)
+      Arg.conv ~docv:"cacert" (parse, Cert.pp)
     in
     let doc = "CA certificate to verify peer against" in
     let docv = "file" in
@@ -553,7 +553,7 @@ module CLI = struct
           Ok (name, value)
       in
       let print = format_header in
-      Arg.conv ~docv:"method" (parse, print)
+      Arg.conv ~docv:"header" (parse, print)
     in
     let doc = "Pass custom header(s) to server" in
     let docv = "header" in
@@ -677,7 +677,7 @@ module CLI = struct
         let s = match output with Stdout -> "stdout" | Channel f -> f in
         Format.fprintf formatter "%s" s
       in
-      Arg.conv ~docv:"method" (parse, print)
+      Arg.conv ~docv:"output" (parse, print)
     in
     let doc = "Write to file instead of stdout" in
     let docv = "file" in
