@@ -35,6 +35,10 @@
         packages = packages // { default = packages.native.piaf; };
         devShells = {
           default = pkgs.callPackage ./nix/shell.nix { inherit packages; };
+          release = pkgs.callPackage ./nix/shell.nix {
+            inherit packages;
+            release-mode = true;
+          };
         };
         gh-actions = pkgs.callPackage ./nix/gh-actions.nix { };
       });
