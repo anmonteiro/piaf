@@ -1,4 +1,5 @@
-## Unreleased
+0.2.0 2024-09-06
+---------------
 
 - Improve certificate checking and authentication
   ([#93](https://github.com/anmonteiro/piaf/pull/93)) -
@@ -20,15 +21,20 @@
   ([#112](https://github.com/anmonteiro/piaf/pull/112))
 - Piaf.Response: add `or_internal_error`
   ([#120](https://github.com/anmonteiro/piaf/pull/120))
-- Piaf.Server: prefer `Lwt.dont_wait` to the global exception hook
-  ([#123](https://github.com/anmonteiro/piaf/pull/123))
 - Piaf.Response: Add `Body.sendfile` and `Response.sendfile`
-  ([#124](https://github.com/anmonteiro/piaf/pull/123))
+  ([#124](https://github.com/anmonteiro/piaf/pull/124))
 - Piaf.Config: Add `config.flush_headers_immediately`
   ([#125](https://github.com/anmonteiro/piaf/pull/125))
 - Piaf.Server: Add `config.shutdown_timeout` to wait before shutting down the
   Piaf server ([#174](https://github.com/anmonteiro/piaf/pull/174))
+- Websocket support ([#139](https://github.com/anmonteiro/piaf/pull/139))
+- Multicore support ([#151](https://github.com/anmonteiro/piaf/pull/151))
+- Allow binding to UNIX domain socket
+  ([#161](https://github.com/anmonteiro/piaf/pull/161))
+- Don't send invalid HTTP/2 headers
+  ([#197](https://github.com/anmonteiro/piaf/pull/197))
 
-## 0.1.0 2021-02-03
+0.1.0 2021-02-03
+---------------
 
 - Initial public release

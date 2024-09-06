@@ -41,9 +41,11 @@
    (>= 0.13.0))
   (httpun-ws
    (>= 0.2.0))
-  pecu
+  (pecu
+   (>= 0.4))
   prettym
-  unstrctrd
+  (unstrctrd
+   (>= 0.2))
   (eio_main
    (>= "1.0"))
   (dune-site :with-test)
