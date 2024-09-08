@@ -7,7 +7,7 @@ in OCaml.
 
 Piaf is released to OPAM.
 
-You can depend on it via [esy](https://esy.sh/) or by running `opam install piaf`.
+You can depend on it by running `opam install piaf`.
 
 _Note_: make sure to mirror Piaf's own resolutions located in the [opam
 file](./piaf.opam).
