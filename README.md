@@ -12,8 +12,6 @@ You can depend on it by running `opam install piaf`.
 _Note_: make sure to mirror Piaf's own resolutions located in the [opam
 file](./piaf.opam).
 
-[esy]: https://esy.sh
-
 # Usage & Examples
 
 TODO, read the [mli](./lib/piaf.mli) file for now.
