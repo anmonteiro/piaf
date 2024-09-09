@@ -1,3 +1,3 @@
 [submodule "vendor/multipart_form"]
 	path = vendor/multipart_form
-	url = git@github.com:anmonteiro/multipart_form.git
+	url = https://github.com/anmonteiro/multipart_form.git
