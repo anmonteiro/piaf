@@ -1,0 +1,4 @@
+(executable
+ (name cflags)
+ (libraries dune-configurator))
+

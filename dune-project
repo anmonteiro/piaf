@@ -6,6 +6,8 @@
 
 (generate_opam_files true)
 
+(use_standard_c_and_cxx_flags true)
+
 (source
  (github anmonteiro/piaf))
 
