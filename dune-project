@@ -1,12 +1,10 @@
-(lang dune 2.8)
+(lang dune 3.0)
 
 (using dune_site 0.1)
 
 (name piaf)
 
 (generate_opam_files true)
-
-(use_standard_c_and_cxx_flags true)
 
 (source
  (github anmonteiro/piaf))
