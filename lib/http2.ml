@@ -95,11 +95,11 @@ end = struct
       t, t.runtime
 
     let request
-        t
-        ~flush_headers_immediately
-        ~error_handler
-        ~response_handler
-        req
+          t
+          ~flush_headers_immediately
+          ~error_handler
+          ~response_handler
+          req
       =
       let response_handler response body =
         let request_method =
@@ -163,7 +163,7 @@ end = struct
   end
 
   let make_error_handler ~fd error_handler :
-      Eio.Net.Sockaddr.stream -> H2.Server_connection.error_handler
+    Eio.Net.Sockaddr.stream -> H2.Server_connection.error_handler
     =
    fun client_addr ?request error start_response ->
     let start_response headers = start_response headers in
@@ -179,7 +179,7 @@ end = struct
       (error :> Error.server)
 
   let make_request_handler ~sw ~config ~fd handler :
-      Eio.Net.Sockaddr.stream -> H2.Reqd.t -> unit
+    Eio.Net.Sockaddr.stream -> H2.Reqd.t -> unit
     =
    fun client_addr reqd ->
     let arg =
@@ -219,7 +219,7 @@ end = struct
     module Reqd = Reqd
 
     let create_connection_handler ~config ~request_handler ~error_handler :
-        Server_intf.connection_handler
+      Server_intf.connection_handler
       =
      fun ~sw fd sockaddr ->
       let request_handler =
@@ -249,12 +249,12 @@ module HTTP : Http_intf.HTTP2 with type scheme = Scheme.http = struct
     include HTTP_2.Client
 
     let create_h2c
-        ~config
-        ?push_handler:_
-        ~http_request
-        ~error_handler
-        (response_handler, response_error_handler)
-        runtime
+          ~config
+          ?push_handler:_
+          ~http_request
+          ~error_handler
+          (response_handler, response_error_handler)
+          runtime
       =
       let response_handler response body =
         let request_method =
@@ -302,15 +302,15 @@ module HTTP : Http_intf.HTTP2 with type scheme = Scheme.http = struct
     include HTTP_2.Server
 
     let create_h2c_connection_handler :
-         config:Server_config.t
-        -> sw:Eio.Switch.t
-        -> fd:Eio_unix.Net.stream_socket_ty Eio.Net.stream_socket
-        -> error_handler:Server_intf.error_handler
-        -> http_request:Httpun.Request.t
-        -> request_body:Bigstringaf.t IOVec.t list
-        -> client_address:Eio.Net.Sockaddr.stream
-        -> Request_info.t Server_intf.Handler.t
-        -> (H2.Server_connection.t, string) result
+       config:Server_config.t
+      -> sw:Eio.Switch.t
+      -> fd:Eio_unix.Net.stream_socket_ty Eio.Net.stream_socket
+      -> error_handler:Server_intf.error_handler
+      -> http_request:Httpun.Request.t
+      -> request_body:Bigstringaf.t IOVec.t list
+      -> client_address:Eio.Net.Sockaddr.stream
+      -> Request_info.t Server_intf.Handler.t
+      -> (H2.Server_connection.t, string) result
       =
      fun ~config
        ~sw

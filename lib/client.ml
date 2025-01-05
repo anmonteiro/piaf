@@ -50,8 +50,9 @@ let create_http_connection ~sw ~config ~conn_info ~uri fd =
     | false, HTTP_2, true -> (module Http1.HTTP : Http_intf.HTTP), HTTP_1_1
     | false, _, _ ->
       let version =
-        if Versions.HTTP.Raw.(compare (of_version config.max_http_version) v2_0)
-           >= 0
+        if
+          Versions.HTTP.Raw.(compare (of_version config.max_http_version) v2_0)
+          >= 0
         then Versions.HTTP.HTTP_1_1
         else config.max_http_version
       in
@@ -94,9 +95,10 @@ let create_https_connection ~sw ~config ~conn_info ~uri fd =
         then (module Http2.HTTPS : Http_intf.HTTPS), Versions.HTTP.HTTP_2
         else
           ( (module Http1.HTTPS : Http_intf.HTTPS)
-          , if Versions.HTTP.Raw.(
-                 compare (of_version config.max_http_version) v2_0)
-               >= 0
+          , if
+              Versions.HTTP.Raw.(
+                compare (of_version config.max_http_version) v2_0)
+              >= 0
             then HTTP_1_1
             else config.max_http_version )
       in
@@ -168,13 +170,13 @@ let shutdown t = shutdown_conn t.conn
 
 (* returns true if it succeeding in reusing the connection, false otherwise. *)
 let reuse_or_set_up_new_connection
-    ({ conn =
-         Connection.Conn
-           ({ impl = (module Http); connection; config; info; _ } as conn)
-     ; env
-     ; _
-     } as t)
-    new_uri
+      ({ conn =
+           Connection.Conn
+             ({ impl = (module Http); connection; config; info; _ } as conn)
+       ; env
+       ; _
+       } as t)
+      new_uri
   =
   match Scheme.of_uri new_uri with
   | Error _ as e -> e
@@ -244,19 +246,19 @@ type request_info =
   }
 
 let rec return_response
-    ({ conn; sw; _ } as t)
-    ({ request; _ } as request_info)
-    ({ Response.status; headers; version; body } as response)
+          ({ conn; sw; _ } as t)
+          ({ request; _ } as request_info)
+          ({ Response.status; headers; version; body } as response)
   =
   let (Connection.Conn
-        { impl = (module Http)
-        ; runtime
-        ; info = { Connection_info.scheme; _ } as conn_info
-        ; uri
-        ; fd
-        ; config
-        ; _
-        })
+         { impl = (module Http)
+         ; runtime
+         ; info = { Connection_info.scheme; _ } as conn_info
+         ; uri
+         ; fd
+         ; config
+         ; _
+         })
     =
     conn
   in
@@ -311,12 +313,12 @@ let is_h2c_upgrade ~config ~version ~scheme =
   | _ -> false
 
 let make_request_info
-    { conn = Connection.Conn { version; info; config; _ }; _ }
-    ?(remaining_redirects = config.max_redirects)
-    ~meth
-    ~headers
-    ~body
-    target
+      { conn = Connection.Conn { version; info; config; _ }; _ }
+      ?(remaining_redirects = config.max_redirects)
+      ~meth
+      ~headers
+      ~body
+      target
   =
   let { Connection_info.host; scheme; _ } = info in
   let is_h2c_upgrade = is_h2c_upgrade ~config ~version ~scheme in
@@ -352,8 +354,8 @@ let make_request_info
   { remaining_redirects; headers; request; meth; target; is_h2c_upgrade }
 
 let rec send_request_and_handle_response
-    t
-    ({ remaining_redirects; request; headers; meth; _ } as request_info)
+          t
+          ({ remaining_redirects; request; headers; meth; _ } as request_info)
   =
   let { conn = Conn ({ info; uri; config; _ } as conn); _ } = t in
 
@@ -477,10 +479,10 @@ let patch t ?headers ?body target =
 let delete t ?headers ?body target = call t ?headers ?body ~meth:`DELETE target
 
 let ws_upgrade :
-     t
-    -> ?headers:(string * string) list
-    -> string
-    -> (Ws.Descriptor.t, [> Error.client ]) result
+   t
+  -> ?headers:(string * string) list
+  -> string
+  -> (Ws.Descriptor.t, [> Error.client ]) result
   =
  fun t ?(headers = []) target ->
   let*! response =
@@ -508,15 +510,15 @@ module Oneshot = struct
    * - HTTP/2 doesn't support the `Connection` header
    * - We want to reuse the same connection in case there's a redirect we must
    *   follow
-   *)
+  *)
   let call
-      ?(config = Config.default)
-      ?(headers = [])
-      ?(body = Body.empty)
-      ~sw
-      ~meth
-      env
-      uri
+        ?(config = Config.default)
+        ?(headers = [])
+        ?(body = Body.empty)
+        ~sw
+        ~meth
+        env
+        uri
     =
     let*! ({ conn = Connection.Conn conn; _ } as t) =
       create ~config ~sw env uri

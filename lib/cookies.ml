@@ -45,13 +45,13 @@ module Set_cookie = struct
   (* TODO: `SameSite=None` must also specify `Secure`:
    * https://web.dev/samesite-cookies-explained/ *)
   let make
-      ?(expiration = `Session)
-      ?path
-      ?domain
-      ?(secure = false)
-      ?(http_only = false)
-      ?same_site
-      cookie
+        ?(expiration = `Session)
+        ?path
+        ?domain
+        ?(secure = false)
+        ?(http_only = false)
+        ?same_site
+        cookie
     =
     { cookie; expiration; domain; path; secure; http_only; same_site }
 
@@ -179,7 +179,7 @@ module Cookie = struct
    * path            =  "$Path" "=" value
    * domain          =  "$Domain" "=" value
    * port            =  "$Port" [ "=" <"> value <"> ]
-   *)
+  *)
 
   let parse headers =
     List.fold_left

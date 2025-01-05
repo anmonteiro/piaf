@@ -216,7 +216,7 @@ module Command = struct
         (* TODO(anmonteiro): we can be a whole lot smarter, and start sending
            `connection: close` in headers as soon as we detect we're shutting
            down. *)
-           (fun () ->
+        (fun () ->
            Eio.Time.sleep clock shutdown_timeout;
            (* Shut down all client sockets after the shutdown timeout has
               elapsed. *)

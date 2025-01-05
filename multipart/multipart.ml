@@ -221,11 +221,11 @@ let extract_parts ~emit ~finish ~max_chunk_size ~content_type stream =
 type t = string option Multipart_form.t
 
 let parse_multipart_form
-    ~content_type
-    ~max_chunk_size
-    ~emit
-    ?(finish = ignore)
-    stream
+      ~content_type
+      ~max_chunk_size
+      ~emit
+      ?(finish = ignore)
+      stream
   =
   match parse_content_type content_type with
   | Ok content_type ->

@@ -82,18 +82,17 @@ let do_sendfile : type writer.
           Http.Body.Writer.close response_body;
           report_exn exn)))
 
-let handle_request :
-    type reqd writer.
-    (module Http_intf.HTTPServerCommon
-       with type Reqd.t = reqd
-        and type Body.Writer.t = writer)
-    -> config:Server_config.t
-    -> ?upgrade:_
-    -> fd:_
-    -> handler:_
-    -> arg:Request_info.t Server_intf.Handler.ctx
-    -> reqd
-    -> unit
+let handle_request : type reqd writer.
+  (module Http_intf.HTTPServerCommon
+     with type Reqd.t = reqd
+      and type Body.Writer.t = writer)
+  -> config:Server_config.t
+  -> ?upgrade:_
+  -> fd:_
+  -> handler:_
+  -> arg:Request_info.t Server_intf.Handler.ctx
+  -> reqd
+  -> unit
   =
  fun (module Http) ~config ?upgrade ~fd ~handler ~arg reqd ->
   let report_exn = report_exn (module Http) reqd in

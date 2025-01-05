@@ -49,8 +49,8 @@ module Time = struct
     |]
 
   let pp_hum
-      formatter
-      { Unix.tm_sec; tm_min; tm_hour; tm_mday; tm_mon; tm_year; _ }
+        formatter
+        { Unix.tm_sec; tm_min; tm_hour; tm_mday; tm_mon; tm_year; _ }
     =
     let year = 1900 + tm_year in
     Format.fprintf
@@ -207,19 +207,19 @@ let set_client_verify ?cacert ?capath ~clientcert ctx =
   | None -> Ok ()
 
 let setup_client_ctx
-    ~config:
-      Config.
-        { min_tls_version
-        ; max_tls_version
-        ; allow_insecure
-        ; cacert
-        ; capath
-        ; clientcert
-        ; max_http_version
-        ; _
-        }
-    ~hostname
-    fd
+      ~config:
+        Config.
+          { min_tls_version
+          ; max_tls_version
+          ; allow_insecure
+          ; cacert
+          ; capath
+          ; clientcert
+          ; max_http_version
+          ; _
+          }
+      ~hostname
+      fd
   =
   match
     Ssl.(
@@ -352,18 +352,18 @@ let rec first_match l1 = function
   | _ :: xs -> first_match l1 xs
 
 let setup_server_ctx
-    ~config:
-      Server_config.HTTPS.
-        { min_tls_version
-        ; max_tls_version
-        ; allow_insecure
-        ; cacert
-        ; capath
-        ; certificate = certificate, private_key
-        ; enforce_client_cert
-        ; _
-        }
-    ~max_http_version
+      ~config:
+        Server_config.HTTPS.
+          { min_tls_version
+          ; max_tls_version
+          ; allow_insecure
+          ; cacert
+          ; capath
+          ; certificate = certificate, private_key
+          ; enforce_client_cert
+          ; _
+          }
+      ~max_http_version
   =
   match
     Ssl.(
@@ -394,8 +394,9 @@ let setup_server_ctx
 
     let+! () = load_cert ~certificate ~private_key ctx
     and+! () = configure_verify_locations ?cacert ?capath ctx in
-    if not allow_insecure
-       (* Don't bother configuring verify locations if we're not going to be
+    if
+      not allow_insecure
+      (* Don't bother configuring verify locations if we're not going to be
           verifying the peer. *)
     then set_server_verify ~enforce_client_cert ctx;
     ctx
@@ -422,11 +423,11 @@ type accept =
 (* TODO(anmonteiro): if we wanna support multiple hostnames, this is how to do
    SNI: https://stackoverflow.com/a/5113466/3417023 *)
 let accept
-    ~clock
-    ~(config : Server_config.HTTPS.t)
-    ~max_http_version
-    ~timeout
-    fd
+      ~clock
+      ~(config : Server_config.HTTPS.t)
+      ~max_http_version
+      ~timeout
+      fd
   =
   let*! ssl_ctx =
     let+! ctx = setup_server_ctx ~config ~max_http_version in
@@ -443,6 +444,7 @@ let accept
   | Error `Timeout ->
     Result.error
       (`Connect_error
-        (Format.asprintf
-           "Failed to accept SSL connection from in a reasonable amount of time"))
+          (Format.asprintf
+             "Failed to accept SSL connection from in a reasonable amount of \
+              time"))
   | exception exn -> Error (`Exn exn)
