@@ -65,11 +65,11 @@ module MakeHTTP1 (Runtime_scheme : Scheme.Runtime.SCHEME) :
       t, t.runtime
 
     let request
-        t
-        ~flush_headers_immediately
-        ~error_handler
-        ~response_handler
-        req
+          t
+          ~flush_headers_immediately
+          ~error_handler
+          ~response_handler
+          req
       =
       let response_handler response body =
         let request_method =
@@ -85,7 +85,7 @@ module MakeHTTP1 (Runtime_scheme : Scheme.Runtime.SCHEME) :
              *
              *   A server MUST NOT send any Transfer-Encoding or Content-Length
              *   header fields in a 2xx (Successful) response to CONNECT.
-             *)
+            *)
             `GET
         in
         (* TODO: revisit whether this is necessary. *)
@@ -156,7 +156,7 @@ module MakeHTTP1 (Runtime_scheme : Scheme.Runtime.SCHEME) :
     end
 
     let make_error_handler ~fd error_handler :
-        Eio.Net.Sockaddr.stream -> Httpun.Server_connection.error_handler
+      Eio.Net.Sockaddr.stream -> Httpun.Server_connection.error_handler
       =
      fun client_addr ?request error start_response ->
       let start_response headers = start_response (Headers.to_http1 headers) in
@@ -178,7 +178,7 @@ module MakeHTTP1 (Runtime_scheme : Scheme.Runtime.SCHEME) :
         (error :> Error.server)
 
     let make_request_handler ~sw ~config ~fd handler :
-        Eio.Net.Sockaddr.stream -> Httpun.Reqd.t Gluten.reqd -> unit
+      Eio.Net.Sockaddr.stream -> Httpun.Reqd.t Gluten.reqd -> unit
       =
      fun client_addr reqd ->
       let { Gluten.reqd; upgrade } = reqd in
@@ -217,7 +217,7 @@ module MakeHTTP1 (Runtime_scheme : Scheme.Runtime.SCHEME) :
         reqd
 
     let create_connection_handler ~config ~request_handler ~error_handler :
-        Server_intf.connection_handler
+      Server_intf.connection_handler
       =
      fun ~sw fd sockaddr ->
       let request_handler =
