@@ -22,6 +22,8 @@ rec {
       ];
     };
 
+    buildInputs = with ocamlPackages; [ dune-configurator ];
+
     propagatedBuildInputs = with ocamlPackages; [
       logs
       eio-ssl
