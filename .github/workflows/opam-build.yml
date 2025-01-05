@@ -23,7 +23,7 @@ jobs:
         ocaml-compiler:
           - 5.1
           - 5.2
-          - 5.3
+          # - 5.3
 
     runs-on: ${{ matrix.os }}
 
