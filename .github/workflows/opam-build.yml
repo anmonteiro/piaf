@@ -23,6 +23,7 @@ jobs:
         ocaml-compiler:
           - 5.1
           - 5.2
+          - 5.3
 
     runs-on: ${{ matrix.os }}
 
@@ -33,7 +34,7 @@ jobs:
           submodules: recursive
 
       - name: Use OCaml ${{ matrix.ocaml-compiler }}
-        uses: ocaml/setup-ocaml@v2
+        uses: ocaml/setup-ocaml@v3
         with:
           ocaml-compiler: ${{ matrix.ocaml-compiler }}
 
