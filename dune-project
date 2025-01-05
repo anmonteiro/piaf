@@ -27,6 +27,7 @@
  (depends
   (ocaml
    (>= "5.1"))
+  dune-configurator
   logs
   (eio-ssl
    (>= 0.3.0))

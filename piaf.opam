@@ -11,6 +11,7 @@ bug-reports: "https://github.com/anmonteiro/piaf/issues"
 depends: [
   "dune" {>= "3.0"}
   "ocaml" {>= "5.1"}
+  "dune-configurator"
   "logs"
   "eio-ssl" {>= "0.3.0"}
   "magic-mime"
