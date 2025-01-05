@@ -46,14 +46,14 @@ let make_error_handler notify_error ~kind:_ error =
   Promise.resolve notify_error error
 
 let create_connection
-    (module Http_impl : Http_intf.HTTPCommon)
-    ~sw
-    ~config
-    ~conn_info
-    ~uri
-    ~version
-    ~fd
-    socket
+      (module Http_impl : Http_intf.HTTPCommon)
+      ~sw
+      ~config
+      ~conn_info
+      ~uri
+      ~version
+      ~fd
+      socket
   =
   let connection_error_received, notify_connection_error_received =
     Promise.create ()
@@ -78,8 +78,8 @@ let create_connection
   in
   Fiber.first (Fun.const (Ok conn)) (ptoerr connection_error_received)
 
-let flush_and_close :
-    type a. (module Body.Raw.Writer with type t = a) -> a -> unit
+let flush_and_close : type a.
+  (module Body.Raw.Writer with type t = a) -> a -> unit
   =
  fun b request_body ->
   Body.Raw.flush_and_close b request_body (function
@@ -89,11 +89,11 @@ let flush_and_close :
         m "Request body has been completely and successfully uploaded"))
 
 let handle_response :
-     sw:Switch.t
-    -> Response.t Promise.t
-    -> Error.client Promise.t
-    -> Error.client Promise.t
-    -> (Response.t, Error.client) result
+   sw:Switch.t
+  -> Response.t Promise.t
+  -> Error.client Promise.t
+  -> Error.client Promise.t
+  -> (Response.t, Error.client) result
   =
  fun ~sw response_p response_error_p connection_error_p ->
   let result =
@@ -129,20 +129,17 @@ let handle_response :
     error
 
 let send_request :
-     sw:Switch.t
-    -> Connection.t
-    -> Request.t
-    -> (Response.t, Error.client) result
+  sw:Switch.t -> Connection.t -> Request.t -> (Response.t, Error.client) result
   =
  fun ~sw conn request ->
   let (Connection.Conn
-        { impl = (module Http)
-        ; connection
-        ; config
-        ; fd
-        ; connection_error_received
-        ; _
-        })
+         { impl = (module Http)
+         ; connection
+         ; config
+         ; fd
+         ; connection_error_received
+         ; _
+         })
     =
     conn
   in
@@ -203,7 +200,7 @@ let send_request :
   handle_response ~sw response_received error_received connection_error_received
 
 let upgrade_connection :
-    sw:Switch.t -> Connection.t -> (Ws.Descriptor.t, [> Error.client ]) result
+  sw:Switch.t -> Connection.t -> (Ws.Descriptor.t, [> Error.client ]) result
   =
  fun ~sw conn ->
   let (Connection.Conn { version; connection_error_received; runtime; _ }) =
@@ -243,13 +240,13 @@ let can't_upgrade msg =
   Error (`Protocol_error (H2.Error_code.HTTP_1_1_Required, msg))
 
 let create_h2c_connection
-    ~sw
-    ~config
-    ~(conn_info : Connection.Info.t)
-    ~uri
-    ~fd
-    ~http_request
-    runtime
+      ~sw
+      ~config
+      ~(conn_info : Connection.Info.t)
+      ~uri
+      ~fd
+      ~http_request
+      runtime
   =
   match conn_info.scheme with
   | `HTTP ->
@@ -309,18 +306,17 @@ let create_h2c_connection
       "Attempted to start HTTP/2 over cleartext TCP but was already \
        communicating over HTTPS"
 
-let shutdown :
-    type t.
-    (module Http_intf.HTTPCommon with type Client.t = t)
-    -> fd:Eio_unix.Net.stream_socket_ty Eio.Net.stream_socket
-    -> t
-    -> unit
+let shutdown : type t.
+  (module Http_intf.HTTPCommon with type Client.t = t)
+  -> fd:Eio_unix.Net.stream_socket_ty Eio.Net.stream_socket
+  -> t
+  -> unit
   =
  fun (module Http) ~fd conn ->
   Promise.await (Http.Client.shutdown conn);
   Eio.Net.close fd
 
-let is_closed :
-    type t. (module Http_intf.HTTPCommon with type Client.t = t) -> t -> bool
+let is_closed : type t.
+  (module Http_intf.HTTPCommon with type Client.t = t) -> t -> bool
   =
  fun (module Http) conn -> Http.Client.is_closed conn

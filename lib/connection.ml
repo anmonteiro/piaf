@@ -68,28 +68,22 @@ let resolve_host =
         Ok
           (List.filter
              (function
-                | `Tcp (ip, _) ->
-                  Eio.Net.Ipaddr.fold
-                    ~v4:(fun _ -> true)
-                    ~v6:(fun _ -> false)
-                    ip
-                | `Unix _ -> true)
+               | `Tcp (ip, _) ->
+                 Eio.Net.Ipaddr.fold ~v4:(fun _ -> true) ~v6:(fun _ -> false) ip
+               | `Unix _ -> true)
              xs)
       | `V6 ->
         Ok
           (List.filter
              (function
-                | `Tcp (ip, _) ->
-                  Eio.Net.Ipaddr.fold
-                    ~v4:(fun _ -> false)
-                    ~v6:(fun _ -> true)
-                    ip
-                | `Unix _ -> true)
+               | `Tcp (ip, _) ->
+                 Eio.Net.Ipaddr.fold ~v4:(fun _ -> false) ~v6:(fun _ -> true) ip
+               | `Unix _ -> true)
              xs))
     | exception Eio.Time.Timeout ->
       Error
         (`Connect_error
-          (Format.asprintf "Timed out resolving hostname: %s" hostname))
+            (Format.asprintf "Timed out resolving hostname: %s" hostname))
 
 module Info = struct
   (* This represents information that changes from connection to connection,
@@ -107,7 +101,8 @@ module Info = struct
    * not. *)
   let equal c1 c2 =
     c1.port = c2.port
-    && (* At least one can match *)
+    &&
+    (* At least one can match *)
     List.exists
       (fun a1 ->
          List.exists
@@ -178,32 +173,32 @@ let connect ~sw ~clock ~network ~config conn_info =
       in
       Error
         (`Connect_error
-          (Format.asprintf
-             "Failed connecting to %a: %s"
-             Info.pp_hum
-             conn_info
-             status))
+            (Format.asprintf
+               "Failed connecting to %a: %s"
+               Info.pp_hum
+               conn_info
+               status))
     | Eio.Io (Eio.Exn.X (Eio_unix.Unix_error (code, _, _)), _) ->
       Error
         (`Connect_error
-          (Format.asprintf
-             "Failed connecting to %a: %s"
-             Info.pp_hum
-             conn_info
-             (Unix.error_message code)))
+            (Format.asprintf
+               "Failed connecting to %a: %s"
+               Info.pp_hum
+               conn_info
+               (Unix.error_message code)))
     | Eio.Time.Timeout ->
       Error
         (`Connect_error
-          (Format.asprintf
-             "Failed connecting to %a: connection timeout"
-             Info.pp_hum
-             conn_info))
+            (Format.asprintf
+               "Failed connecting to %a: connection timeout"
+               Info.pp_hum
+               conn_info))
     | exn ->
       Error
         (`Connect_error
-          (Format.asprintf
-             "FIXME: unhandled connection error (%s)"
-             (Printexc.to_string exn))))
+            (Format.asprintf
+               "FIXME: unhandled connection error (%s)"
+               (Printexc.to_string exn))))
 
 type t =
   | Conn :
@@ -213,7 +208,7 @@ type t =
       ; fd : Eio_unix.Net.stream_socket_ty Eio.Net.stream_socket
       ; mutable info : Info.t
       ; mutable uri : Uri.t
-            (* The connection URI. Request entrypoints connect here. Mutable so
+        (* The connection URI. Request entrypoints connect here. Mutable so
                that we remember permanent redirects. *)
       ; mutable persistent : bool
       ; runtime : Gluten_eio.Client.t

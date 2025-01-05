@@ -55,7 +55,7 @@ end = struct
 
   let is_none t = t == none
   let is_some t = not (is_none t)
-  let call_if_some ~sw t = t ~sw
+  let call_if_some ~sw t upgrade_handler = t ~sw upgrade_handler
 end
 
 module Unix_fd = struct
@@ -111,7 +111,10 @@ let of_stream ?(length = `Chunked) stream =
   create
     ~length
     (`Stream
-      { stream; read_counter = 0; error_received = ref default_error_received })
+        { stream
+        ; read_counter = 0
+        ; error_received = ref default_error_received
+        })
 
 let of_string_stream ?(length = `Chunked) stream =
   let stream =
@@ -124,7 +127,10 @@ let of_string_stream ?(length = `Chunked) stream =
   create
     ~length
     (`Stream
-      { stream; read_counter = 0; error_received = ref default_error_received })
+        { stream
+        ; read_counter = 0
+        ; error_received = ref default_error_received
+        })
 
 let of_string s =
   let length = `Fixed (Int64.of_int (String.length s)) in
@@ -157,7 +163,7 @@ let sendfile ?length path =
     (create
        ~length
        (`Sendfile
-         { fd; waiter; notifier; error_received = ref default_error_received }))
+           { fd; waiter; notifier; error_received = ref default_error_received }))
 
 (* TODO: accept buffer for I/O, so that caller can pool buffers? *)
 let stream_of_fd ?on_close fd =
@@ -331,14 +337,13 @@ module Raw = struct
     module Writer : Writer
   end
 
-  let to_stream :
-      type a.
-      (module Reader with type t = a)
-      -> ?on_eof:(body_stream -> unit)
-      -> body_length:length
-      -> body_error:Error.t
-      -> a
-      -> body_stream
+  let to_stream : type a.
+    (module Reader with type t = a)
+    -> ?on_eof:(body_stream -> unit)
+    -> body_length:length
+    -> body_error:Error.t
+    -> a
+    -> body_stream
     =
    fun (module Reader) ?on_eof ~body_length ~body_error body ->
     let total_len = ref 0L in
@@ -383,7 +388,7 @@ module Raw = struct
            | (_ : Error.t) ->
              (* `None` closes the stream. The promise `t.error_received` remains
               * fulfilled, which signals that the stream hasn't closed cleanly.
-              *)
+             *)
              None)
     and t =
       lazy
@@ -394,14 +399,13 @@ module Raw = struct
     in
     Lazy.force t
 
-  let to_t :
-      type a.
-      (module Reader with type t = a)
-      -> ?on_eof:(body_stream -> unit)
-      -> body_length:length
-      -> body_error:Error.t
-      -> a
-      -> t
+  let to_t : type a.
+    (module Reader with type t = a)
+    -> ?on_eof:(body_stream -> unit)
+    -> body_length:length
+    -> body_error:Error.t
+    -> a
+    -> t
     =
    fun (module Reader) ?on_eof ~body_length ~body_error body ->
     match body_length with
@@ -410,15 +414,14 @@ module Raw = struct
       create
         ~length:body_length
         (`Stream
-          (to_stream (module Reader) ?on_eof ~body_error ~body_length body))
+            (to_stream (module Reader) ?on_eof ~body_error ~body_length body))
 
-  let to_request_body :
-      type a.
-      (module Reader with type t = a)
-      -> ?on_eof:(body_stream -> unit)
-      -> body_length:length
-      -> a
-      -> t
+  let to_request_body : type a.
+    (module Reader with type t = a)
+    -> ?on_eof:(body_stream -> unit)
+    -> body_length:length
+    -> a
+    -> t
     =
    fun reader ?on_eof ~body_length body ->
     to_t reader ?on_eof ~body_length ~body_error:`Bad_request body
@@ -426,23 +429,21 @@ module Raw = struct
   let incomplete_body_error =
     `Malformed_response "missing bytes in response body"
 
-  let to_response_body :
-      type a.
-      (module Reader with type t = a)
-      -> ?on_eof:(body_stream -> unit)
-      -> body_length:length
-      -> a
-      -> t
+  let to_response_body : type a.
+    (module Reader with type t = a)
+    -> ?on_eof:(body_stream -> unit)
+    -> body_length:length
+    -> a
+    -> t
     =
    fun reader ?on_eof ~body_length body ->
     to_t reader ?on_eof ~body_length ~body_error:incomplete_body_error body
 
-  let flush_and_close :
-      type a.
-      (module Writer with type t = a)
-      -> a
-      -> ([ `Written | `Closed ] -> unit)
-      -> unit
+  let flush_and_close : type a.
+    (module Writer with type t = a)
+    -> a
+    -> ([ `Written | `Closed ] -> unit)
+    -> unit
     =
    fun (module Writer) body f ->
     Writer.close body;
@@ -451,12 +452,11 @@ module Raw = struct
   exception Local
 
   let stream_write_body =
-    let stream_write_body :
-        type a.
-        (module Writer with type t = a)
-        -> a
-        -> Bigstringaf.t IOVec.t Stream.t
-        -> unit
+    let stream_write_body : type a.
+      (module Writer with type t = a)
+      -> a
+      -> Bigstringaf.t IOVec.t Stream.t
+      -> unit
       =
      fun (module Writer) body stream ->
       Stream.iter

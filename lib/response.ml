@@ -46,10 +46,10 @@ let body { body; _ } = body
 
 (* TODO: Add content-length... *)
 let create
-    ?(version = Versions.HTTP.HTTP_1_1)
-    ?(headers = Headers.empty)
-    ?(body = Body.empty)
-    status
+      ?(version = Versions.HTTP.HTTP_1_1)
+      ?(headers = Headers.empty)
+      ?(body = Body.empty)
+      status
   =
   { status; headers; version; body }
 

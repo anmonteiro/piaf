@@ -67,11 +67,11 @@ module ALPN = struct
       Reqd.respond_with_string reqd response request.target
 
     let error_handler :
-         Eio.Net.Sockaddr.stream
-        -> ?request:Request.t
-        -> _
-        -> (Headers.t -> Body.Writer.t)
-        -> unit
+       Eio.Net.Sockaddr.stream
+      -> ?request:Request.t
+      -> _
+      -> (Headers.t -> Body.Writer.t)
+      -> unit
       =
      fun _client_address ?request:_ _error start_response ->
       let response_body = start_response Headers.empty in
@@ -88,11 +88,11 @@ module ALPN = struct
       Reqd.respond_with_string request_descriptor response request.target
 
     let error_handler :
-         Eio.Net.Sockaddr.stream
-        -> ?request:H2.Request.t
-        -> _
-        -> (Headers.t -> Body.Writer.t)
-        -> unit
+       Eio.Net.Sockaddr.stream
+      -> ?request:H2.Request.t
+      -> _
+      -> (Headers.t -> Body.Writer.t)
+      -> unit
       =
      fun _client_address ?request:_ _error start_response ->
       let response_body = start_response Headers.empty in
@@ -116,14 +116,14 @@ module ALPN = struct
     | _ :: xs -> first_match l1 xs
 
   let https_server
-      ?(check_client_cert = false)
-      ?(certfile = "server.pem")
-      ?(certkey = "server.key")
-      ~sw
-      ~env
-      ~backlog
-      ~domains
-      address
+        ?(check_client_cert = false)
+        ?(certfile = "server.pem")
+        ?(certkey = "server.key")
+        ~sw
+        ~env
+        ~backlog
+        ~domains
+        address
     =
     let ca = cert_path // "ca.pem" in
     let cert = cert_path // certfile in
@@ -166,16 +166,16 @@ end
 type t = Server.Command.t * Server.Command.t
 
 let listen
-    ?(http_address = `Tcp (Eio.Net.Ipaddr.V4.loopback, 8080))
-    ?(https_address = `Tcp (Eio.Net.Ipaddr.V4.loopback, 9443))
-    ?(check_client_cert = false)
-    ?(certfile = "server.pem")
-    ?(certkey = "server.key")
-    ?(backlog = 128)
-    ?(domains = 1)
-    ~sw
-    ~env
-    ()
+      ?(http_address = `Tcp (Eio.Net.Ipaddr.V4.loopback, 8080))
+      ?(https_address = `Tcp (Eio.Net.Ipaddr.V4.loopback, 9443))
+      ?(check_client_cert = false)
+      ?(certfile = "server.pem")
+      ?(certkey = "server.key")
+      ?(backlog = 128)
+      ?(domains = 1)
+      ~sw
+      ~env
+      ()
   =
   let http_server () = HTTP.listen ~sw ~env ~backlog ~domains http_address in
   let https_server () =
@@ -201,10 +201,10 @@ module H2c = struct
   type t = Server.Command.t
 
   let h2c_connection_handler :
-       Eio.Net.Sockaddr.stream
-      -> Httpun.Request.t
-      -> Bigstringaf.t H2.IOVec.t list
-      -> (H2.Server_connection.t, string) result
+     Eio.Net.Sockaddr.stream
+    -> Httpun.Request.t
+    -> Bigstringaf.t H2.IOVec.t list
+    -> (H2.Server_connection.t, string) result
     =
    fun client_addr http_request request_body ->
     let { Httpun.Request.headers; meth; target; _ } = http_request in

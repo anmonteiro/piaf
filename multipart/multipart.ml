@@ -53,47 +53,46 @@ let rec result_headers t =
     let headers =
       List.filter_map
         (function
-           | Field.Field (_, Content_type, { ty; subty; _ }) ->
-             let ty = Format.asprintf "%a" Pp.pp_ty ty in
-             let subty =
-               match subty with
-               | `Ietf_token s | `Iana_token s | `X_token s -> s
-             in
-             Some
-               ( (Field_name.content_type :> string)
-               , Format.asprintf "%s/%s" ty subty )
-           | Field.Field (_, Content_encoding, encoding) ->
-             let encoding =
-               match encoding with
-               | `Ietf_token s | `X_token s -> s
-               | #Content_encoding.t ->
-                 Format.asprintf "%a" Content_encoding.pp encoding
-             in
-             Some ((Field_name.content_transfer_encoding :> string), encoding)
-           | Field.Field (_, Content_disposition, cdispo) ->
-             let ty =
-               match Content_disposition.disposition_type cdispo with
-               | `Ietf_token s | `X_token s -> s
-               | ty -> Format.asprintf "%a" Pp.pp_disposition_type ty
-             in
-             let name = Content_disposition.name cdispo in
-             let filename = Content_disposition.filename cdispo in
-             let value =
-               Format.asprintf
-                 "%s%a%a"
-                 ty
-                 (Format.pp_print_option
-                    ~none:(fun _fmt () -> ())
-                    (fun fmt name -> Format.fprintf fmt "; name=%S" name))
-                 name
-                 (Format.pp_print_option
-                    ~none:(fun _fmt () -> ())
-                    (fun fmt filename ->
-                       Format.fprintf fmt "; filename=%S" filename))
-                 filename
-             in
-             Some ((Field_name.content_disposition :> string), value)
-           | Field.Field (_, Field, _unstructured) -> None)
+          | Field.Field (_, Content_type, { ty; subty; _ }) ->
+            let ty = Format.asprintf "%a" Pp.pp_ty ty in
+            let subty =
+              match subty with `Ietf_token s | `Iana_token s | `X_token s -> s
+            in
+            Some
+              ( (Field_name.content_type :> string)
+              , Format.asprintf "%s/%s" ty subty )
+          | Field.Field (_, Content_encoding, encoding) ->
+            let encoding =
+              match encoding with
+              | `Ietf_token s | `X_token s -> s
+              | #Content_encoding.t ->
+                Format.asprintf "%a" Content_encoding.pp encoding
+            in
+            Some ((Field_name.content_transfer_encoding :> string), encoding)
+          | Field.Field (_, Content_disposition, cdispo) ->
+            let ty =
+              match Content_disposition.disposition_type cdispo with
+              | `Ietf_token s | `X_token s -> s
+              | ty -> Format.asprintf "%a" Pp.pp_disposition_type ty
+            in
+            let name = Content_disposition.name cdispo in
+            let filename = Content_disposition.filename cdispo in
+            let value =
+              Format.asprintf
+                "%s%a%a"
+                ty
+                (Format.pp_print_option
+                   ~none:(fun _fmt () -> ())
+                   (fun fmt name -> Format.fprintf fmt "; name=%S" name))
+                name
+                (Format.pp_print_option
+                   ~none:(fun _fmt () -> ())
+                   (fun fmt filename ->
+                      Format.fprintf fmt "; filename=%S" filename))
+                filename
+            in
+            Some ((Field_name.content_disposition :> string), value)
+          | Field.Field (_, Field, _unstructured) -> None)
         (Header.assoc Field_name.content_disposition header
         @ Header.assoc Field_name.content_type header
         @ Header.assoc Field_name.content_transfer_encoding header)
@@ -221,11 +220,11 @@ let extract_parts ~emit ~finish ~max_chunk_size ~content_type stream =
 type t = string option Multipart_form.t
 
 let parse_multipart_form
-    ~content_type
-    ~max_chunk_size
-    ~emit
-    ?(finish = ignore)
-    stream
+      ~content_type
+      ~max_chunk_size
+      ~emit
+      ?(finish = ignore)
+      stream
   =
   match parse_content_type content_type with
   | Ok content_type ->

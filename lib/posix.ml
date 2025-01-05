@@ -33,11 +33,11 @@ open Import
 module Logs = (val Logging.setup ~src:"piaf.posix" ~doc:"Piaf POSIX module")
 
 let sendfile
-    (type a)
-    (module Writer : Body.Raw.Writer with type t = a)
-    ~src_fd
-    ~dst_fd
-    raw_write_body
+      (type a)
+      (module Writer : Body.Raw.Writer with type t = a)
+      ~src_fd
+      ~dst_fd
+      raw_write_body
   =
   match Sendfile.sendfile ~src:src_fd dst_fd with
   | Ok sent ->

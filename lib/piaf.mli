@@ -270,42 +270,42 @@ module Config : sig
   type t =
     { follow_redirects : bool  (** whether to follow redirects *)
     ; max_redirects : int
-    (** max redirects to follow. Could probably be rolled up into one option *)
+      (** max redirects to follow. Could probably be rolled up into one option *)
     ; allow_insecure : bool
-    (** Wether to allow insecure server connections when using SSL *)
+      (** Wether to allow insecure server connections when using SSL *)
     ; max_http_version : Versions.HTTP.t
-    (** Use this as the highest HTTP version when sending requests *)
+      (** Use this as the highest HTTP version when sending requests *)
     ; h2c_upgrade : bool
-    (** Send an upgrade to `h2c` (HTTP/2 over TCP) request to the server.
+      (** Send an upgrade to `h2c` (HTTP/2 over TCP) request to the server.
         `http2_prior_knowledge` below ignores this option. *)
     ; http2_prior_knowledge : bool
-    (** Assume HTTP/2 prior knowledge -- don't use HTTP/1.1 Upgrade when
+      (** Assume HTTP/2 prior knowledge -- don't use HTTP/1.1 Upgrade when
         communicating with "http" URIs, default to HTTP/2.0 when we can't agree
         to an ALPN protocol and communicating with "https" URIs. *)
     ; cacert : Cert.t option
-    (** The path to a CA certificates file in PEM format *)
+      (** The path to a CA certificates file in PEM format *)
     ; capath : string option
-    (** The path to a directory which contains CA certificates in PEM format *)
+      (** The path to a directory which contains CA certificates in PEM format *)
     ; clientcert : (Cert.t * Cert.t) option
-    (** Client certificate in PEM format *)
+      (** Client certificate in PEM format *)
     ; min_tls_version : Versions.TLS.t
     ; max_tls_version : Versions.TLS.t
     ; tcp_nodelay : bool
     ; connect_timeout : float (* in seconds *)
     ; (* Buffer sizes *)
       buffer_size : int
-    (** Buffer size used for requests and responses. Defaults to 16384 bytes *)
+      (** Buffer size used for requests and responses. Defaults to 16384 bytes *)
     ; body_buffer_size : int
-    (** Buffer size used for request and response bodies. *)
+      (** Buffer size used for request and response bodies. *)
     ; enable_http2_server_push : bool
     ; default_headers : (Headers.name * Headers.value) list
-    (** Set default headers (on the client) to be sent on every request. *)
+      (** Set default headers (on the client) to be sent on every request. *)
     ; flush_headers_immediately : bool
-    (** Specifies whether to flush message headers to the transport immediately,
+      (** Specifies whether to flush message headers to the transport immediately,
         or if Piaf should wait for the first body bytes to be written. Defaults
         to [false]. *)
     ; prefer_ip_version : [ `V4 | `V6 | `Both ]
-    (** Specify IP version preference *)
+      (** Specify IP version preference *)
     }
 
   val default : t
@@ -771,14 +771,14 @@ module Server : sig
         { address : Eio.Net.Sockaddr.stream
         ; certificate : Cert.t * Cert.t (* Server certificate and private key *)
         ; cacert : Cert.t option
-        (** Either the certificates string or path to a file with certificates
+          (** Either the certificates string or path to a file with certificates
             to verify peer. Both should be in PEM format *)
         ; capath : string option
-        (** The path to a directory which contains CA certificates in PEM format *)
+          (** The path to a directory which contains CA certificates in PEM format *)
         ; min_tls_version : Versions.TLS.t
         ; max_tls_version : Versions.TLS.t
         ; allow_insecure : bool
-        (** Wether to allow insecure server connections *)
+          (** Wether to allow insecure server connections *)
         ; enforce_client_cert : bool
         }
 
@@ -796,7 +796,7 @@ module Server : sig
 
     type t =
       { max_http_version : Versions.HTTP.t
-      (** Use this as:
+        (** Use this as:
           - the highest HTTP version that ALPN will negotiate with the remote
             peer
           - the version to listen on the insecure server:
@@ -804,27 +804,27 @@ module Server : sig
           - max_http_version == HTTP/2 => HTTP/2 server *)
       ; https : HTTPS.t option
       ; h2c_upgrade : bool
-      (** Send an upgrade to `h2c` (HTTP/2 over TCP) request to the server.
+        (** Send an upgrade to `h2c` (HTTP/2 over TCP) request to the server.
           `http2_prior_knowledge` below ignores this option. *)
       ; tcp_nodelay : bool
       ; accept_timeout : float (* seconds *)
       ; shutdown_timeout : float
-      (** seconds. How long to wait until connections terminate before shutting
+        (** seconds. How long to wait until connections terminate before shutting
           down the server. *)
       ; buffer_size : int
-      (** Buffer size used for requests and responses. Defaults to 16384 bytes *)
+        (** Buffer size used for requests and responses. Defaults to 16384 bytes *)
       ; body_buffer_size : int
-      (** Buffer size used for request and response bodies. *)
+        (** Buffer size used for request and response bodies. *)
       ; enable_http2_server_push : bool
-            (* ; max_concurrent_streams : int ; initial_window_size : int *)
-      (** TODO(anmonteiro): these are HTTP/2 specific and we're probably OK with
+        (* ; max_concurrent_streams : int ; initial_window_size : int *)
+        (** TODO(anmonteiro): these are HTTP/2 specific and we're probably OK with
           the defaults *)
       ; flush_headers_immediately : bool
-      (** Specifies whether to flush message headers to the transport
+        (** Specifies whether to flush message headers to the transport
           immediately, or if Piaf should wait for the first body bytes to be
           written. Defaults to [false]. *)
       ; backlog : int
-      (** The maximum length of the queue of pending connections. *)
+        (** The maximum length of the queue of pending connections. *)
       ; address : Eio.Net.Sockaddr.stream  (** The address to listen on. *)
       ; domains : int  (** The number of domains to use. *)
       ; reuse_addr : bool
