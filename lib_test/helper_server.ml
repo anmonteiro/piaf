@@ -2,9 +2,7 @@ open Eio.Std
 open Piaf
 
 let ( // ) = Filename.concat
-
-let cert_path =
-  Option.get Cert_sites.sourceroot // "piaf" // "lib_test" // "certificates"
+let cert_path = Option.get Cert_sites.sourceroot // "lib_test" // "certificates"
 
 let request_handler { Server.request; _ } =
   let response_body =
