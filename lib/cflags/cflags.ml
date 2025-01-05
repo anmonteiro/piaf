@@ -15,15 +15,14 @@ let default c : C.Pkg_config.package_conf =
 
 let () =
   C.main ~name:"ssl" (fun c ->
-      let default = default c in
-      let conf =
-        match C.Pkg_config.get c with
-        | None -> default
-        | Some pc ->
-          (match C.Pkg_config.query pc ~package:"openssl" with
-          | Some s -> s
-          | None -> default)
-      in
-      C.Flags.write_sexp "c_library_flags.sexp" conf.libs;
-      C.Flags.write_sexp "c_flags.sexp" conf.cflags)
-
+    let default = default c in
+    let conf =
+      match C.Pkg_config.get c with
+      | None -> default
+      | Some pc ->
+        (match C.Pkg_config.query pc ~package:"openssl" with
+        | Some s -> s
+        | None -> default)
+    in
+    C.Flags.write_sexp "c_library_flags.sexp" conf.libs;
+    C.Flags.write_sexp "c_flags.sexp" conf.cflags)
