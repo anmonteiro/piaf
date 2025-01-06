@@ -94,6 +94,7 @@ let
         dune
         findlib
         ocamlformat
+        dune-configurator
       ]);
       doCheck = true;
       checkPhase = ''

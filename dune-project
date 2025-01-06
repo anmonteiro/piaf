@@ -1,4 +1,4 @@
-(lang dune 2.8)
+(lang dune 3.0)
 
 (using dune_site 0.1)
 
@@ -27,6 +27,7 @@
  (depends
   (ocaml
    (>= "5.1"))
+  dune-configurator
   logs
   (eio-ssl
    (>= 0.3.0))
