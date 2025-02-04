@@ -503,7 +503,25 @@ let ws_upgrade :
   in
   match Body.drain response.body with
   | Error #Error.t as err -> err
-  | Ok () -> Http_impl.upgrade_connection ~sw:t.sw t.conn
+  | Ok () ->
+    (* From RFC6455§4.2.2:
+     *   If the server chooses to accept the incoming connection, it MUST
+     *   reply with a valid HTTP response indicating the following.
+     *     1.  A Status-Line with a 101 response code as per RFC 2616
+     *         [RFC2616].  Such a response could look like "HTTP/1.1 101
+     *         Switching Protocols".
+     *     2.  An |Upgrade| header field with value "websocket" as per RFC
+     *         2616 [RFC2616].
+     *     3.  A |Connection| header field with value "Upgrade". *)
+    (match
+       Headers.(
+         ( get response.headers Well_known.connection
+         , get response.headers Well_known.upgrade
+         , response.status ))
+     with
+    | Some ("Upgrade" | "upgrade"), Some "websocket", `Switching_protocols ->
+      Http_impl.upgrade_connection ~sw:t.sw t.conn
+    | _ -> Error (`Msg "WebSocket upgrade request refused"))
 
 module Oneshot = struct
   (* Note: we're not sending `Connection: close`:

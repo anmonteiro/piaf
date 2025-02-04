@@ -39,8 +39,8 @@ type t =
 
 let of_uri uri =
   match Uri.scheme uri with
-  | None | Some "http" -> Ok `HTTP
-  | Some "https" -> Ok `HTTPS
+  | None | Some "http" | Some "ws" -> Ok `HTTP
+  | Some "https" | Some "wss" -> Ok `HTTPS
   (* We don't support anything else *)
   | Some other -> Error (`Msg (Format.asprintf "Unsupported scheme: %s" other))
 
