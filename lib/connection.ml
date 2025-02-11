@@ -35,9 +35,10 @@ module Version = Httpun.Version
 module Logs =
   (val Logging.setup ~src:"piaf.connection" ~doc:"Piaf Connection module")
 
+let order_v4v6 = Eio.Net.Ipaddr.fold ~v4:(fun _ -> -1) ~v6:(fun _ -> 1)
+
 let resolve_host =
-  let order_v4v6 = Eio.Net.Ipaddr.fold ~v4:(fun _ -> -1) ~v6:(fun _ -> 1) in
-  fun (env : Eio_unix.Stdenv.base) ~config ~port hostname ->
+  fun env ~config ~port hostname ->
     let clock = Eio.Stdenv.clock env in
     let network = Eio.Stdenv.net env in
     match

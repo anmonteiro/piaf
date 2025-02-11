@@ -36,6 +36,13 @@ module Reqd = Httpun.Reqd
 module Server_connection = Httpun.Server_connection
 module Config = Server_config
 
+type 'a env = 'a constraint 'a =
+  < clock : _ Eio.Time.clock
+  ; domain_mgr : _ Eio.Domain_manager.t
+  ; net : [> [ `Generic | `Unix ] Eio.Net.ty ] Eio.Net.t
+  ; ..
+  > as 'a
+
 type 'ctx ctx = 'ctx Handler.ctx =
   { ctx : 'ctx
   ; request : Request.t
@@ -181,6 +188,8 @@ module Command = struct
     let empty = Fun.id, Hashtbl.create 0
   end
 
+  type clock = float Eio.Time.clock_ty Eio.Time.clock
+
   type nonrec t =
     { (* types like [_ array] mean per domain * listening address *)
       sockets :
@@ -191,7 +200,7 @@ module Command = struct
           , Eio_unix.Net.stream_socket_ty Eio_unix.Net.stream_socket )
           Hashtbl.t
           array
-    ; clock : float Eio.Time.clock_ty r
+    ; clock : clock
     ; shutdown_timeout : float
     }
 
@@ -322,7 +331,7 @@ module Command = struct
       { sockets = [ listening_socket ]
       ; shutdown_resolvers = Array.map fst resolvers
       ; client_sockets = Array.map snd resolvers
-      ; clock = Eio.Stdenv.clock env
+      ; clock = (Eio.Stdenv.clock env :> clock)
       ; shutdown_timeout
       }
 
@@ -368,7 +377,7 @@ module Command = struct
             https_command.shutdown_resolvers
       ; client_sockets =
           Array.append command.client_sockets https_command.client_sockets
-      ; clock
+      ; clock = (clock :> clock)
       ; shutdown_timeout = config.shutdown_timeout
       }
 end
