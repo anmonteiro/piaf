@@ -47,3 +47,4 @@ build: [
   ["dune" "install" "-p" name "--create-install-files" name]
 ]
 dev-repo: "git+https://github.com/anmonteiro/piaf.git"
+x-maintenance-intent: [ "(latest)" ]
