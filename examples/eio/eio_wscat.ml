@@ -30,7 +30,10 @@ let rec stdin_loop ~stdin buf wsd =
 
 let request ~env ~sw host =
   let open Result in
-  let* client = Client.create env ~sw (Uri.of_string host) in
+  let config =
+    { Config.default with max_http_version = Versions.HTTP.HTTP_1_1 }
+  in
+  let* client = Client.create ~config env ~sw (Uri.of_string host) in
   let+ wsd = Client.ws_upgrade client "/" in
   Fiber.both
     (fun () ->
