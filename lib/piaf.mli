@@ -614,12 +614,18 @@ end
       once the request is done. Useful for isolated requests. *)
 
 module Client : sig
+  type 'a env = 'a constraint 'a =
+    < clock : _ Eio.Time.clock
+    ; net : [> [ `Generic | `Unix ] Eio.Net.ty ] Eio.Net.t
+    ; ..
+    > as 'a
+
   type t
 
   val create :
      ?config:Config.t
     -> sw:Eio.Switch.t
-    -> Eio_unix.Stdenv.base
+    -> _ env
     -> Uri.t
     -> (t, [> Error.client ]) result
   (** [create ?config uri] opens a connection to [uri] (initially) that can be
@@ -694,7 +700,7 @@ module Client : sig
        ?config:Config.t
       -> ?headers:(string * string) list
       -> sw:Eio.Switch.t
-      -> Eio_unix.Stdenv.base
+      -> _ env
       -> Uri.t
       -> (Response.t, [> Error.t ]) result
 
@@ -702,7 +708,7 @@ module Client : sig
        ?config:Config.t
       -> ?headers:(string * string) list
       -> sw:Eio.Switch.t
-      -> Eio_unix.Stdenv.base
+      -> _ env
       -> Uri.t
       -> (Response.t, [> Error.t ]) result
 
@@ -711,7 +717,7 @@ module Client : sig
       -> ?headers:(string * string) list
       -> ?body:Body.t
       -> sw:Eio.Switch.t
-      -> Eio_unix.Stdenv.base
+      -> _ env
       -> Uri.t
       -> (Response.t, [> Error.t ]) result
 
@@ -720,7 +726,7 @@ module Client : sig
       -> ?headers:(string * string) list
       -> ?body:Body.t
       -> sw:Eio.Switch.t
-      -> Eio_unix.Stdenv.base
+      -> _ env
       -> Uri.t
       -> (Response.t, [> Error.t ]) result
 
@@ -729,7 +735,7 @@ module Client : sig
       -> ?headers:(string * string) list
       -> ?body:Body.t
       -> sw:Eio.Switch.t
-      -> Eio_unix.Stdenv.base
+      -> _ env
       -> Uri.t
       -> (Response.t, [> Error.t ]) result
 
@@ -738,7 +744,7 @@ module Client : sig
       -> ?headers:(string * string) list
       -> ?body:Body.t
       -> sw:Eio.Switch.t
-      -> Eio_unix.Stdenv.base
+      -> _ env
       -> Uri.t
       -> (Response.t, [> Error.t ]) result
 
@@ -747,7 +753,7 @@ module Client : sig
       -> ?headers:(string * string) list
       -> ?body:Body.t
       -> sw:Eio.Switch.t
-      -> Eio_unix.Stdenv.base
+      -> _ env
       -> meth:Method.t
       -> Uri.t
       -> (Response.t, [> Error.t ]) result
@@ -765,6 +771,13 @@ module Request_info : sig
 end
 
 module Server : sig
+  type 'a env = 'a constraint 'a =
+    < clock : _ Eio.Time.clock
+    ; domain_mgr : _ Eio.Domain_manager.t
+    ; net : [> [ `Generic | `Unix ] Eio.Net.ty ] Eio.Net.t
+    ; ..
+    > as 'a
+
   module Config : sig
     module HTTPS : sig
       type t =
@@ -905,7 +918,7 @@ module Server : sig
     type server := t
     type t
 
-    val start : sw:Eio.Switch.t -> Eio_unix.Stdenv.base -> server -> t
+    val start : sw:Eio.Switch.t -> _ env -> server -> t
     val shutdown : t -> unit
 
     val listen :
@@ -916,7 +929,7 @@ module Server : sig
       -> reuse_port:bool
       -> domains:int
       -> shutdown_timeout:float
-      -> Eio_unix.Stdenv.base
+      -> _ env
       -> connection_handler
       -> t
     (** [listen ~sw ?bind_to_address ~network ~port connection_handler] starts a

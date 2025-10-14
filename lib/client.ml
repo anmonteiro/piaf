@@ -33,9 +33,20 @@ open Import
 module Logs = (val Logging.setup ~src:"piaf.client" ~doc:"Piaf Client module")
 module Connection_info = Connection.Info
 
+type 'a env = 'a constraint 'a =
+  < clock : _ Eio.Time.clock
+  ; net : [> [ `Generic | `Unix ] Eio.Net.ty ] Eio.Net.t
+  ; ..
+  > as 'a
+
+type required_env =
+  < clock : float Eio.Time.clock_ty Eio.Std.r
+  ; net : Eio_unix.Net.t
+  > env
+
 type t =
   { mutable conn : Connection.t
-  ; env : Eio_unix.Stdenv.base
+  ; env : required_env
   ; sw : Switch.t
   }
 
@@ -437,7 +448,7 @@ let rec send_request_and_handle_response
 let create ?(config = Config.default) ~sw env uri =
   let*! conn_info = Connection_info.of_uri env ~config uri in
   match open_connection ~config ~sw ~uri:conn_info.uri env conn_info with
-  | Ok conn -> Ok { conn; env; sw }
+  | Ok conn -> Ok { conn; env :> required_env; sw }
   | Error (#Error.client as err) -> Error err
 
 let call t ~meth ?(headers = []) ?(body = Body.empty) target =
