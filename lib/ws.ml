@@ -185,7 +185,7 @@ module Handler = struct
             (* FIN bit not set, keep accumulating in the temp queue. *)
             ())
         | `Connection_close ->
-          let message = Stream.to_list stream |> List.hd in
+          let message = Stream.to_list stream |> IOVec.concat in
           push_to_messages (Some (opcode, message))
         | `Other _ -> failwith "Custom WebSocket frame types not yet supported")
     in
