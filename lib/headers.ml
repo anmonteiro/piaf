@@ -59,7 +59,7 @@ let add_length_related_headers ~version ~body_length headers =
    * 0-length response body. *)
   (* Don't step over an explicit `content-length` header. *)
   match body_length with
-  | `Fixed n ->
+  | `Fixed n when not (Int64.equal (Int64.of_string "0") n) ->
     add_unless_exists headers Well_known.content_length (Int64.to_string n)
   | `Chunked ->
     (* From RFC9113§8.2.2:
@@ -78,7 +78,7 @@ let add_length_related_headers ~version ~body_length headers =
         Well_known.Values.chunked)
   | `Close_delimited ->
     add_unless_exists headers Well_known.connection Well_known.Values.close
-  | `Error _ | `Unknown -> headers
+  | `Error _ | `Unknown | _ -> headers
 
 (* TODO: Add user-agent if not defined *)
 let canonicalize_headers ~body_length ~host ~version headers =
