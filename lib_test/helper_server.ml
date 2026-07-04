@@ -21,6 +21,11 @@ let request_handler { Server.request; _ } =
     Response.create
       ~headers:Headers.(add headers Well_known.location "/")
       `Found
+  | [ "redirect_whacky" ] ->
+    Response.create
+      ~headers:Headers.(add headers Well_known.location "/%3Dwhacky%3D")
+      `Found
+  | [ "%3Dwhacky%3D" ] -> Response.of_string ~headers ~body:response_body `OK
   | "alpn" :: _ ->
     (Response.create
        ~headers:

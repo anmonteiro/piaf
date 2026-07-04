@@ -148,6 +148,30 @@ let test_redirection_post ~sw env () =
     body;
   Helper_server.teardown server
 
+let test_redirect_encoding ~sw env () =
+  let server = Helper_server.listen ~sw ~env () in
+  let response =
+    Client.Oneshot.get
+      ~sw
+      ~config:{ Config.default with follow_redirects = true }
+      env
+      (Uri.of_string "http://localhost:8080/redirect_whacky")
+  in
+  let response = Result.get_ok response in
+  Alcotest.check
+    response_testable
+    "Expected response"
+    (Response.create
+       ~headers:Headers.(of_list [ Well_known.content_length, "17" ])
+       `OK)
+    response;
+  let body = Body.to_string response.body in
+  Alcotest.(check (result string error_testable))
+    "expected body"
+    (Ok "GET /%3Dwhacky%3D")
+    body;
+  Helper_server.teardown server
+
 let test_https ~sw env () =
   let server = Helper_server.listen ~sw ~env () in
   (* HTTP/1.1 *)
@@ -627,6 +651,7 @@ let suite =
         ; ( "redirect POST, request target with GET"
           , `Quick
           , test_redirection_post )
+        ; "Redirect with location encoding", `Quick, test_redirect_encoding
         ; "https", `Quick, test_https
         ; "https server certs", `Quick, test_https_server_certs
         ; "https client certs", `Quick, test_https_client_certs
