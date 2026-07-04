@@ -399,7 +399,9 @@ let rec send_request_and_handle_response
         if Status.is_permanent_redirection response.status
         then conn.uri <- new_uri;
         let request_info' =
-          let target = Uri.path_and_query new_uri in
+          (* NOTE Use the location *exactly* as provided, slight differences due
+             to uri encoding can get rejected *)
+          let target = location in
           (* From RFC7231§6.4:
            *   Note: In HTTP/1.0, the status codes 301 (Moved Permanently) and
            *   302 (Found) were defined for the first type of redirect
@@ -421,6 +423,13 @@ let rec send_request_and_handle_response
             | `POST, (`Found | `Moved_permanently) -> `GET
             | _ -> meth
           in
+          (* Make sure existing host header is removed *)
+          let headers =
+            Headers.of_list headers
+            |> Fun.flip Headers.remove "host"
+            |> Headers.to_list
+          in
+          (* let t = { t with conn = { connection with uri = new_uri } } in *)
           make_request_info
             t
             ~remaining_redirects:(remaining_redirects - 1)
@@ -510,7 +519,7 @@ module Oneshot = struct
    * - HTTP/2 doesn't support the `Connection` header
    * - We want to reuse the same connection in case there's a redirect we must
    *   follow
-  *)
+   *)
   let call
         ?(config = Config.default)
         ?(headers = [])

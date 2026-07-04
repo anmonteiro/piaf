@@ -397,7 +397,7 @@ let setup_server_ctx
     if
       not allow_insecure
       (* Don't bother configuring verify locations if we're not going to be
-          verifying the peer. *)
+         verifying the peer. *)
     then set_server_verify ~enforce_client_cert ctx;
     ctx
 
