@@ -48,6 +48,6 @@
   (unstrctrd
    (>= 0.2))
   (eio_main
-   (>= "1.0"))
+   (>= "1.4"))
   (dune-site :with-test)
   (alcotest :with-test)))
