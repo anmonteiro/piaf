@@ -25,7 +25,7 @@ depends: [
   "pecu" {>= "0.4"}
   "prettym"
   "unstrctrd" {>= "0.2"}
-  "eio_main" {>= "1.0"}
+  "eio_main" {>= "1.4"}
   "dune-site" {with-test}
   "alcotest" {with-test}
   "odoc" {with-doc}

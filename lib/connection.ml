@@ -47,9 +47,6 @@ let resolve_host =
           network
           hostname)
     with
-    | [] ->
-      Error
-        (`Connect_error (Format.asprintf "Can't resolve hostname: %s" hostname))
     | xs ->
       (match config.Config.prefer_ip_version with
       | `Both ->
@@ -84,6 +81,13 @@ let resolve_host =
       Error
         (`Connect_error
             (Format.asprintf "Timed out resolving hostname: %s" hostname))
+    | exception Eio.Io (Eio.Net.E (Eio.Net.Address_lookup_failed code), _) ->
+      Error
+        (`Connect_error
+            (Format.asprintf
+               "Can't resolve hostname %s: %s"
+               hostname
+               (Eio.Net.Getaddrinfo_error.to_message code)))
 
 module Info = struct
   (* This represents information that changes from connection to connection,
@@ -168,7 +172,6 @@ let connect ~sw ~clock ~network ~config conn_info =
       let status =
         match code with
         | Eio.Net.Refused _ -> "connection refused"
-        | No_matching_addresses -> "no matching addresses"
         | Timeout -> "timeout"
       in
       Error
