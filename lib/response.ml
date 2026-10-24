@@ -93,7 +93,10 @@ let copy_file ?version ?(headers = Headers.empty) path =
     let mime = Magic_mime.lookup path in
     Headers.(add_unless_exists headers Well_known.content_type mime)
   in
-  let stream = Body.stream_of_fd fd in
+  let close_fd () =
+    Eio_unix.run_in_systhread (fun () -> Body.Unix_fd.ensure_closed fd)
+  in
+  let stream = Body.stream_of_fd ~on_close:close_fd fd in
   Ok
     (create
        ?version

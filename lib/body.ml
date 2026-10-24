@@ -185,8 +185,13 @@ let stream_of_fd ?on_close fd =
       (* (min config.Config.body_buffer_size !remaining) *)
       let buf = Bigstringaf.create bytes_to_read in
       let bytes_read = Bigstring.read fd buf ~off:0 ~len:bytes_to_read in
-      assert (Atomic.compare_and_set remaining current (current - bytes_read));
-      Some (IOVec.make buf ~off:0 ~len:bytes_to_read))
+      if bytes_read = 0
+      then (
+        Option.iter (fun f -> f ()) on_close;
+        None)
+      else (
+        assert (Atomic.compare_and_set remaining current (current - bytes_read));
+        Some (IOVec.make buf ~off:0 ~len:bytes_read)))
 
 let to_stream { contents; _ } =
   match contents with

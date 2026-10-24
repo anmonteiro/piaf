@@ -11,6 +11,26 @@ let test_copy_file () =
     (Headers.of_list [ Headers.Well_known.content_type, "text/x-ocaml" ])
     (Result.get_ok response).headers
 
+let test_copy_file_short_read () =
+  let path = Filename.temp_file "piaf-copy-file-" ".body" in
+  let write contents =
+    let channel = open_out_bin path in
+    Fun.protect
+      ~finally:(fun () -> close_out_noerr channel)
+      (fun () -> output_string channel contents)
+  in
+  Fun.protect
+    ~finally:(fun () -> if Sys.file_exists path then Sys.remove path)
+    (fun () ->
+      write "original contents";
+      let response = Result.get_ok (Response.copy_file path) in
+      (* The descriptor has already captured the original size. *)
+      write "short";
+      match Body.to_string response.body with
+      | Ok body -> Alcotest.(check string) "short file body" "short" body
+      | Error error ->
+        Alcotest.failf "unexpected body error: %a" Error.pp_hum error)
+
 let test_copy_file_nonexistent () =
   let response = Response.copy_file "./does_not_exist.ml" in
   Alcotest.(
@@ -43,6 +63,7 @@ let test_sendfile_nonexistent () =
 let suite =
   [ ( "response"
     , [ "copy_file", `Quick, test_copy_file
+      ; "copy_file short read", `Quick, test_copy_file_short_read
       ; "non-existent copy_file", `Quick, test_copy_file_nonexistent
       ; "sendfile", `Quick, test_sendfile
       ; "non-existent sendfile", `Quick, test_sendfile_nonexistent
